@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Session workflow orchestration for Claude Code. A 7-skill chain covering the full development lifecycle: project init, research-design, task-planning, agent-delegation, post-implementation, architecture updates, and release. Features dependency-aware parallelization, collaborative brainstorming, and user gates at every critical decision.",
   "author": {
-    "name": "Mats Hybinette",
+    "name": "hoponthestack",
     "url": "https://github.com/matshoppenbrouwers"
   },
   "homepage": "https://github.com/matshoppenbrouwers/session-flow",
