@@ -20,27 +20,17 @@ Each skill produces artifacts that feed into the next. Start anywhere in the cha
 
 ## Install
 
-**Plugin marketplace** (recommended):
+**Step 1** — Register the marketplace:
+```
+/plugin marketplace add matshoppenbrouwers/session-flow
+```
+
+**Step 2** — Install the plugin:
 ```
 /plugin install session-flow@session-flow
 ```
 
-**Manual install** (to `~/.claude/`):
-```bash
-git clone https://github.com/matshoppenbrouwers/session-flow.git
-cd session-flow
-./install.sh
-```
-
-**Project-level install** (to `.claude/` in your repo):
-```bash
-./install.sh --scope project
-```
-
-Preview before installing:
-```bash
-./install.sh --dry-run
-```
+That's it. Works on macOS, Linux, and Windows.
 
 ## Getting Started
 

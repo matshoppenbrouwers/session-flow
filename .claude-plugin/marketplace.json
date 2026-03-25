@@ -1,0 +1,18 @@
+{
+  "name": "session-flow",
+  "owner": {
+    "name": "hoponthestack"
+  },
+  "metadata": {
+    "description": "Session workflow orchestration for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "session-flow",
+      "source": ".",
+      "description": "Complete development lifecycle chain: init, research-design, task-planning, delegation, post-implementation, release. Features dependency-aware parallelization and collaborative brainstorming.",
+      "version": "1.0.0"
+    }
+  ]
+}
