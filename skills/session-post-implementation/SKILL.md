@@ -9,6 +9,61 @@ Execute this sequential workflow after completing a major feature or plan implem
 
 **Announce:** "Using session-post-implementation to simplify, review, sanitize, and test the implementation."
 
+## Workflow Configuration
+
+Before starting, use **AskUserQuestion** to let the user configure the workflow. Present both questions together at the start (not between steps).
+
+**Question 1: Pipeline scope**
+
+Use AskUserQuestion:
+- question: "How thorough should post-implementation be?"
+- header: "Scope"
+- multiSelect: false
+- options:
+  - A) label: "Full pipeline (Recommended)", description: "All steps: simplify, review, security & liability audit, sanitize, test suite, architecture docs, and manual test plan. Best after completing a major feature."
+  - B) label: "Standard", description: "Simplify, review, sanitize, test suite, and commit. Skips security audit, architecture docs, and manual test plan."
+  - C) label: "Quick", description: "Simplify, review, and commit only. Fastest option for minor changes."
+
+**Scope reference:**
+
+| Step | Full | Standard | Quick |
+|------|------|----------|-------|
+| 1. Simplify | yes | yes | yes |
+| 2. Review | yes | yes | yes |
+| 3. Security & Liability Audit | yes | - | - |
+| 4. Commit checkpoint | yes | yes | yes |
+| 5. Sanitize | yes | yes | - |
+| 6. Test suite | yes | yes | - |
+| 7. Architecture docs | yes | - | - |
+| 8. Manual test plan | yes | - | - |
+| 9. Final commit | yes | yes | - |
+
+**Question 2: Add-ons** (only ask if user chose Standard or Quick)
+
+Show the steps NOT included in their chosen scope as add-on options.
+
+Use AskUserQuestion:
+- question: "Want to add any extra steps?"
+- header: "Add-ons"
+- multiSelect: true
+- options (pick from the table above — only show steps marked "-" for the chosen scope, max 4):
+  - If **Standard**: "Security & Liability Audit", "Architecture docs", "Manual test plan"
+  - If **Quick**: "Security & Liability Audit", "Test suite", "Architecture docs", "Manual test plan"
+
+The user can select multiple, or choose "Other" and type "none" to proceed without extras.
+
+**Question 3: Security audit mode** (only ask if security audit is included — via Full pipeline or as an add-on)
+
+Use AskUserQuestion:
+- question: "How should the security & liability audit run?"
+- header: "Audit mode"
+- multiSelect: false
+- options:
+  - A) label: "Sub-agent (Recommended)", description: "Dispatch as a Sonnet agent. Faster and cheaper. Good for routine changes."
+  - B) label: "Inline", description: "Run in the main conversation using your current model. More thorough. Better for security-sensitive or high-risk changes."
+
+Store the user's choices and apply them throughout the workflow. Merge the base scope with any selected add-ons to determine which steps to run.
+
 ## Workflow Steps
 
 ### Step 1: Simplify
@@ -44,7 +99,34 @@ If issues are found:
 
 Loop until the reviewer passes with no significant issues, but do not yet run the full test suite at this stage (you can run individual tests)
 
-### Step 3: Commit (Checkpoint)
+### Step 3: Security & Liability Audit
+
+**Skip if:** user chose Standard or Quick scope in workflow configuration.
+
+**Mode A — Sub-agent (default):**
+
+```
+Task tool: subagent_type="security-auditor"
+prompt: "Audit the recent code changes for technical security vulnerabilities and legal/liability risk. Read the reference files at skills/security-liability-audit/references/ for detailed patterns. Produce findings and recommendations only — do not modify code."
+```
+
+**Mode B — Inline:**
+
+Read the reference files directly and perform the audit in the main conversation:
+1. Read `skills/security-liability-audit/references/technical-security.md`
+2. Read `skills/security-liability-audit/references/legal-liability.md`
+3. Apply Part A (technical) and Part B (liability) checks from `skills/security-liability-audit/SKILL.md`
+4. Report findings using the same output format
+
+**After audit (either mode):**
+
+If findings are reported:
+1. Present findings to the user
+2. **Technical CRITICAL/HIGH**: fix before proceeding
+3. **Legal/Liability HIGH**: note for follow-up (may require ToS/privacy policy updates, not code fixes)
+4. **MEDIUM and below**: track, proceed
+
+### Step 4: Commit (Checkpoint)
 
 Commit the simplified and reviewed code:
 
@@ -54,7 +136,7 @@ git add -A && git commit -m "refactor: simplify and address review feedback"
 
 This creates a checkpoint before the sanitization phase.
 
-### Step 4: Sanitize
+### Step 5: Sanitize
 
 Run the code-sanitizer agent for final cleanup.
 
@@ -68,7 +150,7 @@ Apply any recommended cleanups. This catches:
 - Temporary test functions left behind
 - Complexity hotspots
 
-### Step 5: Run Test Suite
+### Step 6: Run Test Suite
 
 Run the project's full test suite to verify all changes work correctly.
 
@@ -82,7 +164,7 @@ Detect and use the project's test runner:
 2. Re-run until all pass
 3. Do NOT proceed to documentation until tests are green
 
-### Step 6: Update Architecture Docs
+### Step 7: Update Architecture Docs
 
 If the project has architecture documentation (detect via `.session-flow.json` config or scan for `architecture/`, `_devdocs/architecture/`, `docs/architecture/`, `ARCHITECTURE.md`), use the `/update-architecture` skill for surgical, token-efficient documentation updates.
 
@@ -93,7 +175,7 @@ If the project has architecture documentation (detect via `.session-flow.json` c
 
 Skip this step if the project has no architecture docs.
 
-### Step 7: Generate Manual Test Plan
+### Step 8: Generate Manual Test Plan
 
 Generate a manual test plan for the feature that was just implemented.
 
@@ -159,7 +241,7 @@ Generate a manual test plan for the feature that was just implemented.
 
 Skip this step if the implementation is purely internal (no user-facing behavior to test).
 
-### Step 8: Final Commit
+### Step 9: Final Commit
 
 Commit the sanitization, documentation updates, and test plan:
 
@@ -169,25 +251,27 @@ git add -A && git commit -m "chore: sanitize code, update docs, and add manual t
 
 ## Quick Variant
 
-For smaller changes, use `/quick-post-implementation`:
-- Steps 1-3 only (simplify, review, commit)
-- Skips sanitize, test suite, doc updates, and test plan generation
+For smaller changes, use `/quick-post-implementation` (equivalent to choosing "Quick" scope):
+- Steps 1, 2, 4 only (simplify, review, commit)
+- Skips security audit, sanitize, test suite, doc updates, and test plan generation
 - Faster iteration for minor features
+- Skips the workflow configuration questions entirely
 
 ## Execution Notes
 
 - Run each step sequentially -- each depends on the previous
 - If any step reveals significant issues, address them before proceeding
 - The two commits create clear checkpoints: one for the refined implementation, one for cleanup/docs
-- Tests run once after all code changes (Step 5) to minimize test suite execution time
-- Step 7 generates a manual test plan for QA -- skip if the feature has no user-facing behavior
-- If no changes are made in steps 4-7, skip the final commit
+- Tests run once after all code changes (Step 6) to minimize test suite execution time
+- Step 3 (security audit) can be skipped for trivial changes (typos, docs-only)
+- Step 8 generates a manual test plan for QA -- skip if the feature has no user-facing behavior
+- If no changes are made in steps 5-8, skip the final commit
 
 ## Anti-Patterns
 
 **Skipping the test suite:**
 - BAD: Commit sanitized code without running the full test suite
-- GOOD: Always run the full test suite (Step 5) before the final commit
+- GOOD: Always run the full test suite (Step 6) before the final commit
 
 **Committing without review:**
 - BAD: Run simplifier and immediately commit without code review
@@ -195,7 +279,7 @@ For smaller changes, use `/quick-post-implementation`:
 
 **Running full suite between every step:**
 - BAD: Run the full test suite after simplify, again after review, again after sanitize
-- GOOD: Run individual tests during steps 1-4, full suite once at Step 5
+- GOOD: Run individual tests during steps 1-5, full suite once at Step 6
 
 ## Workflow Integration
 
