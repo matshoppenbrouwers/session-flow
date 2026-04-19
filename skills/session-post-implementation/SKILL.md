@@ -38,6 +38,8 @@ Use AskUserQuestion:
 | 8. Manual test plan | yes | - | - |
 | 9. Final commit | yes | yes | - |
 
+Verification (`/session-verify`) is always optional — offered after Step 8 on Full completions only; see Step 8.5 below.
+
 **Question 2: Add-ons** (only ask if user chose Standard or Quick)
 
 Show the steps NOT included in their chosen scope as add-on options.
@@ -59,7 +61,7 @@ Use AskUserQuestion:
 - header: "Audit mode"
 - multiSelect: false
 - options:
-  - A) label: "Sub-agent (Recommended)", description: "Dispatch as a Sonnet agent. Faster and cheaper. Good for routine changes."
+  - A) label: "Sub-agent (Recommended)", description: "Dispatch as a subagent (inherits the parent session's model). Faster and cheaper. Good for routine changes."
   - B) label: "Inline", description: "Run in the main conversation using your current model. More thorough. Better for security-sensitive or high-risk changes."
 
 Store the user's choices and apply them throughout the workflow. Merge the base scope with any selected add-ons to determine which steps to run.
@@ -164,6 +166,8 @@ Detect and use the project's test runner:
 2. Re-run until all pass
 3. Do NOT proceed to documentation until tests are green
 
+**Phase exit criterion:** full test suite returns zero failures. The exact command + pass/fail counts must be captured in the final commit message or a note to the user. "Tests probably pass" is not acceptable — show the output.
+
 ### Step 7: Update Architecture Docs
 
 If the project has architecture documentation (detect via `.session-flow.json` config or scan for `architecture/`, `_devdocs/architecture/`, `docs/architecture/`, `ARCHITECTURE.md`), use the `/update-architecture` skill for surgical, token-efficient documentation updates.
@@ -241,6 +245,23 @@ Generate a manual test plan for the feature that was just implemented.
 
 Skip this step if the implementation is purely internal (no user-facing behavior to test).
 
+### Step 8.5: Verification (optional, for feature/plan completions)
+
+If this session closed out an implementation plan (not just a bugfix or small change), consider running `/session-verify` before the final commit. Verification produces an evidence artifact proving the implementation matches the design doc and plan via falsifiable hypotheses, structural audit, defect probes, and integration probes.
+
+**Run when:**
+- A `/session-research-design` plan was implemented
+- A multi-task `/session-task-planning` was completed
+- Behaviour is user-visible and risk-prone
+- Prior code review flagged critical or high-severity defects that should be independently confirmed fixed
+
+**Skip when:**
+- Bugfixes, refactors, single-file features
+- Internal polish with no design doc
+- Small changes where the test suite in Step 6 is sufficient evidence
+
+Do not run automatically. Present the option to the user; proceed to Step 9 if they decline.
+
 ### Step 9: Final Commit
 
 Commit the sanitization, documentation updates, and test plan:
@@ -265,6 +286,7 @@ For smaller changes, use `/quick-post-implementation` (equivalent to choosing "Q
 - Tests run once after all code changes (Step 6) to minimize test suite execution time
 - Step 3 (security audit) can be skipped for trivial changes (typos, docs-only)
 - Step 8 generates a manual test plan for QA -- skip if the feature has no user-facing behavior
+- Step 8.5 (verification) is always optional -- present but do not auto-run
 - If no changes are made in steps 5-8, skip the final commit
 
 ## Anti-Patterns
