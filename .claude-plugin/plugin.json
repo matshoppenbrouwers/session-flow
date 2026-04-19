@@ -1,7 +1,7 @@
 {
   "name": "session-flow",
-  "version": "1.0.0",
-  "description": "Session workflow orchestration for Claude Code. A 7-skill chain covering the full development lifecycle: project init, research-design, task-planning, agent-delegation, post-implementation, architecture updates, and release. Features dependency-aware parallelization, collaborative brainstorming, and user gates at every critical decision.",
+  "version": "1.1.0",
+  "description": "Session workflow orchestration for Claude Code. A 9-skill chain covering the full development lifecycle: project init, research-design, task-planning, agent-delegation, post-implementation, evidence-based verification, architecture updates, security & liability audit, and release. Features dependency-aware parallelization, collaborative brainstorming, falsification-based verification, and user gates at every critical decision.",
   "author": {
     "name": "hoponthestack",
     "url": "https://github.com/matshoppenbrouwers"
@@ -26,13 +26,16 @@
     "./skills/session-task-planning",
     "./skills/session-delegation",
     "./skills/session-post-implementation",
+    "./skills/session-verify",
     "./skills/session-release",
-    "./skills/update-architecture"
+    "./skills/update-architecture",
+    "./skills/security-liability-audit"
   ],
   "agents": [
     "./agents/code-reviewer.md",
     "./agents/code-sanitizer.md",
-    "./agents/code-simplifier.md"
+    "./agents/code-simplifier.md",
+    "./agents/security-auditor.md"
   ],
   "commands": [
     "./commands/session-status.md"
