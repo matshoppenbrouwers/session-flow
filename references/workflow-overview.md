@@ -7,9 +7,9 @@ Reference document connecting all session-flow skills. Load on-demand when you n
 ## The Chain
 
 ```
-session-init ──> research-design ──> task-planning ──> delegation ──> post-impl ──> release
- (one-time)       (optional)                                            │
-                                                                  update-architecture
+session-init ──> research-design ──> task-planning ──> delegation ──> post-impl ──> verify ──> release
+ (one-time)       (optional)                                            │             (optional,
+                                                                  update-architecture   heavy)
 ```
 
 **Data flows left to right.** Each stage produces artifacts consumed by the next. Stages can be entered independently if their input artifacts already exist.
@@ -24,7 +24,8 @@ session-init ──> research-design ──> task-planning ──> delegation �
 | **research-design** | Research report, implementation plan, decision log entries | task-planning |
 | **task-planning** | Task file with `[seq]`/`[parallel-after:X]` dependency tags, phase groupings | delegation |
 | **delegation** | Completed implementations, updated task file (`[x]` markers), commit history | post-implementation |
-| **post-implementation** | Refined code (simplified, reviewed, sanitized), test results, updated arch docs | release |
+| **post-implementation** | Refined code (simplified, reviewed, sanitized), test results, updated arch docs | verify (optional) or release |
+| **session-verify** | Evidence artifact `_verification/YYYY-MM-DD-{label}-verification.md` + probes under `_verification/probes/` | release (pre-flight gate) |
 | **update-architecture** | Updated architecture markdown files reflecting current code state | (consumed by humans and future sessions) |
 | **release** | Version-bumped files, changelog entry, tagged commit, verified satellite content | (end of chain) |
 
@@ -41,6 +42,7 @@ Not every workflow starts at `session-init`. Pick your entry based on what alrea
 | A clear plan or spec | `task-planning` | Breaks the plan into session-sized executable tasks |
 | A task file with items ready | `delegation` | Dispatches agents to execute tasks in parallel |
 | Code done, needs polish | `post-implementation` | Simplify, review, sanitize, test, document |
+| Feature/plan done, needs evidence it works | `session-verify` | Falsification-based proof artifact against design spec |
 | Code polished, ready to ship | `release` | Version bump, changelog, tag, satellite verification |
 | Code changed, docs stale | `update-architecture` | Surgically updates architecture docs to match code |
 
@@ -57,6 +59,7 @@ Some stages are optional depending on the scope of work:
 | **task-planning** | Single-task change, or you prefer to work sequentially without a plan |
 | **delegation** | You are executing tasks manually in sequence (no parallel dispatch needed) |
 | **post-implementation** | Quick fix or hotfix where polish adds more overhead than value |
+| **session-verify** | Bugfix, single-file change, no design doc exists, or polish without user-facing behavior |
 | **update-architecture** | No architecture docs in the project, or change doesn't affect system design |
 | **release** | Not versioning the project, or change doesn't warrant a release |
 
@@ -125,7 +128,8 @@ session-init       → "Run /session-research-design or /session-task-planning n
 research-design    → "Run /session-task-planning to break this into tasks."
 task-planning      → "Run /session-delegation to execute these tasks."
 delegation         → "Run /session-post-implementation to polish the code."
-post-implementation → "Run /session-release if ready to ship."
+post-implementation → "Run /session-verify (if plan/feature complete) or /session-release if ready to ship."
+session-verify     → "Run /session-release if verdict is PASS, otherwise fix findings first."
 ```
 
 ### User gates
@@ -150,6 +154,7 @@ Every skill pauses for user approval at critical decision points:
 | `/session-task-planning` | session-task-planning | Break plan into session-sized tasks |
 | `/session-delegation` | session-delegation | Dispatch agents to execute tasks |
 | `/session-post-implementation` | session-post-implementation | Simplify, review, sanitize, test |
+| `/session-verify` | session-verify | Evidence-based verification against design spec |
 | `/session-release` | session-release | Version bump, tag, publish |
 | `/update-architecture` | update-architecture | Update architecture docs |
 | `/session-status` | (command) | Check progress and next steps |
