@@ -37,19 +37,22 @@ Identify parallel opportunities: tasks tagged `[parallel-after:X]` where task X 
 
 ## Step 3: Report Status
 
-Output this summary (adjust fields based on what's available):
+Output exactly this structure. Fixed fields, no substitutions.
 
 ```
 ## Session Status
 
 **Task file:** {relative path to task file}
 **Progress:** {completed}/{total} tasks ({percent}%)
-**Current phase:** {phase name from latest incomplete task}
+**Current phase:** {phase name from latest incomplete task, or "n/a"}
 **Blocked:** {count of blocked tasks, or "none"}
-**Parallel opportunities:** {list of tasks that can run concurrently, or "none"}
+**Parallel opportunities:** {list of task IDs that can run concurrently, or "none"}
+**Recent activity:** {last completed task ID and title, or "no completions yet"}
 
 **Next:** {recommended action — see Step 4}
 ```
+
+Every field is required. If a field has no data, use "none", "n/a", or "0" — do not omit the field.
 
 ## Step 4: Recommend Next Action
 

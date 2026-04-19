@@ -9,6 +9,15 @@ Convert implementation plans into session-scoped tasks with explicit paralleliza
 
 **Announce:** "Using session-task-planning to break this into Claude Code session-sized tasks."
 
+## Non-Negotiables
+
+1. **Task files go to `todo/`, never `plans/`.** Design documents and task files are separate artifacts with separate directories.
+2. **Every task has Files, Instructions, Accept, Test.** No exceptions. A task missing any field is not valid and must be revised before saving.
+3. **Accept criteria must be observable.** "Code is cleaner" is not acceptance. `pytest tests/foo.py::test_bar passes` is.
+4. **Action verbs only.** "Create", "Add", "Move", "Extract" — not "Consider", "Look into", "Think about".
+5. **Every parallelism claim is tested against the file-modification graph.** If two tasks touch the same file, they cannot be `[parallel-after:X]` — they must be `[seq]`.
+6. **Exact paths, not "relevant files".** `src/auth/login.py:45-120` — not "auth files".
+
 ## Core Principle
 
 Each task must be completable in **one Claude Code session** (~30 min focused work). Tasks too large get split. Tasks too small get merged.

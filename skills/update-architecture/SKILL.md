@@ -119,6 +119,26 @@ When a doc exceeds 1500 lines:
 3. Add cross-reference in original
 4. Update index with new doc
 
+## Output Contract
+
+At the end of an update session, produce exactly this summary. No freeform prose.
+
+```
+## Architecture Doc Updates
+
+| Doc | Before | After | Lines Δ | Change |
+|-----|--------|-------|---------|--------|
+| `architecture/storage.md` | 420 | 438 | +18 | Added `get_tasks_by_priority()` signature; updated LOC count |
+| `architecture/ai.md` | 287 | 285 | -2 | Updated classification accuracy metric (93% → 95%) |
+| `architecture/index.md` | 140 | 140 | 0 | No change needed |
+
+**Docs split:** 0 (flag any doc >1500 lines here)
+**Docs approaching threshold:** 1 (`storage.md` at 438, monitor)
+**Cross-references added:** 0
+```
+
+Every edit must include: which doc, line count delta, and a one-line description of the change. If no change was needed in a scanned doc, include it with `Lines Δ: 0` — that's evidence you looked.
+
 ## Anti-Patterns
 
 **Rewriting when editing:**

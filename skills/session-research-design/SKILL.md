@@ -9,6 +9,14 @@ Conduct deep research and produce a design plan before task planning.
 
 **Announce:** "Using session-research-design to research approaches and design an implementation plan."
 
+## Non-Negotiables
+
+1. **Never guess scope.** If the user's ask is ambiguous, ask a clarifying question. Do not assume.
+2. **Always propose alternatives.** Present 2-3 approaches with explicit trade-offs. Do not ship a single-option "recommendation" — the user cannot make an informed choice without alternatives.
+3. **Research before planning.** The research report is a prerequisite to the plan. Do not compress both into one step.
+4. **User approves section-by-section.** Do not dump the full plan and ask "looks good?". Present in sections and get feedback on each.
+5. **Cite the codebase.** Every claim about "what exists" must reference files/line numbers. "The auth module handles tokens" is not acceptable without a citation.
+
 ## Core Principle
 
 Complex features require understanding before planning. This skill produces two artifacts:

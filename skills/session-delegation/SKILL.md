@@ -9,6 +9,14 @@ Orchestrate task execution from a session task plan file.
 
 **Announce:** "Using session-delegation to orchestrate task execution from the plan."
 
+## Non-Negotiables
+
+1. **Never execute without a parsed task plan.** If no `/session-task-planning` output exists, stop and run that first.
+2. **Respect the dependency graph.** A task with `[parallel-after:X]` where X is still `[ ]` cannot start. No exceptions.
+3. **Mark `[x]` in the todo file as soon as a task completes.** Other tasks may be waiting on it. Don't batch updates.
+4. **Parallel = one message with multiple Task tool calls.** Not multiple sequential messages. The whole point of parallelism is concurrent execution.
+5. **Stop on blocking failure.** If a task fails and other tasks depend on it, pause the dependent branch and report to the user. Do not silently skip and continue.
+
 ## Prerequisites
 
 - A task plan file produced by `/session-task-planning` with dependency tags
@@ -25,6 +33,8 @@ Read the todo file. Extract:
 - Priority (`P1`, `P2`, `P3`)
 
 Build an execution graph from the tags.
+
+**Phase exit criterion:** every task in the todo file maps to a node in the graph with dependencies resolved. If a tag is ambiguous (e.g. `[parallel-after:X]` where X doesn't exist), stop and ask the user.
 
 ### Step 2: Execute tasks in dependency order
 
