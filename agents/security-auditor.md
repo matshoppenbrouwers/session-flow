@@ -1,7 +1,6 @@
 ---
 name: security-auditor
 description: Combined technical security and legal liability auditor. Scans recent code changes for vulnerabilities (LLM/AI security, OWASP Top 10, secrets, agentic risks, desktop app security, supply chain) AND legal/liability exposure (GDPR, EU AI Act, ToS/EULA gaps, consumer protection, cross-border data transfers). Designed for solo EU-based developers with worldwide users.
-model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
 
