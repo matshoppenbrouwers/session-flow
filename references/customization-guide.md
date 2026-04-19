@@ -53,7 +53,6 @@ Create a file at `.claude/agents/code-reviewer.md` (or whichever agent) in your 
 ---
 name: code-reviewer
 description: Your custom reviewer description.
-model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
 ```
@@ -63,6 +62,33 @@ Then write your review instructions below the frontmatter. Post-implementation w
 ### Marketplace plugins:
 
 If you have a marketplace plugin installed (e.g., `code-simplifier:code-simplifier`), session-post-implementation detects it and uses the plugin instead of the bundled agent. No configuration needed.
+
+---
+
+## Model Selection
+
+Bundled agents (`code-reviewer`, `code-sanitizer`, `code-simplifier`) **do not pin a model** in their frontmatter. They inherit the parent session's model by default. So:
+
+- A user running Claude Code on Opus 4.7 gets Opus 4.7 subagents automatically.
+- A user running Sonnet gets Sonnet subagents.
+- A user on Haiku gets Haiku subagents (may be underpowered for heavy review — override if so).
+
+### Why inherit-by-default?
+
+Pinning a specific model in a bundled agent is hostile to users who upgrade their main model: their code review stays stuck at the pinned tier even though they paid for more capability. Inheritance respects the user's choice.
+
+### When to override
+
+If a specific agent genuinely needs a different tier than the session default:
+
+1. **Project-level override** — create `.claude/agents/code-reviewer.md` in your repo with `model: opus` (or whatever) in the frontmatter.
+2. **User-level override** — create `~/.claude/agents/code-reviewer.md` for all your projects.
+
+The precedence rules above apply: project wins over user wins over bundle.
+
+### Custom agents you write
+
+For your own custom agents, **avoid pinning `model`** unless the agent has a task-specific reason (e.g. heavy reasoning that always warrants opus regardless of session model). A good default is to omit the `model` field entirely and let the user's session tier apply.
 
 ---
 

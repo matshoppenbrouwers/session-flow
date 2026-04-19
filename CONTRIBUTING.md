@@ -15,9 +15,10 @@ Before submitting a skill:
 
 ## Agent Quality Checklist
 
-- [ ] YAML frontmatter has `name`, `description`, `model`, `tools`
+- [ ] YAML frontmatter has `name`, `description`, `tools`
+- [ ] **Do not pin `model`** unless the agent has a task-specific capability requirement (e.g. heavy reasoning that always warrants Opus). Bundled agents should inherit the user's session model so a user running Opus 4.7 gets Opus 4.7 subagents automatically.
 - [ ] No project-specific paths or framework assumptions
-- [ ] Reads project conventions from CLAUDE.md
+- [ ] Reads project conventions from CLAUDE.md / AGENTS.md
 - [ ] Has a performance budget or scope constraint
 - [ ] Output format is structured and actionable
 
