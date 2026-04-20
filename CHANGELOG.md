@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1 (2026-04-20)
+
+### Fixed
+- Bundled agents (`code-reviewer`, `code-sanitizer`, `code-simplifier`, `security-auditor`) now declare `model: inherit` in their frontmatter so they actually run on the parent session's model. In 1.1.0 the `model` field was removed entirely on the assumption that omission caused inheritance — Claude Code instead defaults to Sonnet when the field is absent, so users on Opus 4.7 were getting Sonnet 4.6 subagents. The correct magic value is `model: inherit` (as used by e.g. the superpowers plugin).
+- `CONTRIBUTING.md` agent checklist and `references/customization-guide.md` Model Selection section corrected to document the `model: inherit` requirement.
+
 ## 1.1.0 (2026-04-19)
 
 ### Added

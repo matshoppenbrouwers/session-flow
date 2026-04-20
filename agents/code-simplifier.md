@@ -2,6 +2,7 @@
 name: code-simplifier
 description: Simplify recently modified code for clarity, consistency, and maintainability. Dispatched by session-post-implementation. Focuses on reducing nesting, extracting guard clauses, consolidating duplicates, and improving readability without changing functionality.
 tools: Read, Edit, Grep, Glob, Bash
+model: inherit
 ---
 
 # Code Simplifier

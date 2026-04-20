@@ -15,8 +15,8 @@ Before submitting a skill:
 
 ## Agent Quality Checklist
 
-- [ ] YAML frontmatter has `name`, `description`, `tools`
-- [ ] **Do not pin `model`** unless the agent has a task-specific capability requirement (e.g. heavy reasoning that always warrants Opus). Bundled agents should inherit the user's session model so a user running Opus 4.7 gets Opus 4.7 subagents automatically.
+- [ ] YAML frontmatter has `name`, `description`, `tools`, `model: inherit`
+- [ ] **Use `model: inherit`** so the agent runs on the user's session model (e.g. a user running Opus 4.7 gets Opus 4.7 subagents automatically). Omitting the field defaults to Sonnet — that is *not* inheritance. Only pin a specific tier (`model: opus` / `sonnet` / `haiku`) when the agent has a hard capability requirement.
 - [ ] No project-specific paths or framework assumptions
 - [ ] Reads project conventions from CLAUDE.md / AGENTS.md
 - [ ] Has a performance budget or scope constraint

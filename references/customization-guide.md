@@ -67,15 +67,17 @@ If you have a marketplace plugin installed (e.g., `code-simplifier:code-simplifi
 
 ## Model Selection
 
-Bundled agents (`code-reviewer`, `code-sanitizer`, `code-simplifier`) **do not pin a model** in their frontmatter. They inherit the parent session's model by default. So:
+Bundled agents (`code-reviewer`, `code-sanitizer`, `code-simplifier`, `security-auditor`) declare **`model: inherit`** in their frontmatter. They run on the parent session's model. So:
 
 - A user running Claude Code on Opus 4.7 gets Opus 4.7 subagents automatically.
 - A user running Sonnet gets Sonnet subagents.
 - A user on Haiku gets Haiku subagents (may be underpowered for heavy review — override if so).
 
+> **Note:** `model: inherit` is the magic value. *Omitting* the `model` field entirely does **not** inherit — Claude Code falls back to Sonnet. If you want the user's session tier, write `model: inherit` explicitly.
+
 ### Why inherit-by-default?
 
-Pinning a specific model in a bundled agent is hostile to users who upgrade their main model: their code review stays stuck at the pinned tier even though they paid for more capability. Inheritance respects the user's choice.
+Pinning a specific tier in a bundled agent is hostile to users who upgrade their main model: their code review stays stuck at the pinned tier even though they paid for more capability. `inherit` respects the user's choice.
 
 ### When to override
 
@@ -88,7 +90,7 @@ The precedence rules above apply: project wins over user wins over bundle.
 
 ### Custom agents you write
 
-For your own custom agents, **avoid pinning `model`** unless the agent has a task-specific reason (e.g. heavy reasoning that always warrants opus regardless of session model). A good default is to omit the `model` field entirely and let the user's session tier apply.
+For your own custom agents, **use `model: inherit`** unless the agent has a task-specific reason to pin a tier (e.g. heavy reasoning that always warrants Opus regardless of session model). Do not omit the field — that silently falls back to Sonnet.
 
 ---
 

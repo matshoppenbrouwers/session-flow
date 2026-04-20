@@ -2,6 +2,7 @@
 name: code-reviewer
 description: Solo-dev code reviewer. Auto-detects scope (uncommitted changes or last commit). Covers security (OWASP Top 10), Python, React/TypeScript, Go, Java/Kotlin, and project conventions in a single pass. No PR workflows.
 tools: Read, Grep, Glob, Bash
+model: inherit
 ---
 
 # Code Reviewer (Solo Dev)
