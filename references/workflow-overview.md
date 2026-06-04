@@ -103,21 +103,27 @@ If you have a custom `code-reviewer.md` in your project's `.claude/agents/`, pos
 
 ## Path Resolution
 
-Every skill needs to find project directories (todo, memory, architecture). They all follow the same resolution order:
+Every skill needs to find project directories (todo, tasks, sequence, architecture, direction). They all follow the same resolution order:
 
 ### Resolution order:
-1. **Config file:** Read `.session-flow.json` in the project root. It contains explicit paths:
+1. **Config file:** Read `.session-flow.json` in the project root. It contains explicit paths under a nested `paths` object:
    ```json
    {
-     "todoDir": "_devdocs/todo",
-     "memoryDir": "_devdocs/memory",
-     "architectureDir": "_devdocs/architecture"
+     "root": "_devdocs",
+     "paths": {
+       "todo": "_devdocs/todo",
+       "tasks": "_devdocs/todo/tasks",
+       "sequence": "_devdocs/todo/SEQUENCE.md",
+       "architecture": "_devdocs/architecture",
+       "direction": "_devdocs/PRD.md"
+     }
    }
    ```
 2. **Auto-detect:** Look for common directory names at the project root:
    - Todo: `todo/`, `_devdocs/todo/`, `docs/todo/`
-   - Memory: `memory/`, `_devdocs/memory/`, `docs/memory/`
+   - Tasks/sequence: `{todo}/tasks/`, `{todo}/SEQUENCE.md`
    - Architecture: `architecture/`, `_devdocs/architecture/`, `docs/architecture/`
+   - Direction: `PRD.md` / `DIRECTION.md` / `VISION.md` in the docs root, then the repo root
 3. **Suggest init:** If neither config nor directories exist, suggest running `/session-init` to bootstrap the project structure.
 
 ### Why this matters:

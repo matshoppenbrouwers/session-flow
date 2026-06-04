@@ -12,7 +12,7 @@ Capture a task into the sequence backlog so it can be picked up later with "impl
 ## Non-Negotiables
 
 1. **Every breakdown has Files, Instructions, Accept, Test.** A linked breakdown missing any field is not valid. The only exception is a deliberate `(needs breakdown)` capture (mode C), which has no breakdown yet by design.
-2. **Sequence IDs are unique and monotonic.** Scan existing `SEQ-NNN` ids and use the next integer. Never reuse or duplicate an id.
+2. **Sequence IDs are unique and monotonic.** Scan existing ids and use the next integer. The entry id is `SEQ-NNN` (zero-padded to 3 digits); the breakdown file uses the same number zero-padded to 4 (`NNNN-slug.md`). Never reuse or duplicate an id.
 3. **Never overwrite an existing breakdown file.** If `todo/tasks/NNNN-slug.md` exists, pick a new id/slug. Appending to the sequence is additive only.
 4. **One-line entries stay one line.** The sequence is a scannable list. Detail lives in the breakdown file, never inline in SEQUENCE.md.
 5. **Action verbs in the breakdown.** "Create", "Add", "Extract" — not "Consider", "Look into".
@@ -49,7 +49,7 @@ Pick the mode based on the task's size and how ready it is.
 
 The task is well-understood and session-sized (1-5 files). Write a complete breakdown now.
 
-1. Choose the next `SEQ-NNN` id and a `NNNN-slug` filename (zero-padded, kebab-case slug).
+1. Choose the next id (e.g. `SEQ-007`). The breakdown filename reuses that same number padded to 4 digits with a kebab-case slug: `SEQ-007` → `0007-add-rate-limit.md`.
 2. Write `{tasks}/NNNN-slug.md` using the breakdown template below.
 3. Append a linked entry to `SEQUENCE.md`.
 
@@ -66,7 +66,7 @@ The user just wants it recorded; research/breakdown comes later (via `/session-g
 
 1. Choose the next `SEQ-NNN` id.
 2. Append a one-liner with a trailing `(needs breakdown)` and no link:
-   `- [ ] SEQ-009 P3: Investigate caching layer  (needs breakdown)`
+   `- [ ] SEQ-009 P3: Investigate caching layer (needs breakdown)`
 
 When unsure which mode, ask the user one question: "Quick capture, full breakdown now, or is this big enough to plan as multiple tasks?"
 

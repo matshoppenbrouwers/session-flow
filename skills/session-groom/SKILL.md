@@ -13,7 +13,7 @@ Keep the sequence backlog ready: research each un-prepared entry, verify it, and
 
 1. **Idempotent.** Running groom twice over a healthy sequence changes nothing. Only act on entries that are `(needs breakdown)`, have a dangling/missing link, or are explicitly flagged for re-research.
 2. **Verify before linking.** A breakdown is only attached after the task is confirmed feasible and grounded in the actual code (files exist, the approach is sound). Don't fabricate paths or tests.
-3. **Gate the big ones.** If an entry turns out to be a significant or architecture-touching change, do not auto-break-it-down — escalate to `/session-research-design` (or `/session-gatekeeper`) and leave a note on the entry.
+3. **Gate the big ones.** If an entry turns out to be a significant or architecture-touching change, do not auto-break-it-down — escalate to a cowork `/session-research-design` session and leave a note on the entry.
 4. **Never start implementation.** Groom prepares breakdowns; it does not write app code. Execution is `/session-next`'s job.
 5. **Report a summary.** After a pass, list what was groomed, what was escalated, and what was skipped.
 
@@ -44,13 +44,13 @@ For each un-prepared entry:
 
 ### Step 3: Write the breakdown
 
-Reuse the `session-add-task` / `session-task-planning` breakdown template (header + Files / Instructions / Accept / Test). Write it to `{tasks}/NNNN-slug.md` (next free id, never overwrite), then update the sequence entry to drop `(needs breakdown)` and add the `→` link.
+Reuse the `session-add-task` / `session-task-planning` breakdown template (header + Files / Instructions / Accept / Test). Write it to `{tasks}/NNNN-slug.md`, where `NNNN` is the entry's existing `SEQ-NNN` number (zero-padded) so the file and entry stay aligned. Never overwrite an existing file. Then update the sequence entry to drop `(needs breakdown)` and add the `→` link.
 
 ### Step 4: Escalate when needed
 
 If the entry is too big or diverges from the app's direction, do not break it down. Instead:
 - Leave the entry as-is and annotate it (e.g. `(needs research-design)`).
-- Recommend `/session-research-design` for a cowork session, or route via `/session-gatekeeper`.
+- Recommend `/session-research-design` for a cowork session with the user.
 
 ### Step 5: Report
 
@@ -92,7 +92,7 @@ raw one-liners in SEQUENCE.md  (from users or /session-add-task capture mode)
         v
    session-groom  --(session-sized)--> writes todo/tasks/NNNN-*.md, links the entry
         |
-        +--(significant/divergent)--> escalate to session-research-design / session-gatekeeper
+        +--(significant/divergent)--> escalate to session-research-design (cowork)
         |
         v
    ready entries  ---> session-next executes them

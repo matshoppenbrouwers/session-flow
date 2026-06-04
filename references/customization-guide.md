@@ -12,21 +12,28 @@ Session-flow reads `.session-flow.json` from your project root. This file is cre
 
 ```json
 {
-  "todoDir": "_devdocs/todo",
-  "memoryDir": "_devdocs/memory",
-  "architectureDir": "_devdocs/architecture",
-  "archiveDir": "_devdocs/memory/archive",
-  "reportsDir": "_devdocs/reports"
+  "root": "_devdocs",
+  "paths": {
+    "research": "_devdocs/research",
+    "plans": "_devdocs/plans",
+    "todo": "_devdocs/todo",
+    "tasks": "_devdocs/todo/tasks",
+    "sequence": "_devdocs/todo/SEQUENCE.md",
+    "testing": "_devdocs/testing",
+    "architecture": "_devdocs/architecture",
+    "direction": "_devdocs/PRD.md"
+  }
 }
 ```
 
-All paths are relative to the project root. Every field is optional — skills fall back to auto-detection if a field is missing.
+All paths are relative to the project root and live under the nested `paths` object. Every field is optional — skills fall back to auto-detection if a field is missing. `paths.sequence` and `paths.direction` point at files (`SEQUENCE.md` and the product-direction doc); the rest are directories.
 
 ### Minimal config:
 
 ```json
 {
-  "todoDir": "docs/tasks"
+  "root": "docs",
+  "paths": { "todo": "docs/tasks" }
 }
 ```
 
@@ -139,8 +146,10 @@ Change the relevant path:
 
 ```json
 {
-  "todoDir": "project-management/tasks",
-  "architectureDir": "docs/arch"
+  "paths": {
+    "todo": "project-management/tasks",
+    "architecture": "docs/arch"
+  }
 }
 ```
 
@@ -155,11 +164,16 @@ If the directories exist before you run `/session-init`, the init skill detects 
 ```
 project-root/
   .session-flow.json
+  CLAUDE.md / AGENTS.md   # session-flow:sequence block wired in by init
   _devdocs/
+    research/       # Research documents from session-research-design
+    plans/          # Implementation plans from session-research-design
     todo/           # Task files from session-task-planning
-    memory/         # Session state, decision logs, archives
+      tasks/        # Per-task breakdown files for sequence entries
+      SEQUENCE.md   # Task backlog: one-line entries linked to breakdowns
+    testing/        # Manual test plans and results from session-post-implementation
     architecture/   # Architecture documentation
-    reports/        # Research reports from session-research-design
+    PRD.md          # Product direction doc (optional; used by session-gatekeeper)
 ```
 
 ---

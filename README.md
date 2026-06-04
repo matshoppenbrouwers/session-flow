@@ -9,15 +9,17 @@ Session workflow orchestration for Claude Code. A development lifecycle chain fr
 ## The Chain
 
 ```
-session-init ──> research-design ──> task-planning ──> delegation ──> post-impl ──> verify ──> release
- (one-time)       (collaborative      (break into       (dispatch      (simplify,     (evidence-   (version bump,
-                   brainstorming)      session tasks)    agents)        review,        based proof) package, verify)
-                                                                        audit, test)   (optional,
-                                                                           │            heavy)
-                                                                     update-architecture
+session-init ──> gatekeeper ──> research-design ──> task-planning ──> delegation ──> post-impl ──> verify ──> release
+ (one-time)       (triage          (collaborative      (break into       (dispatch      (simplify,     (evidence-   (version bump,
+                   intake)          brainstorming)      session tasks)    agents)        review,        based proof) package, verify)
+                                                                                         audit, test)   (optional,
+                                                                                            │            heavy)
+                                                                                      update-architecture
+
+sequence layer:  gatekeeper / add-task / task-planning ──> SEQUENCE.md ──> groom ──> next
 ```
 
-Each skill produces artifacts that feed into the next. Start anywhere in the chain based on what you already have.
+Each skill produces artifacts that feed into the next. Start anywhere in the chain based on what you already have. The **sequence layer** runs alongside the chain: a standing backlog (`todo/SEQUENCE.md`) that gatekeeper/add-task fill, groom prepares, and next works through.
 
 ## Install
 
@@ -113,7 +115,7 @@ Beyond per-feature task files, session-flow keeps a standing **backlog** at `tod
 
 ```
 - [ ] SEQ-007 P2: Add rate limiting to the API → todo/tasks/0007-add-rate-limit.md
-- [ ] SEQ-008 P3: Investigate caching layer  (needs breakdown)
+- [ ] SEQ-008 P3: Investigate caching layer (needs breakdown)
 - [x] SEQ-006 P1: Fix login redirect loop → todo/tasks/0006-fix-login-redirect.md
 ```
 
@@ -133,7 +135,7 @@ Each linked breakdown in `todo/tasks/` is a self-contained, bite-sized prompt (F
 
 ### Gatekeeper / Intake
 
-`/session-gatekeeper` is the front-of-chain funnel for incoming work — GitHub issues, feature requests, or ideas that surface mid-session. It grounds each item in your architecture docs and product direction (`PRD.md`, configurable via `paths.direction`), then routes it:
+`/session-gatekeeper` is the front-of-chain funnel for incoming work — GitHub issues, feature requests, or ideas that surface mid-session. It grounds each item in your architecture docs and product direction (a `PRD.md` in the docs root by default, configurable via `paths.direction`), then routes it:
 
 - **Trivial, aligned, and clear** → straight into the sequence via `session-add-task`.
 - **Significant, divergent, or unclear** → escalated to a cowork `/session-research-design` session with you.
@@ -199,12 +201,12 @@ session-flow adapts to your project via `.session-flow.json` (created by `/sessi
     "sequence": "_devdocs/todo/SEQUENCE.md",
     "testing": "_devdocs/testing",
     "architecture": "_devdocs/architecture",
-    "direction": "PRD.md"
+    "direction": "_devdocs/PRD.md"
   }
 }
 ```
 
-`paths.direction` points `/session-gatekeeper` at your product-direction doc — set it to an existing PRD/vision file or let `/session-init` scaffold `PRD.md`.
+`paths.direction` points `/session-gatekeeper` at your product-direction doc. It defaults to a `PRD.md` inside the docs root (e.g. `_devdocs/PRD.md`) — let `/session-init` scaffold it, or set this to an existing PRD/vision file anywhere in the repo.
 
 Override agents by placing custom versions at `~/.claude/agents/` (user) or `.claude/agents/` (project). See [references/customization-guide.md](references/customization-guide.md) for details.
 

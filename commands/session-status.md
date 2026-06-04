@@ -12,7 +12,7 @@ Check the current state of the session-flow workflow and recommend the next acti
 
 Locate the project's task directory using this resolution order:
 
-1. Read `.session-flow.json` in the project root for a configured `todoDir` path.
+1. Read `.session-flow.json` in the project root for the configured `paths.todo` path.
 2. If no config, detect from common locations: `todo/`, `_devdocs/todo/`, `docs/todo/`.
 3. If no directory found, skip to Step 4.
 

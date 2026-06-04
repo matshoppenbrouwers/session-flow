@@ -84,9 +84,9 @@ Add entries with `/session-add-task` or `/session-gatekeeper`. Prepare raw ones 
 
 `session-gatekeeper` grounds its triage in a product-direction doc. Offer -- do not force -- to scaffold one:
 
-"Want me to create a `PRD.md` stub for product direction? (Used by /session-gatekeeper. You can also point at an existing file instead.)"
+"Want me to create a `PRD.md` stub for product direction in the docs root (`{root}/PRD.md`)? (Used by /session-gatekeeper. You can also point at an existing file instead.)"
 
-- If yes and no file exists: create `{root}/PRD.md` with a minimal stub (vision, scope, non-goals headings).
+- If yes and no file exists: create `{root}/PRD.md` (inside the docs root, e.g. `_devdocs/PRD.md`) with a minimal stub (vision, scope, non-goals headings).
 - If the user already has a PRD/direction file: don't create one -- just record its path in `paths.direction` (Step 5).
 - If the user declines: skip it; gatekeeper degrades gracefully when no direction doc exists.
 
@@ -141,7 +141,7 @@ Create `.session-flow.json` in the project root:
 }
 ```
 
-This config file allows all other session-flow skills to auto-discover the documentation root without hardcoding paths. `paths.direction` points at the product-direction doc used by `/session-gatekeeper` -- set it to the user's existing PRD/direction file if they have one (default `PRD.md`).
+This config file allows all other session-flow skills to auto-discover the documentation root without hardcoding paths. `paths.direction` points at the product-direction doc used by `/session-gatekeeper` -- it defaults to `<chosen-root>/PRD.md` (inside the docs root), or set it to the user's existing PRD/direction file anywhere in the repo.
 
 ### Step 5b: Wire the Sequence into CLAUDE.md and AGENTS.md
 

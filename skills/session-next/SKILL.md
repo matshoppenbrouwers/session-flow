@@ -12,7 +12,7 @@ Pick up and execute the next ready task from the sequence backlog.
 ## Non-Negotiables
 
 1. **Only execute entries with a valid linked breakdown.** An entry marked `(needs breakdown)` or with a dangling link is not ready. Skip it and offer `/session-groom`.
-2. **Mark `[x]` in both places on completion.** Update the entry in `SEQUENCE.md` and the `**Status**` in the breakdown file. Do not batch — a backlog reader must see live state.
+2. **Mark `[x]` on completion.** Always update the entry in `SEQUENCE.md`. For a per-task breakdown, also set `**Status**: [x]` in the file. (A phase-file anchor has no per-task `**Status**` line — `/session-delegation` marks the phase tasks `[x]`; you just close the entry.) Do not batch — a backlog reader must see live state.
 3. **Respect order and priority.** Pick the topmost open entry; among equals, prefer lower P-number (P1 before P3). Don't cherry-pick the easy one.
 4. **Hand off multi-task breakdowns.** If the link points to a `session-task-planning` phase file, dispatch via `/session-delegation` — do not try to do a whole phase as one task.
 5. **One task per invocation unless told otherwise.** Finish, report, and suggest the next. Don't silently churn through the whole backlog.

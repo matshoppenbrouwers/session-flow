@@ -22,7 +22,7 @@ Triage incoming work and route it to the right place, grounded in where the app 
 Resolve project context before judging anything:
 
 1. Read `.session-flow.json` for `paths.architecture`, `paths.plans`, `paths.sequence`, and `paths.direction`.
-2. **Direction doc:** read `paths.direction` (default `PRD.md`). If unset, detect `PRD.md`, then `DIRECTION.md`, then `VISION.md`, then a `## Direction` section in a top-level doc.
+2. **Direction doc:** read `paths.direction` (defaults to a `PRD.md` in the docs root, e.g. `_devdocs/PRD.md`). If unset, detect `PRD.md` / `DIRECTION.md` / `VISION.md` in the docs root first, then at the repo root, then a `## Direction` section in a top-level doc.
 3. **Architecture:** read `architecture/INDEX.md` and relevant architecture docs.
 4. **Recent plans:** skim recent `plans/` for in-flight direction.
 5. If no direction doc exists, note it, ask the user for the north-star (or which file to use), and treat alignment as "unknown" — which biases toward escalation rather than auto-adding.
