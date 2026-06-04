@@ -35,6 +35,19 @@ Also detect the current phase from `### [PHASE-TASK]` headers (e.g., `SETUP`, `C
 
 Identify parallel opportunities: tasks tagged `[parallel-after:X]` where task X is already `[x]`.
 
+## Step 2b: Parse the Task Sequence
+
+Find the backlog file via `.session-flow.json` `paths.sequence`, or detect `{todo}/SEQUENCE.md`. If present, count its one-line entries:
+
+| Category | How to count |
+|----------|--------------|
+| Total | All `- [ ]` / `- [x]` entries |
+| Done | `[x]` entries |
+| Ready | `[ ]` entries with a `→` link to an existing breakdown |
+| Needs breakdown | `[ ]` entries with trailing `(needs breakdown)` or a missing/dangling link |
+
+If there is no sequence file, treat all counts as 0.
+
 ## Step 3: Report Status
 
 Output exactly this structure. Fixed fields, no substitutions.
@@ -48,6 +61,7 @@ Output exactly this structure. Fixed fields, no substitutions.
 **Blocked:** {count of blocked tasks, or "none"}
 **Parallel opportunities:** {list of task IDs that can run concurrently, or "none"}
 **Recent activity:** {last completed task ID and title, or "no completions yet"}
+**Sequence backlog:** {done}/{total} done · {ready} ready · {needs_breakdown} need breakdown (or "no sequence")
 
 **Next:** {recommended action — see Step 4}
 ```
@@ -58,8 +72,12 @@ Every field is required. If a field has no data, use "none", "n/a", or "0" — d
 
 Based on the state, suggest the appropriate skill:
 
+Check the sequence backlog first, then the active task file:
+
 | State | Recommendation |
 |-------|---------------|
+| Sequence has `ready` entries | "Run `/session-next` to implement the next task from the backlog." |
+| Sequence has only `needs breakdown` entries | "Run `/session-groom` to research and break down the open entries." |
 | No task directory or task file found | "Run `/session-research-design` to explore the problem space, or `/session-task-planning` if you already have a plan." |
 | Task file exists but all items are `[plan]` | "Run `/session-task-planning` to break these into executable tasks." |
 | Tasks exist with `[ ]` remaining | "Continue with `/session-delegation` to execute the next batch." |

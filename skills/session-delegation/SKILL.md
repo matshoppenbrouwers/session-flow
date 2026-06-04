@@ -22,6 +22,8 @@ Orchestrate task execution from a session task plan file.
 - A task plan file produced by `/session-task-planning` with dependency tags
 - The plan should have `[seq]`, `[parallel-after:X]`, and status `[ ]` tags
 
+**Invoked by session-next:** When a `SEQUENCE.md` entry links to a multi-task phase file, `/session-next` hands off to this skill. After the linked phase (or anchored task) is fully `[x]`, mark the source sequence entry `[x]` in `SEQUENCE.md` too.
+
 ## Execution Algorithm
 
 ### Step 1: Parse the task plan

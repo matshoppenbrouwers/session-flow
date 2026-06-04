@@ -161,6 +161,14 @@ Each task references the design doc -- read it first for full context.
 | [Criterion 2] | [How to verify] |
 ```
 
+## Sequence Integration
+
+After writing a phase file, optionally surface it on the task backlog so it can be picked up with "implement the next task":
+
+- Offer to register the phase's top-level tasks as entries in `SEQUENCE.md`, each linked to its task anchor (e.g. `→ todo/2026-06-03-feature.md#1A-1`).
+- For one-off follow-ups that don't warrant a full phase, point the user to `/session-add-task` instead.
+- This is additive only. Keep the `todo/` vs `plans/` separation intact -- phase files and breakdowns live under `todo/`, design docs stay in `plans/`.
+
 ## Validation Checklist
 
 Before finalizing, verify each task:
