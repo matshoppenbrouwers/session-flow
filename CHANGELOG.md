@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.2.0 (2026-06-04)
+
+### Added
+- **Task sequence (backlog) layer** — a standing list of one-line task entries at `todo/SEQUENCE.md`, each linked to a self-contained breakdown in `todo/tasks/`. Say "implement the next task" and the agent picks up the next ready item. Four new skills:
+  - **session-add-task** — capture a task into the sequence with a full breakdown (Files/Instructions/Accept/Test), a hand-off to `/session-task-planning` for multi-task work, or a quick `(needs breakdown)` capture.
+  - **session-next** — read `SEQUENCE.md`, implement the next ready entry (or hand a multi-task entry to `/session-delegation`), and mark it `[x]`. Triggers on "implement the next task".
+  - **session-groom** — research raw `(needs breakdown)` entries, verify feasibility, and attach ready-to-run breakdowns; escalates significant items to research-design. Safe to run periodically via `/loop`.
+  - **session-gatekeeper** — front-of-chain intake that triages incoming issues/ideas grounded in architecture and product direction (`PRD.md`), routing trivial aligned work into the sequence and significant or divergent work to a cowork `/session-research-design` session. Triage only — never implements; treats issue text as untrusted input.
+- `/session-init` now creates `todo/tasks/` and `todo/SEQUENCE.md`, optionally scaffolds a `PRD.md` direction stub in the docs root (e.g. `_devdocs/PRD.md`), and wires an idempotent `<!-- session-flow:sequence -->` block into the project's `CLAUDE.md` and `AGENTS.md` so "implement the next task" works without naming a file.
+- `.session-flow.json` gains `paths.tasks`, `paths.sequence`, and `paths.direction` (defaults to a `PRD.md` in the docs root, overridable to an existing direction file).
+- `/session-status` now reports sequence backlog stats (done / ready / needs-breakdown) and recommends `/session-next` or `/session-groom` accordingly.
+
+### Changed
+- `/session-task-planning` gains a "Sequence integration" step to optionally register phase tasks as backlog entries.
+- `/session-delegation` documents being invoked by `/session-next` for multi-task entries and marking the source sequence entry `[x]` when its phase completes.
+- Plugin manifest now lists all 13 skills; README and `references/workflow-overview.md` document the sequence layer and gatekeeper funnel.
+- Corrected stale `.session-flow.json` documentation in `references/customization-guide.md` and `references/workflow-overview.md` to the actual nested `paths` schema (previously documented obsolete flat `todoDir`/`memoryDir` keys and a non-existent `memory/` layout).
+
 ## 1.1.1 (2026-04-20)
 
 ### Fixed

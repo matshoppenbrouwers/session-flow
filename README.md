@@ -3,21 +3,23 @@
 Session workflow orchestration for Claude Code. A development lifecycle chain from research through release, with dependency-aware task planning, agent dispatch, and evidence-based verification.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Skills: 9](https://img.shields.io/badge/Skills-9-green)
+![Skills: 13](https://img.shields.io/badge/Skills-13-green)
 ![Agents: 4](https://img.shields.io/badge/Agents-4-orange)
 
 ## The Chain
 
 ```
-session-init ──> research-design ──> task-planning ──> delegation ──> post-impl ──> verify ──> release
- (one-time)       (collaborative      (break into       (dispatch      (simplify,     (evidence-   (version bump,
-                   brainstorming)      session tasks)    agents)        review,        based proof) package, verify)
-                                                                        audit, test)   (optional,
-                                                                           │            heavy)
-                                                                     update-architecture
+session-init ──> gatekeeper ──> research-design ──> task-planning ──> delegation ──> post-impl ──> verify ──> release
+ (one-time)       (triage          (collaborative      (break into       (dispatch      (simplify,     (evidence-   (version bump,
+                   intake)          brainstorming)      session tasks)    agents)        review,        based proof) package, verify)
+                                                                                         audit, test)   (optional,
+                                                                                            │            heavy)
+                                                                                      update-architecture
+
+sequence layer:  gatekeeper / add-task / task-planning ──> SEQUENCE.md ──> groom ──> next
 ```
 
-Each skill produces artifacts that feed into the next. Start anywhere in the chain based on what you already have.
+Each skill produces artifacts that feed into the next. Start anywhere in the chain based on what you already have. The **sequence layer** runs alongside the chain: a standing backlog (`todo/SEQUENCE.md`) that gatekeeper/add-task fill, groom prepares, and next works through.
 
 ## Install
 
@@ -43,9 +45,13 @@ Works on macOS, Linux, and Windows.
 
 | Skill | Trigger | Produces |
 |-------|---------|----------|
-| **session-init** | `/session-init` | Directory structure + `.session-flow.json` config |
+| **session-init** | `/session-init` | Directory structure, `SEQUENCE.md`, `.session-flow.json` config |
+| **session-gatekeeper** | `/session-gatekeeper` | Triaged issues routed to the sequence or to research-design |
 | **session-research-design** | `/session-research-design` | Research report + implementation plan |
 | **session-task-planning** | `/session-task-planning` | Task file with dependency tags `[seq]`, `[parallel-after:X]` |
+| **session-add-task** | `/session-add-task` | Sequence entry + per-task breakdown file |
+| **session-groom** | `/session-groom` | Researched breakdowns attached to raw backlog entries |
+| **session-next** | `/session-next` | The next backlog task implemented and marked done |
 | **session-delegation** | `/session-delegation` | Completed implementations via parallel agent dispatch |
 | **session-post-implementation** | `/session-post-implementation` | Refined code, security audit, test plan, updated docs |
 | **session-verify** | `/session-verify` | Evidence-based verification artifact proving implementation matches design spec |
@@ -59,6 +65,8 @@ You don't have to start at step 1:
 
 | You have... | Start with |
 |-------------|------------|
+| Incoming issues or ideas to triage | `/session-gatekeeper` — route them to the backlog or a design session |
+| A running backlog | `/session-next` — implement the next ready task |
 | A vague idea | `/session-research-design` — collaborative brainstorming refines it |
 | A plan or spec | `/session-task-planning` — break it into session-sized tasks |
 | A task list | `/session-delegation` — dispatch agents to execute |
@@ -100,6 +108,40 @@ Claude: Bumps version → waits for build → packages artifacts →
         scans docs site, website, changelog for stale content →
         presents checklist → commits release
 ```
+
+## Task Sequence / Backlog
+
+Beyond per-feature task files, session-flow keeps a standing **backlog** at `todo/SEQUENCE.md` — a flat list of one-line entries, each linking to a detailed breakdown:
+
+```
+- [ ] SEQ-007 P2: Add rate limiting to the API → todo/tasks/0007-add-rate-limit.md
+- [ ] SEQ-008 P3: Investigate caching layer (needs breakdown)
+- [x] SEQ-006 P1: Fix login redirect loop → todo/tasks/0006-fix-login-redirect.md
+```
+
+Each linked breakdown in `todo/tasks/` is a self-contained, bite-sized prompt (Files / Instructions / Accept / Test) ready for an agent to execute.
+
+| Want to... | Use |
+|------------|-----|
+| Capture something for later | `/session-add-task` — adds an entry + breakdown |
+| Implement the next item | `/session-next` — or just say "implement the next task" |
+| Prepare raw one-liners | `/session-groom` — researches and attaches breakdowns |
+
+`session-init` wires a `<!-- session-flow:sequence -->` block into your `CLAUDE.md` and `AGENTS.md` so "implement the next task" works without naming a file. Pair grooming with the built-in `/loop` for hands-off upkeep:
+
+```
+/loop 30m /session-groom
+```
+
+### Gatekeeper / Intake
+
+`/session-gatekeeper` is the front-of-chain funnel for incoming work — GitHub issues, feature requests, or ideas that surface mid-session. It grounds each item in your architecture docs and product direction (a `PRD.md` in the docs root by default, configurable via `paths.direction`), then routes it:
+
+- **Trivial, aligned, and clear** → straight into the sequence via `session-add-task`.
+- **Significant, divergent, or unclear** → escalated to a cowork `/session-research-design` session with you.
+- **Off-direction** → flagged for your explicit decision.
+
+It triages only — it never implements, and it treats issue text as untrusted data rather than instructions. It pairs with `/loop` for periodic issue intake, queuing anything significant for you rather than auto-processing it.
 
 ## Post-Implementation Workflow
 
@@ -155,11 +197,16 @@ session-flow adapts to your project via `.session-flow.json` (created by `/sessi
     "research": "_devdocs/research",
     "plans": "_devdocs/plans",
     "todo": "_devdocs/todo",
+    "tasks": "_devdocs/todo/tasks",
+    "sequence": "_devdocs/todo/SEQUENCE.md",
     "testing": "_devdocs/testing",
-    "architecture": "_devdocs/architecture"
+    "architecture": "_devdocs/architecture",
+    "direction": "_devdocs/PRD.md"
   }
 }
 ```
+
+`paths.direction` points `/session-gatekeeper` at your product-direction doc. It defaults to a `PRD.md` inside the docs root (e.g. `_devdocs/PRD.md`) — let `/session-init` scaffold it, or set this to an existing PRD/vision file anywhere in the repo.
 
 Override agents by placing custom versions at `~/.claude/agents/` (user) or `.claude/agents/` (project). See [references/customization-guide.md](references/customization-guide.md) for details.
 
@@ -169,7 +216,7 @@ Only 1-2 skills are loaded at a time (triggered by description matching):
 
 | Component | Est. Tokens |
 |-----------|-------------|
-| All 9 skill metadata (always loaded) | ~900 |
+| All 13 skill metadata (always loaded) | ~1,300 |
 | Largest single skill body (research-design) | ~2,500 |
 | Typical active session | ~3,400 |
 
