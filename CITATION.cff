@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+title: "session-flow: a Claude Code plugin for session workflow orchestration"
+message: "If you use session-flow, please cite it using these metadata."
+type: software
+authors:
+  - alias: hoponthestack
+    name: matshoppenbrouwers
+repository-code: "https://github.com/matshoppenbrouwers/session-flow"
+url: "https://github.com/matshoppenbrouwers/session-flow"
+abstract: >-
+  session-flow is a Claude Code plugin that orchestrates the full software
+  development lifecycle through a chain of 13 skills and 4 agents — research,
+  design, task planning, agent delegation, post-implementation, evidence-based
+  verification, and release — with dependency-aware parallelization, a standing
+  task backlog, and a security & liability audit.
+keywords:
+  - claude-code
+  - claude
+  - claude-plugin
+  - anthropic
+  - ai
+  - llm
+  - agentic-workflow
+  - developer-tools
+  - workflow-orchestration
+  - task-planning
+  - code-review
+license: MIT
+version: 1.2.0
+date-released: "2026-06-04"

@@ -1,10 +1,12 @@
-# session-flow
+# session-flow — Claude Code plugin for session workflow orchestration
 
-Session workflow orchestration for Claude Code. A development lifecycle chain from research through release, with dependency-aware task planning, agent dispatch, and evidence-based verification.
+**session-flow** is a [Claude Code](https://claude.com/claude-code) plugin that orchestrates the full software development lifecycle — a chain of **13 skills** and **4 agents** covering research, design, task planning, agent delegation, post-implementation, evidence-based verification, and release. It adds dependency-aware parallelization, a standing task backlog, collaborative brainstorming, and a security & liability audit, with user gates at every critical decision.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Skills: 13](https://img.shields.io/badge/Skills-13-green)
 ![Agents: 4](https://img.shields.io/badge/Agents-4-orange)
+
+> **Install in Claude Code:** `/plugin marketplace add matshoppenbrouwers/session-flow` then `/plugin install session-flow@session-flow`
 
 ## The Chain
 
@@ -234,3 +236,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for skill quality checklists and guidelin
 ## License
 
 [MIT](LICENSE)
+
+## Links
+
+- **Repository:** https://github.com/matshoppenbrouwers/session-flow
+- **Author:** [matshoppenbrouwers (hoponthestack)](https://github.com/matshoppenbrouwers)
+- **Install:** `/plugin marketplace add matshoppenbrouwers/session-flow`
+
+<sub>Keywords: Claude Code plugin · Claude Code skills · Claude Code agents · agentic workflow · development lifecycle automation · task planning · code review · evidence-based verification</sub>

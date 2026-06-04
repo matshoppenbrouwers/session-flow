@@ -11,14 +11,26 @@
   "license": "MIT",
   "keywords": [
     "claude-code",
+    "claude",
+    "claude-plugin",
+    "anthropic",
+    "ai",
+    "llm",
+    "agentic-workflow",
+    "developer-tools",
+    "automation",
+    "workflow",
     "session-workflow",
     "task-planning",
     "agent-orchestration",
     "parallel-agents",
     "post-implementation",
     "release-workflow",
+    "code-review",
+    "verification",
     "brainstorming",
-    "skills"
+    "skills",
+    "agents"
   ],
   "skills": [
     "./skills/session-init",
