@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1 (2026-07-16)
+
+### Changed
+- `session-next` Step 3 softens the per-task test mandate: instead of "write a test for the acceptance criteria (TDD)", it now bounds scope to the test(s) the acceptance criterion needs, prefers extending an existing test module over forking a new one, targets the pure/decision layer (not the framework, mocks, or trivial pass-throughs), and defers to the project's root `CLAUDE.md` "Test with altitude" principle where present. Keeps TDD (test as external oracle) while removing wording that drove test volume.
+
 ## 1.2.0 (2026-06-04)
 
 ### Added
