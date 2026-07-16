@@ -1,2 +1,6 @@
+# Normalize line endings across platforms: store LF in the repo and
+# check out LF everywhere. Prevents CRLF flips on Windows/WSL checkouts.
+* text=auto eol=lf
+
 # Keep shell scripts with Unix line endings on all platforms
 *.sh text eol=lf
