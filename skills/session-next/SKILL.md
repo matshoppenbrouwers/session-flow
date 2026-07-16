@@ -42,7 +42,7 @@ Among otherwise-equal candidates, prefer the lowest P-number. If the topmost ope
 
 Run the bite-sized prompt directly:
 1. Read all referenced files first.
-2. Write a test for the acceptance criteria (TDD).
+2. Write the test(s) the acceptance criterion needs — no more. Prefer extending an existing test module over forking a new one. Cover the pure/decision layer; don't test the framework, mocks, or trivial pass-throughs. (Defer to the project's root `CLAUDE.md` "Test with altitude" principle, which wins where present.)
 3. Implement until the test passes.
 4. Run the breakdown's exact Test command.
 5. Commit the change with a descriptive message.
