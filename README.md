@@ -224,6 +224,17 @@ Only 1-2 skills are loaded at a time (triggered by description matching):
 
 Security audit reference files (~900 lines total) are only loaded when the audit runs.
 
+## Companion Plugin
+
+[**session-scribe**](https://github.com/matshoppenbrouwers/session-scribe) bridges the same workflow into Notion: ended sessions become dated Agent log entries on the mapped project page, and the `SEQUENCE.md` backlog is mirrored into a Notion Tasks database with project relations. session-flow produces the work and the backlog; session-scribe makes both reviewable outside the terminal.
+
+```
+/plugin marketplace add matshoppenbrouwers/session-scribe
+/plugin install session-scribe@session-scribe
+```
+
+The two integrate by convention — session-scribe reads the `SEQUENCE.md` format, neither depends on the other's code, and either works standalone.
+
 ## References
 
 - [Workflow Overview](references/workflow-overview.md) — Full chain diagram, artifact flow, skip patterns
