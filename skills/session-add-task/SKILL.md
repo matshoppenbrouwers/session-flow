@@ -97,6 +97,8 @@ Per-task breakdown files reuse the `session-task-planning` task template, wrappe
 **Test**: `[exact command to verify]`
 ```
 
+**Files entries** may be exact paths (`src/api/routes.py:100-200`) or directory globs (`src/lib/governor/**`) when the task owns a whole subtree. Files also doubles as the **dispatch write boundary** — `/session-delegation` injects it as "you may only create or modify these paths" — so an incomplete field stalls the agent rather than widening its lane.
+
 ## Workflow
 
 1. Resolve paths (config → detect → suggest init).

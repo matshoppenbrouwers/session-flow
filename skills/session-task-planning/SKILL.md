@@ -62,6 +62,10 @@ Each task must be completable in **one Claude Code session** (~30 min focused wo
 ---
 ```
 
+**Files entries** may be exact paths (`src/api/routes.py`, `src/api/routes.py:100-200`) or directory globs (`src/lib/governor/**`) when a task legitimately owns a whole subtree. Still never "relevant files" — the entry has to name a footprint.
+
+Files doubles as the **dispatch write boundary**: `/session-delegation` injects it into every agent payload as "you may only create or modify these paths". An incomplete Files field means an agent stops mid-task and reports instead of doing the work, so list everything the task must touch.
+
 ### Tag Reference
 
 | Tag | Meaning |
@@ -177,7 +181,7 @@ Before finalizing, verify each task:
 
 - [ ] Has all required fields (Files, Instructions, Accept, Test)
 - [ ] Instructions use action verbs ("Create", "Add", "Move", not "Consider")
-- [ ] Files are explicit paths, not "relevant files"
+- [ ] Files are explicit paths or directory globs, not "relevant files"
 - [ ] Accept criteria is observable, not "code is clean"
 - [ ] Test command is exact and runnable
 - [ ] Dependency tag is correct

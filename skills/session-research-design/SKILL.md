@@ -13,7 +13,7 @@ Conduct deep research and produce a design plan before task planning.
 
 1. **Never guess scope.** If the user's ask is ambiguous, ask a clarifying question. Do not assume.
 2. **Always propose alternatives.** Present 2-3 approaches with explicit trade-offs. Do not ship a single-option "recommendation" — the user cannot make an informed choice without alternatives.
-3. **Research before planning.** The research report is a prerequisite to the plan. Do not compress both into one step.
+3. **Research before planning, unless it is already done.** The research report is normally a prerequisite to the plan, and the two are never compressed into one step. Research may be skipped only when a recent research artifact for this topic exists, or the user states the problem is already understood — in which case the plan's Context section names what it relied on instead. **Framing (Step 1) is never skipped**; it is the cheapest gate in the chain.
 4. **User approves section-by-section.** Do not dump the full plan and ask "looks good?". Present in sections and get feedback on each.
 5. **Cite the codebase.** Every claim about "what exists" must reference files/line numbers. "The auth module handles tokens" is not acceptable without a citation.
 
@@ -21,8 +21,8 @@ Conduct deep research and produce a design plan before task planning.
 
 Complex features require understanding before planning. This skill produces two artifacts:
 
-1. **Research report** (saved to the project's research directory) -- explores the problem space
-2. **Implementation plan** (saved to the project's plans directory) -- defines the build path
+1. **Research report** (saved to the project's research directory) -- explores the problem space. Skippable when the understanding already exists (Step 2).
+2. **Implementation plan** (saved to the project's plans directory) -- defines the build path. Always produced.
 
 Both use the `YYYY-MM-DD-{topic}.md` naming convention. Directory paths are read from `.session-flow.json` config, or auto-detected by looking for `research/`, `_devdocs/research/`, `docs/research/` (and `plans/`, `_devdocs/plans/`, `docs/plans/` respectively). If no matching directory is found, suggest running `/session-init`.
 
@@ -50,25 +50,37 @@ Start with purpose, then follow up based on the answer. Let each response inform
 
 ### Step 2: Research
 
-Dispatch up to 3 parallel Explore agents to gather information:
+**Skip check, first.** Research is skippable when either holds:
+
+- A recent research artifact for this topic exists in the research directory, still matches the framing from Step 1, and the user agrees it stands.
+- The user states the problem is already understood and does not want it re-researched.
+
+If skipping, say so explicitly ("Skipping research — relying on `{path}` / your description of X"), go to Step 5, and name that basis in the plan's Context section. When in doubt, research; skipping on a stale artifact is worse than a short second pass.
+
+Otherwise, dispatch the research agents:
 
 ```
-Agent 1: Codebase analysis
-  "Analyze the existing codebase for {topic}. Find all relevant modules,
-   schemas, APIs, and integration points. Map the current architecture."
+codebase-researcher — one dispatch, or two with different questions
+  "{Specific question about the existing code for {topic}: which modules,
+   schemas, APIs, and integration points exist, and how does the current
+   flow work?} Cite file:line on every claim. Report 'not found' explicitly.
+   No recommendations."
 
-Agent 2: Existing patterns
-  "Search the codebase for patterns similar to {topic}. How are related
-   features structured? What conventions, protocols, and abstractions exist?"
+  Split into two dispatches when the questions are genuinely different —
+  e.g. one mapping the current architecture, one on how comparable features
+  are already structured (conventions, protocols, abstractions to match).
 
-Agent 3: External approaches (if applicable)
-  Use WebSearch to find how other projects solve this problem.
-  Focus on 3-5 reference implementations with concrete architecture details.
+external-researcher — when the approach is not obvious from the codebase
+  "{Question about prior art for {topic}.} Find 3-5 reference
+   implementations with concrete architecture details."
+
+  It has no repository access by design. Put any repo context it needs
+  — the framing, relevant interfaces, constraints — in the payload.
 ```
 
-Send all agents in a **single message** for parallel execution.
+Send the dispatches in a **single message** for parallel execution.
 
-**If the topic is narrow** (single module, clear approach): skip Agent 3 and reduce to 1-2 agents.
+**If the topic is narrow** (single module, clear approach): drop `external-researcher` and reduce to one `codebase-researcher` dispatch.
 
 Gather all findings before proceeding.
 
@@ -149,7 +161,15 @@ Present to the user:
 
 ### Step 5: Implementation Plan
 
-After the user approves the research direction, write an implementation plan to the project's plans directory as `YYYY-MM-DD-{topic}-implementation.md`.
+After the user approves the research direction (or immediately after Step 1, if research was skipped), write an implementation plan to the project's plans directory as `YYYY-MM-DD-{topic}-implementation.md`.
+
+**Load the house rules first.** Read `paths.conventions` and `paths.lessons` from `.session-flow.json` when they are set and the files exist:
+
+- **Conventions** are one-line `rule — reason` entries. Design to them. Where the design departs from one, say so in the plan with the reason — a departure is a decision to record, never a blocker.
+- **Lessons** are a one-line index. Read the lines; load nothing further unless a line looks relevant to this topic.
+- **If either key is unset or the file is missing, say so** ("No conventions file configured — designing against CLAUDE.md and observed patterns") and proceed on `CLAUDE.md` plus the patterns the research actually found. Never silently invent a house style.
+
+**Targeted lookups are allowed here.** If a design decision turns on a detail the research didn't cover — an exact signature, whether a helper already exists, how an existing caller behaves — re-dispatch `codebase-researcher` with that narrow question and continue. Do not make the user exit and re-run the skill, and do not guess. The same applies while iterating in Step 6.
 
 **Plan template:**
 
@@ -159,12 +179,12 @@ After the user approves the research direction, write an implementation plan to 
 **Date**: YYYY-MM-DD
 **Status**: Planned
 **Goal**: {one sentence}
-**Research**: `{path-to-research-report}`
+**Research**: `{path-to-research-report}` — or `skipped: {basis}` when Step 2 was skipped
 
 ---
 
 ## Context
-{Problem and chosen approach; the research doc carries the full analysis.}
+{Problem and chosen approach; the research doc carries the full analysis. If research was skipped, name what this plan relied on instead — the prior artifact and its date, or the user's stated understanding.}
 
 ### Architecture Decision
 {The key architectural choice and why.}
@@ -227,8 +247,8 @@ Suggested presentation order:
 
 Once the user approves the plan:
 
-1. Confirm both artifacts are saved:
-   - Research report in the project's research directory
+1. Confirm the artifacts are saved:
+   - Research report in the project's research directory (unless Step 2 was skipped)
    - Implementation plan in the project's plans directory
 2. Suggest: "Plan is ready. Run `/session-task-planning` to break this into executable tasks."
 
