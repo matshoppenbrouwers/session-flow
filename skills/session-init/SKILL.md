@@ -90,6 +90,28 @@ Add entries with `/session-add-task` or `/session-gatekeeper`. Prepare raw ones 
 - If the user already has a PRD/direction file: don't create one -- just record its path in `paths.direction` (Step 5).
 - If the user declines: skip it; gatekeeper degrades gracefully when no direction doc exists.
 
+### Step 3d: Offer a Conventions File (optional)
+
+`session-research-design` designs against the project's house rules and `code-reviewer` enforces them. Offer -- do not force -- to scaffold one:
+
+"Want me to create a `conventions.md` stub for house rules in the docs root (`{root}/conventions.md`)? (Read by /session-research-design and code-reviewer. You can also point at an existing file instead.)"
+
+- If yes and no file exists: create `{root}/conventions.md` with a heading, a one-line format note, and no invented rules -- the user or a later `codebase-researcher` pass fills it in.
+- If the user already has a conventions/house-rules file: don't create one -- just record its path in `paths.conventions` (Step 5).
+- If the user declines: skip it; the design and review steps degrade gracefully and say so when no conventions file is configured.
+
+Format for entries, stated in the stub:
+
+```markdown
+# Conventions
+
+One rule per line, `rule — reason`, ~140 characters. The reason is mandatory: without it,
+design either treats the rule as gospel or ignores it. If a rule needs more than one line,
+it is an architecture decision -- record it in `architecture/decisions.md` instead.
+```
+
+`lessons.md` (conclusions drawn from past work, same one-line format) uses the same offer only if the user asks for it. Otherwise just leave `paths.lessons` pointing at the default location and let the file appear when there is something to write in it.
+
 ### Step 4: Create INDEX.md
 
 Create `{root}/INDEX.md` with a minimal map of the structure:
@@ -136,12 +158,16 @@ Create `.session-flow.json` in the project root:
     "sequence": "<chosen-root>/todo/SEQUENCE.md",
     "testing": "<chosen-root>/testing",
     "architecture": "<chosen-root>/architecture",
-    "direction": "<chosen-root>/PRD.md"
+    "direction": "<chosen-root>/PRD.md",
+    "conventions": "<chosen-root>/conventions.md",
+    "lessons": "<chosen-root>/lessons.md"
   }
 }
 ```
 
 This config file allows all other session-flow skills to auto-discover the documentation root without hardcoding paths. `paths.direction` points at the product-direction doc used by `/session-gatekeeper` -- it defaults to `<chosen-root>/PRD.md` (inside the docs root), or set it to the user's existing PRD/direction file anywhere in the repo.
+
+`paths.conventions` and `paths.lessons` are optional file paths, defaulting to `<chosen-root>/conventions.md` and `<chosen-root>/lessons.md`. Write them whether or not the files exist yet -- their consumers (`session-research-design`, `session-delegation`, `code-reviewer`) check for the file and say so when it is missing. Point either key at the user's existing file instead if they have one. Drop the key entirely only if the user asks you to.
 
 ### Step 5b: Wire the Sequence into CLAUDE.md and AGENTS.md
 
@@ -199,6 +225,7 @@ This skill creates the config that makes step 1 work for all other skills.
 - **Putting design docs in todo/** -- `todo/` is for task files only; design docs go in `plans/`
 - **Creating sample/template files** -- Only create the structure; content comes from the skills that use each directory
 - **Duplicating the CLAUDE.md/AGENTS.md block** -- Match the `<!-- session-flow:sequence -->` markers and replace in place; never append a second copy
-- **Forcing a PRD.md** -- The direction doc is optional; offer it, and respect an existing file via `paths.direction`
+- **Forcing a PRD.md or conventions.md** -- Both are optional; offer them, and respect an existing file via `paths.direction` / `paths.conventions`
+- **Seeding conventions.md with invented rules** -- The stub carries the format note and nothing else; rules come from the project, not from you
 
 Chain context: see `references/workflow-overview.md`.

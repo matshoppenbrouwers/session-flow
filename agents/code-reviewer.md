@@ -42,6 +42,7 @@ Run the appropriate git diff command(s) first to get the changes, then read full
 
 ### Project Conventions
 - Enforce rules from the active project's CLAUDE.md
+- When `.session-flow.json` defines `paths.conventions` and that file exists, read it and enforce its entries alongside CLAUDE.md. Entries are one-line `rule — reason` pairs; cite the rule when you flag a violation. If the key is unset or the file is missing, review on CLAUDE.md alone -- do not invent house rules
 - File size limits (<500 LOC target)
 - Single responsibility per file/function
 - Logging for diagnostics, `print`/`println` for user output only

@@ -228,7 +228,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ## Phase 4: Conventions and lessons config (v5 §8–9)
 
-### [4A-1] [parallel-after:2A-2] [ ] P2: Add `paths.conventions` and `paths.lessons` to init and the schema docs
+### [4A-1] [parallel-after:2A-2] [x] P2: Add `paths.conventions` and `paths.lessons` to init and the schema docs
 **Files**: `skills/session-init/SKILL.md`, `references/customization-guide.md`
 
 **Instructions**:
@@ -242,7 +242,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [4A-2] [parallel-after:2A-3] [ ] P2: code-reviewer enforces `paths.conventions`
+### [4A-2] [parallel-after:2A-3] [x] P2: code-reviewer enforces `paths.conventions`
 **Files**: `agents/code-reviewer.md`
 
 **Instructions**:
