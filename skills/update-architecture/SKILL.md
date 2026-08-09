@@ -1,11 +1,13 @@
 ---
 name: update-architecture
-description: Surgical updates and current-state initialization for session-flow architecture documentation in _devdocs/architecture. Ensures token-efficient edits, current data-flow and system-structure notes, architecture index hygiene, and doc splitting checks. Called by session-post-implementation step 7. Triggers on "/update-architecture" or when user says "update arch docs", "sync architecture", "map current architecture", "initialize architecture docs", or "docs are out of date".
+description: Surgical updates and current-state initialization for the project's architecture documentation root. Ensures token-efficient edits, current data-flow and system-structure notes, architecture index hygiene, and doc splitting checks. Called by session-post-implementation when architecture docs are in scope. Triggers on "/update-architecture" or when user says "update arch docs", "sync architecture", "map current architecture", "initialize architecture docs", or "docs are out of date".
 ---
 
 # Update Architecture Documentation
 
-Maintain architecture docs in `_devdocs/architecture/`. Keep updates surgical, compact, and useful.
+Maintain the project's architecture docs, wherever they live. Keep updates surgical, compact, and useful.
+
+Throughout this skill, `{architecture}` means the resolved architecture documentation root (see below) — never a hardcoded directory.
 
 **Announce:** "Using update-architecture for session-flow architecture documentation updates."
 
@@ -20,30 +22,27 @@ When invoked by `/session-post-implementation`, default to maintenance mode.
 
 ## Architecture Doc Discovery
 
-Architecture documentation belongs in `_devdocs/architecture/`.
+Resolve `{architecture}` before doing anything else, using the same order every other session-flow skill uses:
 
-Before updating architecture docs:
+1. Read `.session-flow.json` and use `paths.architecture` if set.
+2. Otherwise detect, in order: `architecture/`, `_devdocs/architecture/`, `docs/architecture/`.
+3. Use whichever resolved first as `{architecture}` for the rest of the session, and state the resolved path in your first message.
 
-1. Check that `_devdocs/` exists.
-2. Check that `.session-flow.json` exists.
-3. Check that `.session-flow.json` maps `paths.architecture` to `_devdocs/architecture`.
-4. Use `_devdocs/architecture/` as the only architecture documentation location.
+Once resolved, treat `{architecture}` as the single architecture documentation location for this project — do not scatter architecture docs across other roots, and do not migrate an existing root to a different one without asking.
 
-Do not search for or create architecture documentation in `/docs`, `documentation/`, or root-level `ARCHITECTURE.md`.
+If `.session-flow.json` is missing and no candidate directory exists, suggest running `/session-init`.
 
-If `_devdocs/` or `.session-flow.json` is missing, suggest running `/session-init`.
-
-If `_devdocs/architecture/` does not exist:
+If `{architecture}` does not exist:
 
 - if running from `/session-post-implementation`, skip and report that architecture docs are not initialized;
-- if the user explicitly asked to establish, create, map, or initialize architecture documentation, create `_devdocs/architecture/` and the minimal current-state architecture structure.
+- if the user explicitly asked to establish, create, map, or initialize architecture documentation, create `{architecture}` (defaulting to the configured root, else `architecture/`) and the minimal current-state architecture structure.
 
 ## Preferred Architecture Structure
 
 Use this structure for normal projects:
 
 ```text
-_devdocs/architecture/
+{architecture}/
   architecture_index.md
   system_context.md
   containers.md
@@ -58,7 +57,7 @@ _devdocs/architecture/
 For small projects, this reduced structure is acceptable:
 
 ```text
-_devdocs/architecture/
+{architecture}/
   architecture_index.md
   overview.md
   data_flows.md
@@ -68,7 +67,7 @@ _devdocs/architecture/
 For larger projects, split by layer, domain, or flow:
 
 ```text
-_devdocs/architecture/
+{architecture}/
   architecture_index.md
   frontend.md
   backend.md
@@ -103,7 +102,7 @@ Do not expose secret values. Mention only variable names and where they are used
 
 ### Step 2: Create or Update the Architecture Index
 
-Ensure `_devdocs/architecture/architecture_index.md` exists.
+Ensure `{architecture}/architecture_index.md` exists.
 
 Keep it compact:
 
@@ -310,9 +309,9 @@ At the end of an update session, produce exactly this summary. No freeform prose
 
 | Doc | Before | After | Lines Δ | Change |
 |-----|--------|-------|---------|--------|
-| `_devdocs/architecture/containers.md` | 420 | 438 | +18 | Added background job container and dependency notes |
-| `_devdocs/architecture/data_flows.md` | 287 | 292 | +5 | Updated import validation flow |
-| `_devdocs/architecture/architecture_index.md` | 140 | 140 | 0 | Reviewed; no index update needed |
+| `{architecture}/containers.md` | 420 | 438 | +18 | Added background job container and dependency notes |
+| `{architecture}/data_flows.md` | 287 | 292 | +5 | Updated import validation flow |
+| `{architecture}/architecture_index.md` | 140 | 140 | 0 | Reviewed; no index update needed |
 
 **Docs split:** 0
 **Docs approaching threshold:** 1 (`containers.md` at 438, monitor)
@@ -324,9 +323,9 @@ Every scanned architecture doc must be included. If no change was needed in a sc
 
 ## Anti-Patterns
 
-**Using ambiguous documentation roots:**
-- BAD: Create or update `/docs/architecture`.
-- GOOD: Use `_devdocs/architecture/` only.
+**Hardcoding the documentation root:**
+- BAD: Assume a fixed root and reject a project that keeps its docs elsewhere.
+- GOOD: Resolve `paths.architecture` from config (falling back to detection), then keep every doc under that one resolved root.
 
 **Rewriting when editing:**
 - BAD: Rewrite the entire "Storage Layer" section because one function changed.
