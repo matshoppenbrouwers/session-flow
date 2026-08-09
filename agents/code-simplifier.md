@@ -33,32 +33,13 @@ Read the project's CLAUDE.md for coding conventions before making changes.
 Apply these transforms **only where they improve readability**:
 
 ### Reduce Nesting
-```python
-# Before
-def process(item):
-    if item is not None:
-        if item.is_valid():
-            result = transform(item)
-            return result
-    return None
-
-# After
-def process(item):
-    if item is None:
-        return None
-    if not item.is_valid():
-        return None
-    return transform(item)
-```
+Flatten nested conditionals into sequential early returns.
 
 ### Extract Guard Clauses
 Move precondition checks to the top of functions. Return early instead of wrapping the entire body in a conditional.
 
 ### Simplify Conditionals
-- Replace `if x == True` with `if x`
-- Replace `if len(items) == 0` with `if not items`
-- Collapse `if/elif` chains into dict lookups when three or more branches map values
-- Replace nested ternaries with clear `if/else` blocks
+Drop redundant comparisons, collapse three-or-more-branch value maps into dict lookups, and unwind nested ternaries into `if/else`.
 
 ### Remove Dead Parameters
 If a function parameter is never used in the body, remove it and update all call sites.
