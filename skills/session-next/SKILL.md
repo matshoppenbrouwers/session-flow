@@ -76,15 +76,4 @@ If the entry links to a phase file, invoke `/session-delegation` against that fi
 - BAD: Try to implement a whole multi-task phase file in one go
 - GOOD: Hand off to `/session-delegation`
 
-## Workflow Integration
-
-```
-SEQUENCE.md (backlog)
-        |
-        v
-   session-next  ---> per-task breakdown ---> implement + commit ---> mark [x]
-        |
-        +--> phase-file anchor ---> session-delegation ---> mark [x] when phase done
-```
-
-`session-next` is the consumer end of the sequence layer: `/session-add-task` and `/session-gatekeeper` fill the backlog, `/session-groom` keeps it ready, and `session-next` works it down. After a task lands, consider `/session-post-implementation` to polish.
+Chain context: see `references/workflow-overview.md`.

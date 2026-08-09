@@ -315,11 +315,4 @@ For smaller changes, use `/quick-post-implementation` (equivalent to choosing "Q
 - BAD: Run the full test suite after simplify, again after review, again after sanitize
 - GOOD: Run individual tests during steps 1-5, full suite once at Step 6
 
-## Workflow Integration
-
-This skill is part of the session workflow chain:
-
-```
-/session-init  -->  /session-research-design  -->  /session-task-planning  -->  /session-delegation  -->  /session-post-implementation  -->  /session-release
-  (bootstrap)       (research & design)             (break into tasks)          (execute tasks)           (this skill)                       (package & ship)
-```
+Chain context: see `references/workflow-overview.md`.

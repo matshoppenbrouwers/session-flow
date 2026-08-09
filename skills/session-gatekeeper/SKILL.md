@@ -92,21 +92,4 @@ Trivial aligned items flow into the sequence automatically; significant or diver
 - BAD: Starting to write the fix while triaging
 - GOOD: Route to `/session-add-task`; let `/session-next` execute later
 
-## Workflow Integration
-
-```
-incoming issues / ideas
-        |
-        v
-   session-gatekeeper  (ground in PRD.md + architecture)
-        |
-   classify: scope x alignment x clarity
-        |
-        +-- trivial + aligned + clear ----> session-add-task ----> SEQUENCE.md ----> session-next
-        |
-        +-- significant / divergent / unclear ----> session-research-design (cowork) ----> plans/ ----> task-planning
-        |
-        +-- off-direction ----> user decision
-```
-
-Gatekeeper is the front-of-chain funnel: it decides whether incoming work joins the backlog or warrants a collaborative design session, keeping the sequence aligned with the app's direction. Auto-implementation of triaged items is a deliberate future step, not part of this skill.
+Chain context: see `references/workflow-overview.md`.

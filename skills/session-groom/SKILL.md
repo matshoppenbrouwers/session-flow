@@ -84,18 +84,4 @@ Each tick scans for new raw one-liners (e.g. ones a user pasted in) and prepares
 - BAD: Starting to write the fix while grooming
 - GOOD: Prepare the breakdown; let `/session-next` execute it
 
-## Workflow Integration
-
-```
-raw one-liners in SEQUENCE.md  (from users or /session-add-task capture mode)
-        |
-        v
-   session-groom  --(session-sized)--> writes todo/tasks/NNNN-*.md, links the entry
-        |
-        +--(significant/divergent)--> escalate to session-research-design (cowork)
-        |
-        v
-   ready entries  ---> session-next executes them
-```
-
-Groom sits between capture and execution: it turns rough backlog items into ready-to-run breakdowns, pairing with `/loop` for hands-off upkeep. Use `/session-status` to see how many entries still need grooming.
+Chain context: see `references/workflow-overview.md`.

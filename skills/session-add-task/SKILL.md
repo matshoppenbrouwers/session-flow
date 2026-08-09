@@ -128,18 +128,4 @@ Per-task breakdown files reuse the `session-task-planning` task template, wrappe
 - BAD: "Rewrite the backend" as a single per-task file
 - GOOD: Use Mode B → `/session-task-planning`
 
-## Workflow Integration
-
-```
-something surfaces / user idea
-        |
-        v
-  session-add-task ---> SEQUENCE.md (one-line entry)
-        |                    |
-   (Mode A) per-task    (Mode B) ---> session-task-planning ---> todo/ phase file
-   breakdown file            |
-        |                    v
-        +-------> later: session-next executes the entry
-```
-
-`session-add-task` feeds the backlog that `/session-next` works through and `/session-groom` keeps healthy. It is the manual counterpart to `/session-gatekeeper`, which captures tasks automatically from triaged issues.
+Chain context: see `references/workflow-overview.md`.

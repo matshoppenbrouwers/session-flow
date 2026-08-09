@@ -291,11 +291,4 @@ Follow the `YYYY-MM-DD-label.md` convention. Use today's date for both the resea
 - BAD: Present the entire 500-word plan and ask "looks good?"
 - GOOD: Present architecture first, get approval, then data flow, get approval, then phases.
 
-## Workflow Integration
-
-This skill is an early step in the session workflow chain:
-
-```
-/session-init  -->  /session-research-design  -->  /session-task-planning  -->  /session-delegation  -->  /session-post-implementation  -->  /session-release
-  (setup project)       (this skill)               (break into tasks)          (execute tasks)           (refine and test)                  (version & publish)
-```
+Chain context: see `references/workflow-overview.md`.

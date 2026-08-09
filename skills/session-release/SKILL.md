@@ -238,13 +238,4 @@ Print a summary of what's ready and what the user needs to do next:
 - BAD: Flag every occurrence of "0.2.0" including in unrelated constants
 - GOOD: Focus on config files, docs, and distribution -- skip test fixtures and historical references
 
-## Workflow Integration
-
-This skill is the final step in the session workflow chain:
-
-```
-/session-init  -->  /session-research-design  -->  /session-task-planning  -->  /session-delegation  -->  /session-post-implementation  -->  /session-release
-  (bootstrap)       (research & design)             (break into tasks)          (execute tasks)           (refine and test)                  (this skill)
-```
-
-It can also be used standalone when the code is already tested and ready to ship.
+Chain context: see `references/workflow-overview.md`.

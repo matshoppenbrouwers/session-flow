@@ -92,6 +92,11 @@ After each task completes:
 2. Log: task ID, files changed, test result
 3. Check if new parallel opportunities are unlocked
 
+When every task is `[x]`:
+1. Run the project's full test suite
+2. Report summary: tasks completed, files changed, any issues
+3. Suggest running `/session-post-implementation` for refinement
+
 ## Agent Prompt Template
 
 When dispatching a task to an agent, use this prompt structure:
@@ -138,16 +143,4 @@ You are implementing task [TASK-ID] from the session plan.
 - BAD: Run all tasks sequentially when some are independent
 - GOOD: Check dependency graph -- tasks with satisfied dependencies can run in a single multi-tool message
 
-## Workflow Integration
-
-This skill is part of the session workflow chain:
-
-```
-/session-init  -->  /session-research-design  -->  /session-task-planning  -->  /session-delegation  -->  /session-post-implementation  -->  /session-release
-  (bootstrap)       (research & design)             (break into tasks)          (this skill)              (refine and test)                  (package & ship)
-```
-
-When all tasks are `[x]`:
-1. Run the project's full test suite
-2. Report summary: tasks completed, files changed, any issues
-3. Suggest running `/session-post-implementation` for refinement
+Chain context: see `references/workflow-overview.md`.

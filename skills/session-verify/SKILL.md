@@ -276,17 +276,4 @@ Appropriate for:
 - BAD: "I couldn't run the integration tests in my environment."
 - GOOD: "Integration tests require Windows + Tauri (not available in WSL). User must run `pnpm tauri dev` on Windows and execute checklist §9.3."
 
-## Workflow Integration
-
-This skill sits between post-implementation polish and release:
-
-```
-/session-init  -->  /session-research-design  -->  /session-task-planning  -->  /session-delegation  -->  /session-post-implementation  -->  /session-verify  -->  /session-release
-  (bootstrap)       (research & design)             (break into tasks)          (execute tasks)           (simplify, review, test)          (this skill)           (package & ship)
-```
-
-- `/session-post-implementation` can optionally suggest this skill in its Step 7.5 for feature/plan completions.
-- `/session-release` pre-flight checks for a PASS verification artifact when shipping a feature that had a design doc.
-- Standalone: invoke directly when auditing a completed but un-verified implementation, or when prior code review flagged significant defects that need independent confirmation.
-
-Not appropriate to run for every session — use it when the cost of shipping broken code is high.
+Chain context: see `references/workflow-overview.md`.
