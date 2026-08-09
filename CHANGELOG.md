@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.3.0 (2026-08-09)
+
+Implements the v5 spec (`plans/2026-08-09-session-flow-v5-spec.md`): four verified defect fixes, three new agents with the workflows rewired around them, the Files field as a write boundary, conventions/lessons config, and a prescriptiveness trim across skills and agents. No breaking changes — existing artifacts, formats, and scripts keep working.
+
+### Added
+- **codebase-researcher** agent — answers one specific question about an existing codebase with `file:line` citations, explicit "not found" when it isn't there, and no recommendations. `tools: Read, Grep, Glob`, pinned to `model: sonnet` (a deliberate exception to the inherit-by-default policy, documented in the agent file).
+- **external-researcher** agent — researches docs, specs, and prior art outside the repo with source-validation discipline: primary sources, publication dates, vendor claims flagged, conflicts presented rather than resolved. `tools: WebSearch, WebFetch` — no `Read`, so it cannot see the repository at all. Also pinned to `model: sonnet`.
+- **test-author** agent — writes a phase's acceptance tests from the design artifact, public interface, and each task's Accept criterion **before** the implementers run, so the tests act as an external oracle rather than a post-hoc rationalization. `model: inherit`.
+- `/session-delegation` dispatches `test-author` once per phase before that phase's implementers and records the produced test paths per task. Implementer prompts now say the pre-authored tests are the acceptance oracle: make them pass, never modify a test file, and stop and report if a test looks wrong. Documents the red-phase caveat — oracle tests may not collect until dependency tasks land, which is expected, not a blocking failure.
+- Every delegation dispatch carries the task's **Files** field as a write boundary ("only create or modify these paths; anything else, stop and report"). It is a scoping constraint, not a security boundary. `session-task-planning`, `session-add-task`, and `session-groom` document that Files entries may be exact paths or directory globs (`src/lib/governor/**`).
+- `.session-flow.json` gains optional `paths.conventions` and `paths.lessons`, defaulting to `{root}/conventions.md` and `{root}/lessons.md`. Both use one-line `rule — reason` entries (~140 chars, reason mandatory). `/session-init` offers — never forces — to scaffold `conventions.md` with the format note and no invented rules.
+- `/session-research-design` reads conventions and lessons at design time and `code-reviewer` enforces conventions alongside `CLAUDE.md`. When a key is unset or the file is missing, both say so and fall back to `CLAUDE.md` plus observed patterns rather than inventing a house style. Convention departures are flagged with reasons, never blocked.
+- `/session-delegation` includes the conventions file in implementer payloads when it exists, and reads lessons as a one-line index.
+- README documents the seven bundled agents, the researcher model pins, the conventions/lessons schema, the Files-glob write boundary, and recommends **claude-mem** for cross-session recall — with the caveat that claude-mem and session-scribe each register a `SessionEnd` hook, so test the two together before relying on either.
+
+### Changed
+- `/session-research-design` Step 2 dispatches `codebase-researcher` and `external-researcher` (in parallel where both apply) instead of the previous ad-hoc Explore-agent prompts, and may re-dispatch `codebase-researcher` for targeted lookups mid-design.
+- Research is now skippable given a recent research artifact or user-stated understanding; the plan's Context section then names what it relied on. Framing is never skipped.
+- **Prescriptiveness trim**, one commit per category so anything load-bearing can be bisected back:
+  - The repeated "Workflow Integration" chain diagram is gone from all 13 skills, replaced by a single pointer to `references/workflow-overview.md`. It was loaded on every invocation, carried no mid-skill decision value, and was the most drift-prone content in the repo.
+  - Anti-pattern entries that merely restated a Non-Negotiable are removed; entries whose BAD case is non-obvious (e.g. task-planning's secretly-dependent-parallel) are kept.
+  - `code-reviewer`'s per-language checklists (Python / React-TypeScript / Go / Java-Kotlin) are removed — current models know this material, and the lists anchored reviews to their own contents. Scope detection, the 80% confidence gate, falsification discipline, and the output contract are unchanged.
+  - `code-simplifier`'s before/after code examples are removed; the action names, constraints, budget, and output contract stay.
+  - `session-research-design`'s template placeholder prose is deflated to bare section lists. Every section heading survives — they are the interop contract with verify and task-planning.
+  - Every format contract, `**Announce:**` line, tool budget, and prior-fighting Non-Negotiable is deliberately retained.
+- `CONTRIBUTING.md` no longer mandates Anti-Patterns and Workflow Integration sections in new skills (which would have regrown the ceremony) and now asks for cross-references by step name rather than step number.
+- Cross-reference drift fixed across `session-verify`, `references/workflow-overview.md`, and `references/customization-guide.md`; the README token-budget figure corrected from ~1,300 to the measured ~1,500.
+
+### Fixed
+- `/session-delegation` no longer passes the deprecated Task `mode: "bypassPermissions"` parameter (removed in Claude Code v2.1.212), which had been silently ignored. Subagents inherit the parent session's permission mode.
+- `/update-architecture` resolves the architecture root from `paths.architecture` with detection fallback (`architecture/`, `_devdocs/architecture/`, `docs/architecture/`) instead of hardcoding `_devdocs/architecture/`. Projects initialized with a `docs/` root are no longer rejected.
+- `/session-verify` and `/session-release` no longer key off `paths.design` — a config key `session-init` never wrote, which meant release's verification pre-flight could not fire on an initialized project. Both now resolve `paths.plans`, then `paths.research`, then detect.
+- `/session-post-implementation` and `security-auditor` no longer pass plugin-relative reference paths in dispatch payloads, which did not resolve from an arbitrary project CWD. The loading skill now resolves its own plugin location and passes absolute paths; the auditor falls back to its in-file checklist summaries when they are absent.
+
 ## 1.2.1 (2026-07-16)
 
 ### Changed

@@ -290,7 +290,9 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ## Phase 6: Docs and release
 
-### [6A-1] [seq] [ ] P1: README overhaul
+**Release scope:** 1.3.0 ships Phases 1–4. Phase 5 (`[auto]` intake) is still gated on SEQ-001 and is deliberately absent from the 1.3.0 README and CHANGELOG — when it lands, it needs its own entry (1.4.0) rather than an edit to 1.3.0.
+
+### [6A-1] [seq] [x] P1: README overhaul
 **Files**: `README.md`
 
 **Instructions**:
@@ -303,7 +305,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [6A-2] [seq] [ ] P1: CHANGELOG 1.3.0 and version bump
+### [6A-2] [seq] [x] P1: CHANGELOG 1.3.0 and version bump
 **Files**: `CHANGELOG.md`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`
 
 **Instructions**:
