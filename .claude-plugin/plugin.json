@@ -1,6 +1,6 @@
 {
   "name": "session-flow",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Session workflow orchestration for Claude Code. A 13-skill chain covering the full development lifecycle: project init, issue gatekeeping/triage, research-design, task-planning, a one-line task sequence (backlog) with add-task/groom/next, agent-delegation, post-implementation, evidence-based verification, architecture updates, security & liability audit, and release. Features dependency-aware parallelization, collaborative brainstorming, falsification-based verification, and user gates at every critical decision.",
   "author": {
     "name": "hoponthestack",

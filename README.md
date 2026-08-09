@@ -1,10 +1,10 @@
 # session-flow — Claude Code plugin for session workflow orchestration
 
-**session-flow** is a [Claude Code](https://claude.com/claude-code) plugin that orchestrates the full software development lifecycle — a chain of **13 skills** and **4 agents** covering research, design, task planning, agent delegation, post-implementation, evidence-based verification, and release. It adds dependency-aware parallelization, a standing task backlog, collaborative brainstorming, and a security & liability audit, with user gates at every critical decision.
+**session-flow** is a [Claude Code](https://claude.com/claude-code) plugin that orchestrates the full software development lifecycle — a chain of **13 skills** and **7 agents** covering research, design, task planning, agent delegation, post-implementation, evidence-based verification, and release. It adds dependency-aware parallelization, a standing task backlog, collaborative brainstorming, and a security & liability audit, with user gates at every critical decision.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Skills: 13](https://img.shields.io/badge/Skills-13-green)
-![Agents: 4](https://img.shields.io/badge/Agents-4-orange)
+![Agents: 7](https://img.shields.io/badge/Agents-7-orange)
 
 > **Install in Claude Code:** `/plugin marketplace add matshoppenbrouwers/session-flow` then `/plugin install session-flow@session-flow`
 
@@ -84,6 +84,7 @@ A typical session might look like:
 ```
 You: /session-research-design
 Claude: "What problem are we solving?" → one question at a time →
+        dispatches codebase-researcher + external-researcher in parallel →
         proposes 3 approaches → presents design section by section →
         writes research report + implementation plan
 
@@ -92,8 +93,9 @@ Claude: Reads the plan → breaks into 8 tasks with dependency tags →
         identifies 3 parallel opportunities → saves to todo/
 
 You: /session-delegation
-Claude: Parses dependency graph → dispatches 2 agents in parallel →
-        marks tasks [x] as they complete → reports progress
+Claude: Parses dependency graph → dispatches test-author for the phase's
+        acceptance tests → dispatches 2 implementers in parallel against
+        those tests → marks tasks [x] as they complete → reports progress
 
 You: /session-post-implementation
 Claude: Simplifies code → reviews for bugs → sanitizes dead code →
@@ -121,7 +123,7 @@ Beyond per-feature task files, session-flow keeps a standing **backlog** at `tod
 - [x] SEQ-006 P1: Fix login redirect loop → todo/tasks/0006-fix-login-redirect.md
 ```
 
-Each linked breakdown in `todo/tasks/` is a self-contained, bite-sized prompt (Files / Instructions / Accept / Test) ready for an agent to execute.
+Each linked breakdown in `todo/tasks/` is a self-contained, bite-sized prompt (Files / Instructions / Accept / Test) ready for an agent to execute. **Files** entries may be exact paths (`src/api/routes.py`) or directory globs (`src/lib/governor/**`) when a task owns a whole subtree — and the field doubles as the write boundary: `/session-delegation` injects it into every dispatch as "you may only create or modify these paths."
 
 | Want to... | Use |
 |------------|-----|
@@ -181,12 +183,19 @@ The audit can also run standalone via `/security-liability-audit`.
 
 | Agent | Used By | Purpose |
 |-------|---------|---------|
+| **codebase-researcher** | research-design (research + design phases) | Answer one question about the existing code, with file:line citations. Read-only |
+| **external-researcher** | research-design (research phase) | Research docs, specs, and prior art outside the repo, with source validation. No repo access |
+| **test-author** | delegation (once per phase, before implementers) | Write the acceptance tests that become the implementers' oracle |
 | **code-simplifier** | post-impl step 1 | Simplify recently changed code |
 | **code-reviewer** | post-impl step 2 | Find bugs, security issues, convention violations |
 | **security-auditor** | post-impl step 3 | Technical security + legal liability audit |
 | **code-sanitizer** | post-impl step 5 | Detect dead code and temporary artifacts |
 
-Bundled agents inherit the parent session's model — an Opus 4.7 session gets Opus 4.7 subagents, a Sonnet session gets Sonnet. If you have the marketplace `code-simplifier:code-simplifier` plugin installed, session-post-implementation uses it automatically instead of the bundled agent.
+Bundled agents inherit the parent session's model — an Opus 4.7 session gets Opus 4.7 subagents, a Sonnet session gets Sonnet. Two deliberate exceptions: `codebase-researcher` and `external-researcher` pin `model: sonnet`, because both do bounded read-and-report work where the frontier tier buys nothing and the dispatch count is high. Override either by placing your own version in `.claude/agents/`.
+
+Subagents also inherit the parent session's permission mode. `external-researcher` has no `Read` tool at all — it cannot see your repository, only the sources it fetches.
+
+If you have the marketplace `code-simplifier:code-simplifier` plugin installed, session-post-implementation uses it automatically instead of the bundled agent.
 
 ## Customization
 
@@ -203,12 +212,22 @@ session-flow adapts to your project via `.session-flow.json` (created by `/sessi
     "sequence": "_devdocs/todo/SEQUENCE.md",
     "testing": "_devdocs/testing",
     "architecture": "_devdocs/architecture",
-    "direction": "_devdocs/PRD.md"
+    "direction": "_devdocs/PRD.md",
+    "conventions": "_devdocs/conventions.md",
+    "lessons": "_devdocs/lessons.md"
   }
 }
 ```
 
 `paths.direction` points `/session-gatekeeper` at your product-direction doc. It defaults to a `PRD.md` inside the docs root (e.g. `_devdocs/PRD.md`) — let `/session-init` scaffold it, or set this to an existing PRD/vision file anywhere in the repo.
+
+`paths.conventions` and `paths.lessons` are optional one-line-entry files, both in the same `rule — reason` format (~140 characters, reason mandatory):
+
+```
+Repository methods return domain objects, never ORM rows — keeps persistence swappable and out of the service layer.
+```
+
+**Conventions** are house rules: `/session-research-design` loads them at design time and `code-reviewer` enforces them alongside `CLAUDE.md`. **Lessons** are conclusions drawn after the fact, read as a one-line index by research-design and delegation. Both are kept out of `CLAUDE.md` on purpose — that file costs tokens on every turn of every session, while these matter only at design and review time. If a rule doesn't fit on one line it's an architecture decision, and `/update-architecture` owns those. When a key is unset or the file is missing, the consuming skills say so and fall back to `CLAUDE.md` plus observed patterns rather than inventing a house style.
 
 Override agents by placing custom versions at `~/.claude/agents/` (user) or `.claude/agents/` (project). See [references/customization-guide.md](references/customization-guide.md) for details.
 
@@ -224,7 +243,9 @@ Only 1-2 skills are loaded at a time (triggered by description matching):
 
 Security audit reference files (~900 lines total) are only loaded when the audit runs.
 
-## Companion Plugin
+## Companion Plugins
+
+### session-scribe — Notion mirror
 
 [**session-scribe**](https://github.com/matshoppenbrouwers/session-scribe) bridges the same workflow into Notion: ended sessions become dated Agent log entries on the mapped project page, and the `SEQUENCE.md` backlog is mirrored into a Notion Tasks database with project relations. session-flow produces the work and the backlog; session-scribe makes both reviewable outside the terminal.
 
@@ -234,6 +255,12 @@ Security audit reference files (~900 lines total) are only loaded when the audit
 ```
 
 The two integrate by convention — session-scribe reads the `SEQUENCE.md` format, neither depends on the other's code, and either works standalone.
+
+### claude-mem — cross-session recall
+
+session-flow deliberately ships no memory system. If you want recall across sessions, use [**claude-mem**](https://github.com/thedotmack/claude-mem): it observes your sessions and makes what it saw searchable later. It pairs naturally with `paths.lessons` — periodically ask it to propose lessons entries from what it observed, then prune hard by hand. Observations are its job; conclusions are yours.
+
+**Caveat before you install both:** claude-mem and session-scribe each register a `SessionEnd` hook. Test the two together on a throwaway session and confirm both actually fire before relying on either — don't assume they coexist.
 
 ## References
 
