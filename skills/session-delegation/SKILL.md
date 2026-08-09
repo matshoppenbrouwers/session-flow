@@ -55,7 +55,6 @@ while uncompleted tasks exist:
 ```
 Task tool:
   subagent_type: "general-purpose"
-  mode: "bypassPermissions"
   prompt: [task instructions from plan, including Files, Instructions, Accept, Test]
 ```
 
@@ -64,13 +63,12 @@ Send a **single message** with multiple Task tool calls:
 ```
 Task tool #1:                          Task tool #2:
   subagent_type: "general-purpose"       subagent_type: "general-purpose"
-  mode: "bypassPermissions"              mode: "bypassPermissions"
   prompt: [task 1 instructions]          prompt: [task 2 instructions]
 ```
 
 This leverages Claude Code's parallel tool execution.
 
-Note: `bypassPermissions` mode may not be available to all users. If not available, use `default` mode -- the user will be prompted to approve tool calls.
+Do not pass a `mode` parameter: subagents inherit the parent session's permission mode (the Task tool's `mode` was deprecated in Claude Code v2.1.212 and is ignored).
 
 ### Step 4: Per-task agent workflow
 
