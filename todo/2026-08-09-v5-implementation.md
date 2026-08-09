@@ -164,7 +164,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ## Phase 3: Agents and rewiring (v5 §4–6)
 
-### [3A-1] [parallel-after:2A-2] [ ] P1: Create the three agents and register them
+### [3A-1] [parallel-after:2A-2] [x] P1: Create the three agents and register them
 **Files**: `agents/codebase-researcher.md` (new), `agents/external-researcher.md` (new), `agents/test-author.md` (new), `.claude-plugin/plugin.json`
 
 **Instructions**:
@@ -180,7 +180,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [3B-1] [parallel-after:3A-1] [ ] P1: Rework research-design — new agents, skip-research path, design re-dispatch, conventions/lessons
+### [3B-1] [parallel-after:3A-1] [x] P1: Rework research-design — new agents, skip-research path, design re-dispatch, conventions/lessons
 **Files**: `skills/session-research-design/SKILL.md`
 
 **Instructions**:
@@ -196,7 +196,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [3B-2] [parallel-after:3A-1] [ ] P1: Rewire delegation — test-author oracle and Files-as-boundary
+### [3B-2] [parallel-after:3A-1] [x] P1: Rewire delegation — test-author oracle and Files-as-boundary
 **Files**: `skills/session-delegation/SKILL.md`
 
 **Instructions**:
@@ -212,7 +212,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [3B-3] [parallel-after:2A-2] [ ] P2: Document Files globs in the three task templates
+### [3B-3] [parallel-after:2A-2] [x] P2: Document Files globs in the three task templates
 **Files**: `skills/session-task-planning/SKILL.md`, `skills/session-add-task/SKILL.md`, `skills/session-groom/SKILL.md`
 
 **Instructions**:

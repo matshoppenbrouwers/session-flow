@@ -44,7 +44,7 @@ For each un-prepared entry:
 
 ### Step 3: Write the breakdown
 
-Reuse the `session-add-task` / `session-task-planning` breakdown template (header + Files / Instructions / Accept / Test). Write it to `{tasks}/NNNN-slug.md`, where `NNNN` is the entry's existing `SEQ-NNN` number (zero-padded) so the file and entry stay aligned. Never overwrite an existing file. Then update the sequence entry to drop `(needs breakdown)` and add the `→` link.
+Reuse the `session-add-task` / `session-task-planning` breakdown template (header + Files / Instructions / Accept / Test). Files entries may be exact paths or directory globs (`src/lib/governor/**`), and the field doubles as the **dispatch write boundary** delegation injects into agent payloads — list everything the task must touch. Write it to `{tasks}/NNNN-slug.md`, where `NNNN` is the entry's existing `SEQ-NNN` number (zero-padded) so the file and entry stay aligned. Never overwrite an existing file. Then update the sequence entry to drop `(needs breakdown)` and add the `→` link.
 
 ### Step 4: Escalate when needed
 
