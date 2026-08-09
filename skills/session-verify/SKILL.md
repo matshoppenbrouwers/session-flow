@@ -42,7 +42,7 @@ Confirm these inputs before proceeding. Do not guess.
 
 ### Step 2: Scope Matrix
 
-Produce and confirm with the user a 6-row matrix that defines what "working" means for this verification. Present as a table. Adjust rows to match ambition chosen in Step 1.
+Produce and confirm with the user a 6-row matrix that defines what "working" means for this verification. Present as a table. Adjust rows to match the ambition chosen in the Scope step.
 
 | Row | Dimension | What must be true |
 |-----|-----------|-------------------|
@@ -175,10 +175,10 @@ The artifact at `_verification/{date}-{label}-verification.md` must use exactly 
 | # | Hypothesis | Predicted | Observed | Evidence | Status |
 
 ## Scope Matrix Status
-Row 1..6 from Step 2 with PASS/FAIL/N/A + one-line justification.
+Row 1..6 from the Scope Matrix with PASS/FAIL/N/A + one-line justification.
 
 ## Structural Audit
-Inventory table from Step 4.
+Inventory table from the Structural Audit.
 
 ## Test Results
 - Full suite: pass/fail counts, duration, command

@@ -8,8 +8,7 @@ Before submitting a skill:
 - [ ] Description includes what it does AND when to trigger
 - [ ] SKILL.md is under 500 lines
 - [ ] Has an `**Announce:**` line
-- [ ] Has an Anti-Patterns section
-- [ ] Has a Workflow Integration section showing its place in the chain
+- [ ] Cross-references other steps by name, not number
 - [ ] No project-specific paths or tool references
 - [ ] Uses the path resolution pattern (config → detect → suggest init)
 
