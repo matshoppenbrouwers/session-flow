@@ -51,7 +51,10 @@
     "./agents/code-reviewer.md",
     "./agents/code-sanitizer.md",
     "./agents/code-simplifier.md",
-    "./agents/security-auditor.md"
+    "./agents/codebase-researcher.md",
+    "./agents/external-researcher.md",
+    "./agents/security-auditor.md",
+    "./agents/test-author.md"
   ],
   "commands": [
     "./commands/session-status.md"
