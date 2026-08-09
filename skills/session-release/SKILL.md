@@ -41,7 +41,7 @@ Verify readiness:
 1. **Git status**: Check for uncommitted changes. Warn if dirty.
 2. **Test status**: Ask the user to confirm tests pass (or offer to run them).
 3. **Target version**: If not provided as argument, ask the user. Validate semver format.
-4. **Verification status**: If this release ships a feature that had a design doc (check `.session-flow.json.paths.design` or `_devdocs/design/`), look for a corresponding `_verification/{date}-{label}-verification.md` artifact with `Verdict: PASS` (or `PASS-WITH-CAVEATS` if the user accepts the caveats). If the artifact is missing or `FAIL`, offer to run `/session-verify` first. Skip for bugfix/refactor releases with no design doc.
+4. **Verification status**: If this release ships a feature that had a design doc (check `.session-flow.json.paths.plans`, else a detected `plans/`), look for a corresponding `_verification/{date}-{label}-verification.md` artifact with `Verdict: PASS` (or `PASS-WITH-CAVEATS` if the user accepts the caveats). If the artifact is missing or `FAIL`, offer to run `/session-verify` first. Skip for bugfix/refactor releases with no design doc.
 
 ### Step 2: Version bump
 

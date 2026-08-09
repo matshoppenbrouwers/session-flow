@@ -19,9 +19,7 @@ Run the diff, then read full files for context around changed lines.
 
 ## Part A: Technical Security
 
-Read the technical security reference for detailed patterns:
-`skills/security-liability-audit/references/technical-security.md`
-(resolve path relative to the session-flow plugin directory)
+Expect the dispatch payload to carry an absolute path to the technical security reference (`.../skills/security-liability-audit/references/technical-security.md`); read it for detailed patterns. If no absolute path was passed, or it is unreadable, proceed with the checklist summaries below and note the degraded mode in your report. Do not guess at repo-relative paths.
 
 Apply these checks to changed files:
 
@@ -48,8 +46,7 @@ If webhook code changed: signature verification, TLS, OAuth scope.
 
 ## Part B: Liability & Legal
 
-Read the legal reference for detailed frameworks:
-`skills/security-liability-audit/references/legal-liability.md`
+Same contract as Part A: read the legal reference (`.../skills/security-liability-audit/references/legal-liability.md`) at the absolute path given in the dispatch payload; if absent, use the checklist summaries below and say so.
 
 ### B1: ToS/EULA Coverage
 Does the change introduce behavior the ToS doesn't cover? New data collection, AI features, third-party integrations, payment logic, feature removal.

@@ -40,7 +40,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ## Phase 1: Verified defect fixes (v5 §3)
 
-### [1A-1] [seq] [ ] P1: Remove the deprecated Task `mode` parameter from delegation
+### [1A-1] [seq] [x] P1: Remove the deprecated Task `mode` parameter from delegation
 **Files**: `skills/session-delegation/SKILL.md:58`, `:67`, `:73`
 
 **Instructions**:
@@ -55,7 +55,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [1A-2] [parallel-after:1A-1] [ ] P1: De-hardcode `_devdocs` from update-architecture
+### [1A-2] [parallel-after:1A-1] [x] P1: De-hardcode `_devdocs` from update-architecture
 **Files**: `skills/update-architecture/SKILL.md`
 
 **Instructions**:
@@ -70,7 +70,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [1A-3] [parallel-after:1A-1] [ ] P1: Replace phantom `paths.design` in verify and release
+### [1A-3] [parallel-after:1A-1] [x] P1: Replace phantom `paths.design` in verify and release
 **Files**: `skills/session-verify/SKILL.md:35`, `skills/session-release/SKILL.md:44`
 
 **Instructions**:
@@ -84,7 +84,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [1A-4] [parallel-after:1A-1] [ ] P1: Fix plugin-relative reference paths in dispatch payloads
+### [1A-4] [parallel-after:1A-1] [x] P1: Fix plugin-relative reference paths in dispatch payloads
 **Files**: `skills/session-post-implementation/SKILL.md:112`, `agents/security-auditor.md`
 
 **Instructions**:

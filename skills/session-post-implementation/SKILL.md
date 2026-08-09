@@ -105,19 +105,31 @@ Loop until the reviewer passes with no significant issues, but do not yet run th
 
 **Skip if:** user chose Standard or Quick scope in workflow configuration.
 
+**Resolve the reference paths first (both modes).** The subagent starts in the project CWD and cannot resolve paths relative to the plugin, so *this* skill resolves them and passes absolute paths:
+
+- Use `${CLAUDE_PLUGIN_ROOT}` when it is set — the references are at `${CLAUDE_PLUGIN_ROOT}/skills/security-liability-audit/references/`.
+- Otherwise derive the plugin root from this file's own absolute path (`.../skills/session-post-implementation/SKILL.md` → two levels up), or locate the installed plugin (e.g. `~/.claude/plugins/**/session-flow/`).
+- If neither resolves, say so and continue in degraded mode: the auditor works from its own built-in checklist summaries.
+
 **Mode A — Sub-agent (default):**
 
 ```
 Task tool: subagent_type="security-auditor"
-prompt: "Audit the recent code changes for technical security vulnerabilities and legal/liability risk. Read the reference files at skills/security-liability-audit/references/ for detailed patterns. Produce findings and recommendations only — do not modify code."
+prompt: "Audit the recent code changes for technical security vulnerabilities and legal/liability risk. Produce findings and recommendations only — do not modify code.
+Reference files (absolute paths, read them for detailed patterns):
+- <RESOLVED_PLUGIN_ROOT>/skills/security-liability-audit/references/technical-security.md
+- <RESOLVED_PLUGIN_ROOT>/skills/security-liability-audit/references/legal-liability.md
+If a path is missing or unreadable, proceed with your built-in checklist summaries and say so in your report."
 ```
+
+Substitute the resolved absolute paths into the prompt — never dispatch the placeholder or a repo-relative path.
 
 **Mode B — Inline:**
 
-Read the reference files directly and perform the audit in the main conversation:
-1. Read `skills/security-liability-audit/references/technical-security.md`
-2. Read `skills/security-liability-audit/references/legal-liability.md`
-3. Apply Part A (technical) and Part B (liability) checks from `skills/security-liability-audit/SKILL.md`
+Read the reference files directly and perform the audit in the main conversation, using the same resolved absolute root:
+1. Read `<RESOLVED_PLUGIN_ROOT>/skills/security-liability-audit/references/technical-security.md`
+2. Read `<RESOLVED_PLUGIN_ROOT>/skills/security-liability-audit/references/legal-liability.md`
+3. Apply Part A (technical) and Part B (liability) checks from `<RESOLVED_PLUGIN_ROOT>/skills/security-liability-audit/SKILL.md`
 4. Report findings using the same output format
 
 **After audit (either mode):**
