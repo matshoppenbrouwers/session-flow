@@ -43,7 +43,7 @@ Skills will auto-detect other directories. Only configure what deviates from con
 
 ## Override Agents
 
-Session-flow bundles three agents: `code-reviewer`, `code-sanitizer`, and `code-simplifier`. You can replace any of them with your own.
+Session-flow bundles four agents: `code-reviewer`, `code-sanitizer`, `code-simplifier`, and `security-auditor`. You can replace any of them with your own.
 
 ### Precedence order (highest wins):
 
@@ -103,7 +103,7 @@ For your own custom agents, **use `model: inherit`** unless the agent has a task
 
 ## Test Runner Integration
 
-Session-post-implementation runs your test suite in Step 5. It finds the test command using this detection order:
+Session-post-implementation runs your test suite in its test-suite step. It finds the test command using this detection order:
 
 ### Detection order:
 
@@ -132,7 +132,7 @@ Session-post-implementation reads this and uses the exact command.
 
 ### Skipping tests:
 
-If your project has no test suite, post-implementation skips Step 5 and notes it in the summary. No configuration needed.
+If your project has no test suite, post-implementation skips the test-suite step and notes it in the summary. No configuration needed.
 
 ---
 

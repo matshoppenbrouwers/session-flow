@@ -90,59 +90,40 @@ Write a structured report to the project's research directory as `YYYY-MM-DD-{to
 ## 1. Current State
 
 ### What Exists
-
-{Describe what the codebase already has. Reference specific files and line numbers.}
+{What the codebase already has, cited file:line.}
 
 ### Architecture
-
-{Diagram or description of the current architecture relevant to this topic.}
+{Current architecture relevant to this topic.}
 
 ### Gaps
-
 | Gap | Impact |
 |-----|--------|
-| {gap} | {impact} |
 
 ---
 
 ## 2. Reference Implementations
 
 ### 2.1 {Reference Name}
+**Source:** {link} — **Architecture:** {how it works} — **Relevance:** {what to borrow}
 
-**Source:** {link or citation}
-
-**Architecture:** {how it works}
-
-**Relevance to this project:** {what we can learn or borrow}
-
-{Repeat for each reference (3-5 typical)}
+{Repeat per reference, 3-5 typical.}
 
 ---
 
 ## 3. Comparative Analysis
-
-{Compare approaches across dimensions: complexity, performance, maintainability, fit with existing codebase.}
-
 | Dimension | Approach A | Approach B | Approach C |
 |-----------|-----------|-----------|-----------|
-| {dim} | {value} | {value} | {value} |
 
 ---
 
 ## 4. Recommendation
+**Recommended approach:** {name} — {rationale, referencing the comparison}
 
-**Recommended approach:** {name}
-
-**Rationale:** {why this approach, referencing the comparison}
-
-**Key design decisions to resolve:**
-1. {decision}
-2. {decision}
+**Key design decisions to resolve:** {list}
 
 ---
 
 ## 5. Open Questions
-
 - {question for user discussion}
 ```
 
@@ -183,58 +164,44 @@ After the user approves the research direction, write an implementation plan to 
 ---
 
 ## Context
-
-{1-2 paragraphs summarizing the problem and chosen approach. Reference the research doc for full analysis.}
+{Problem and chosen approach; the research doc carries the full analysis.}
 
 ### Architecture Decision
-
-{Key architectural choice and why. Keep brief -- details are in the research report.}
+{The key architectural choice and why.}
 
 ---
 
 ## Module Structure
-
-{If applicable. Show the file tree for new modules/packages.}
+{File tree for new modules, if applicable.}
 
 ### Integration Points
-
-{Where the new code connects to existing code. List files and approximate locations.}
+{Where new code connects to existing code — files and locations.}
 
 ---
 
 ## Phase N: {Phase Name}
+**Files created:** `path/to/file.py` -- {purpose}
 
-{Each phase should be independently deployable and testable.}
+**Files modified:** `path/to/existing.py` -- {what changes}
 
-**Files created:**
-- `path/to/file.py` -- {purpose}
+**Design notes:** {schema changes, API contracts}
 
-**Files modified:**
-- `path/to/existing.py` -- {what changes}
-
-**Design notes:**
-{Key implementation details, schema changes, API contracts.}
-
-**Accept**: {Observable outcome proving this phase works}
+**Accept**: {observable outcome proving this phase works}
 
 **Commit**: `{conventional commit message}`
 
+{Repeat per phase; each phase independently deployable and testable.}
+
 ---
 
-{Repeat for each phase}
-
 ## Success Criteria
-
 | Criterion | Measurement |
 |-----------|-------------|
-| {criterion} | {how to verify} |
 
 ---
 
 ## References
-
 - Research report: `{path-to-research-report}`
-- {Other relevant docs}
 ```
 
 ### Step 6: User Review (Plan)
@@ -271,31 +238,12 @@ Follow the `YYYY-MM-DD-label.md` convention. Use today's date for both the resea
 
 ## Anti-Patterns
 
-**Skipping research:**
-- BAD: Jump straight to an implementation plan without understanding the problem space
-- GOOD: Research first, even if the approach seems obvious -- you may discover constraints
-
 **Over-researching:**
 - BAD: 10 reference implementations with exhaustive analysis for a simple feature
 - GOOD: Scale research depth to feature complexity. Simple features need 1-2 references.
-
-**No user checkpoints:**
-- BAD: Write research report AND plan, then present both at once
-- GOOD: Get user approval on research direction before writing the plan
 
 **Vague plans:**
 - BAD: "Phase 2: Implement the feature"
 - GOOD: "Phase 2: Hybrid search pipeline with FTS5 + vector scoring, temporal decay, MMR re-ranking"
 
-**Dumping the whole design at once:**
-- BAD: Present the entire 500-word plan and ask "looks good?"
-- GOOD: Present architecture first, get approval, then data flow, get approval, then phases.
-
-## Workflow Integration
-
-This skill is an early step in the session workflow chain:
-
-```
-/session-init  -->  /session-research-design  -->  /session-task-planning  -->  /session-delegation  -->  /session-post-implementation  -->  /session-release
-  (setup project)       (this skill)               (break into tasks)          (execute tasks)           (refine and test)                  (version & publish)
-```
+Chain context: see `references/workflow-overview.md`.

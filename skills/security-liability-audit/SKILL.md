@@ -173,3 +173,5 @@ If the audit discovers systemic security concerns (not just point findings in th
 - No webhook signature verification anywhere in the codebase
 - Complete absence of auth on public endpoints
 - Supply chain concerns (many unaudited deps with install scripts)
+
+Chain context: see `references/workflow-overview.md`.

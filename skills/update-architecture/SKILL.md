@@ -343,14 +343,4 @@ Every scanned architecture doc must be included. If no change was needed in a sc
 - BAD: Document every helper function.
 - GOOD: Document system structure, data movement, important dependencies, runtime behavior, and risks.
 
-## Workflow Integration
-
-This skill is a supporting skill in the session-flow chain, called by `/session-post-implementation` Step 7 when architecture docs are included in the selected scope:
-
-```text
-/session-init  -->  /session-research-design  -->  /session-task-planning  -->  /session-delegation  -->  /session-post-implementation  -->  /session-release
-                                                                                                              |
-                                                                                                        /update-architecture (this skill)
-```
-
-It can also be invoked standalone when architecture docs need updating or when the user wants to establish a current-state architecture baseline.
+Chain context: see `references/workflow-overview.md`.

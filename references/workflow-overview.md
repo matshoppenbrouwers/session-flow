@@ -24,7 +24,7 @@ session-init ──> gatekeeper ──> research-design ──> task-planning �
 |-------|----------|-------------|
 | **session-init** | `.session-flow.json`, directory structure (`todo/`, `todo/tasks/`, `architecture/`), `SEQUENCE.md`, CLAUDE.md/AGENTS.md sequence block | All other skills (path resolution) |
 | **gatekeeper** | Triage verdicts; routes items to the sequence (via add-task) or to research-design | add-task / research-design |
-| **research-design** | Research report, implementation plan, decision log entries | task-planning |
+| **research-design** | Research report, implementation plan | task-planning |
 | **task-planning** | Task file with `[seq]`/`[parallel-after:X]` dependency tags, phase groupings | delegation / sequence |
 | **add-task** | A `SEQUENCE.md` entry + per-task breakdown in `todo/tasks/` | next / groom |
 | **groom** | Breakdowns attached to raw `(needs breakdown)` entries; escalations for big items | next |
@@ -81,12 +81,12 @@ Some stages are optional depending on the scope of work:
 Skills dispatch agents for specialized work. Here is the mapping:
 
 ### post-implementation dispatches:
-1. **code-simplifier** (Step 1) — Simplifies recently changed code for clarity and maintainability
-2. **code-reviewer** (Step 2) — Finds bugs, security issues, and convention violations
-3. **code-sanitizer** (Step 4) — Detects dead code, temporary artifacts, and cleanup opportunities
+1. **code-simplifier** (Simplify step) — Simplifies recently changed code for clarity and maintainability
+2. **code-reviewer** (Review step) — Finds bugs, security issues, and convention violations
+3. **code-sanitizer** (Sanitize step) — Detects dead code, temporary artifacts, and cleanup opportunities
 
 ### post-implementation also invokes:
-4. **update-architecture** (Step 6) — Surgically updates architecture docs to reflect code changes
+4. **update-architecture** (Update Architecture Docs step) — Surgically updates architecture docs to reflect code changes
 
 ### delegation dispatches:
 - **General-purpose agents** for task execution (one agent per independent task or parallel group)

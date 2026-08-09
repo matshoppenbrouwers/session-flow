@@ -66,36 +66,4 @@ Groom is designed to run unattended on an interval:
 
 Each tick scans for new raw one-liners (e.g. ones a user pasted in) and prepares them. Because anything significant is escalated rather than auto-actioned, periodic grooming is safe — it never silently commits to a large change.
 
-## Anti-Patterns
-
-**Re-grooming healthy entries:**
-- BAD: Rewriting existing breakdowns on every pass
-- GOOD: Touch only `(needs breakdown)` / dangling / unlinked entries
-
-**Fabricated breakdowns:**
-- BAD: Inventing file paths and a test command without reading the code
-- GOOD: Verify files exist and the approach is real before linking
-
-**Auto-planning a refactor:**
-- BAD: Quietly breaking a "rewrite the data layer" one-liner into tasks
-- GOOD: Escalate to `/session-research-design`
-
-**Implementing during groom:**
-- BAD: Starting to write the fix while grooming
-- GOOD: Prepare the breakdown; let `/session-next` execute it
-
-## Workflow Integration
-
-```
-raw one-liners in SEQUENCE.md  (from users or /session-add-task capture mode)
-        |
-        v
-   session-groom  --(session-sized)--> writes todo/tasks/NNNN-*.md, links the entry
-        |
-        +--(significant/divergent)--> escalate to session-research-design (cowork)
-        |
-        v
-   ready entries  ---> session-next executes them
-```
-
-Groom sits between capture and execution: it turns rough backlog items into ready-to-run breakdowns, pairing with `/loop` for hands-off upkeep. Use `/session-status` to see how many entries still need grooming.
+Chain context: see `references/workflow-overview.md`.

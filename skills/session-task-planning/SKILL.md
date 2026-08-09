@@ -22,6 +22,8 @@ Convert implementation plans into session-scoped tasks with explicit paralleliza
 
 Each task must be completable in **one Claude Code session** (~30 min focused work). Tasks too large get split. Tasks too small get merged.
 
+**Predecessor:** Expects an implementation plan from `/session-research-design` or equivalent. If no plan exists, ask the user for one before proceeding.
+
 ## Task Sizing Rules
 
 **Right-sized task:**
@@ -183,40 +185,8 @@ Before finalizing, verify each task:
 
 ## Anti-Patterns
 
-**Vague instructions:**
-- BAD: "Improve the code structure"
-- GOOD: "Extract `_convert_messages()` from server.py:200-250 into providers/openai.py"
-
-**Unclear acceptance:**
-- BAD: "Code is cleaner"
-- GOOD: "`provider_type='openai'` works end-to-end via new module"
-
 **Missing dependencies:**
 - BAD: Tasks that secretly depend on each other marked as parallel
 - GOOD: If B uses A's output, B has `[parallel-after:A]` or `[seq]` after A
 
-**Too ambitious:**
-- BAD: "Refactor entire backend" as one task
-- GOOD: Split into focused extraction tasks
-
-**Saving task files to plans/:**
-- BAD: Task files mixed with design docs in plans/
-- GOOD: Task files always go to todo/, design docs always go to plans/
-
-## Workflow Integration
-
-This skill is the second step in the session workflow chain:
-
-```
-/session-init  -->  /session-research-design  -->  /session-task-planning  -->  /session-delegation  -->  /session-post-implementation  -->  /session-release
-  (setup project)       (research & design)          (this skill)              (execute tasks)           (refine and test)                  (version & publish)
-```
-
-**Predecessor:** Expects an implementation plan from `/session-research-design` or equivalent. If no plan exists, ask the user for one before proceeding.
-
-**This skill produces task files.** To execute them:
-
-1. **Sequential execution**: Work through `[seq]` tasks in order
-2. **Parallel execution**: Use `/session-delegation` for parallel pairs
-3. **Progress tracking**: Update `[ ]` -> `[x]` as tasks complete
-4. **Intermezzo**: Run full test suite between phases
+Chain context: see `references/workflow-overview.md`.

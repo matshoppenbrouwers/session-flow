@@ -218,7 +218,7 @@ Only 1-2 skills are loaded at a time (triggered by description matching):
 
 | Component | Est. Tokens |
 |-----------|-------------|
-| All 13 skill metadata (always loaded) | ~1,300 |
+| All 13 skill metadata (always loaded) | ~1,500 |
 | Largest single skill body (research-design) | ~2,500 |
 | Typical active session | ~3,400 |
 

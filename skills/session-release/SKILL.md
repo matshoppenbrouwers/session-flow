@@ -222,29 +222,8 @@ Print a summary of what's ready and what the user needs to do next:
 
 ## Anti-Patterns
 
-**Skipping the satellite scan:**
-- BAD: Bump version, package, ship -- forget the docs site still says v0.1.0
-- GOOD: Always scan, even if you think nothing needs updating
-
-**Auto-running builds:**
-- BAD: Run build commands without checking for signing keys or environment setup
-- GOOD: Print build instructions, wait for user to confirm completion
-
-**Updating lock files manually:**
-- BAD: Edit `package-lock.json` to change version strings
-- GOOD: Let the build toolchain regenerate lock files
-
 **Grepping too aggressively:**
 - BAD: Flag every occurrence of "0.2.0" including in unrelated constants
 - GOOD: Focus on config files, docs, and distribution -- skip test fixtures and historical references
 
-## Workflow Integration
-
-This skill is the final step in the session workflow chain:
-
-```
-/session-init  -->  /session-research-design  -->  /session-task-planning  -->  /session-delegation  -->  /session-post-implementation  -->  /session-release
-  (bootstrap)       (research & design)             (break into tasks)          (execute tasks)           (refine and test)                  (this skill)
-```
-
-It can also be used standalone when the code is already tested and ready to ship.
+Chain context: see `references/workflow-overview.md`.

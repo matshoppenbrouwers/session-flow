@@ -42,7 +42,7 @@ Confirm these inputs before proceeding. Do not guess.
 
 ### Step 2: Scope Matrix
 
-Produce and confirm with the user a 6-row matrix that defines what "working" means for this verification. Present as a table. Adjust rows to match ambition chosen in Step 1.
+Produce and confirm with the user a 6-row matrix that defines what "working" means for this verification. Present as a table. Adjust rows to match the ambition chosen in the Scope step.
 
 | Row | Dimension | What must be true |
 |-----|-----------|-------------------|
@@ -175,10 +175,10 @@ The artifact at `_verification/{date}-{label}-verification.md` must use exactly 
 | # | Hypothesis | Predicted | Observed | Evidence | Status |
 
 ## Scope Matrix Status
-Row 1..6 from Step 2 with PASS/FAIL/N/A + one-line justification.
+Row 1..6 from the Scope Matrix with PASS/FAIL/N/A + one-line justification.
 
 ## Structural Audit
-Inventory table from Step 4.
+Inventory table from the Structural Audit.
 
 ## Test Results
 - Full suite: pass/fail counts, duration, command
@@ -248,17 +248,9 @@ Appropriate for:
 
 ## Anti-Patterns
 
-**Claiming green without evidence:**
-- BAD: "The test suite passes — I confirmed this is working."
-- GOOD: "`$ pytest tests/ -v` returned `143 passed in 12.4s`. Log at `_verification/2026-04-18-x-tests.log`."
-
 **Spot-checking instead of exhaustive coverage:**
 - BAD: Verify 3 of 11 event types exist; assume the other 8 do.
 - GOOD: Inventory all 11 in a table with file:line citations.
-
-**Skipping phases:**
-- BAD: Skip defect probes because "the tests passed anyway".
-- GOOD: Run every probe — the whole point is that passing tests are not the same as correct behavior.
 
 **Treating compilation as correctness:**
 - BAD: "TypeScript compiles clean — the UI wiring is correct."
@@ -268,25 +260,8 @@ Appropriate for:
 - BAD: Discover a missing feature; quietly update the plan to say it was out of scope.
 - GOOD: Report it as NOT-IMPLEMENTED in the Spec-vs-Reality Gap section.
 
-**Fixing defects silently:**
-- BAD: Find a bug, edit the code, report the feature as passing.
-- GOOD: Report the bug as a finding with a failing probe; ask the user how to proceed.
-
 **Hand-waving environment limits:**
 - BAD: "I couldn't run the integration tests in my environment."
 - GOOD: "Integration tests require Windows + Tauri (not available in WSL). User must run `pnpm tauri dev` on Windows and execute checklist §9.3."
 
-## Workflow Integration
-
-This skill sits between post-implementation polish and release:
-
-```
-/session-init  -->  /session-research-design  -->  /session-task-planning  -->  /session-delegation  -->  /session-post-implementation  -->  /session-verify  -->  /session-release
-  (bootstrap)       (research & design)             (break into tasks)          (execute tasks)           (simplify, review, test)          (this skill)           (package & ship)
-```
-
-- `/session-post-implementation` can optionally suggest this skill in its Step 7.5 for feature/plan completions.
-- `/session-release` pre-flight checks for a PASS verification artifact when shipping a feature that had a design doc.
-- Standalone: invoke directly when auditing a completed but un-verified implementation, or when prior code review flagged significant defects that need independent confirmation.
-
-Not appropriate to run for every session — use it when the cost of shipping broken code is high.
+Chain context: see `references/workflow-overview.md`.

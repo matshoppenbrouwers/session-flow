@@ -108,38 +108,12 @@ Per-task breakdown files reuse the `session-task-planning` task template, wrappe
 
 ## Anti-Patterns
 
-**Inline detail in the sequence:**
-- BAD: A multi-line task with instructions pasted into SEQUENCE.md
-- GOOD: A one-line entry linking to `todo/tasks/NNNN-slug.md`
-
 **Vague breakdown:**
 - BAD: "Improve the API" with no Files/Test
 - GOOD: "Add token-bucket middleware to `src/api/middleware.py`; `pytest tests/api/test_rate_limit.py`"
-
-**Reused ids:**
-- BAD: Two `SEQ-007` entries
-- GOOD: Scan first, use the next free integer
-
-**Overwriting a breakdown:**
-- BAD: Writing `0007-*.md` over an existing file
-- GOOD: If it exists, advance to the next id/slug
 
 **Cramming a refactor into one breakdown:**
 - BAD: "Rewrite the backend" as a single per-task file
 - GOOD: Use Mode B → `/session-task-planning`
 
-## Workflow Integration
-
-```
-something surfaces / user idea
-        |
-        v
-  session-add-task ---> SEQUENCE.md (one-line entry)
-        |                    |
-   (Mode A) per-task    (Mode B) ---> session-task-planning ---> todo/ phase file
-   breakdown file            |
-        |                    v
-        +-------> later: session-next executes the entry
-```
-
-`session-add-task` feeds the backlog that `/session-next` works through and `/session-groom` keeps healthy. It is the manual counterpart to `/session-gatekeeper`, which captures tasks automatically from triaged issues.
+Chain context: see `references/workflow-overview.md`.
