@@ -21,12 +21,31 @@ Session-flow reads `.session-flow.json` from your project root. This file is cre
     "sequence": "_devdocs/todo/SEQUENCE.md",
     "testing": "_devdocs/testing",
     "architecture": "_devdocs/architecture",
-    "direction": "_devdocs/PRD.md"
+    "direction": "_devdocs/PRD.md",
+    "conventions": "_devdocs/conventions.md",
+    "lessons": "_devdocs/lessons.md"
   }
 }
 ```
 
-All paths are relative to the project root and live under the nested `paths` object. Every field is optional — skills fall back to auto-detection if a field is missing. `paths.sequence` and `paths.direction` point at files (`SEQUENCE.md` and the product-direction doc); the rest are directories.
+All paths are relative to the project root and live under the nested `paths` object. Every field is optional — skills fall back to auto-detection if a field is missing. `paths.sequence`, `paths.direction`, `paths.conventions`, and `paths.lessons` point at files; the rest are directories.
+
+| Key | Purpose |
+|-----|---------|
+| `direction` | Product-direction doc grounding `/session-gatekeeper` triage |
+| `conventions` | House rules read by `session-research-design` at design time and enforced by `code-reviewer` |
+| `lessons` | Conclusions from past work, read as a one-line index by `session-research-design` and `session-delegation` |
+
+### Conventions and lessons format
+
+Both files are one rule per line, `rule — reason`, ~140 characters. The reason is mandatory — without it, design either treats the rule as gospel or ignores it. Anything that needs more than one line is an architecture decision and belongs in `architecture/decisions.md` instead.
+
+```markdown
+Repository access goes through the store layer — direct SQL in handlers made schema changes unshippable.
+No global mutable config — the 2025 rollout bug traced to a request handler mutating it mid-flight.
+```
+
+Conventions are rules to design and review against; lessons are conclusions drawn after the fact. Neither is required: when a key is unset or the file is missing, the consuming skills say so and fall back to `CLAUDE.md` plus observed patterns rather than inventing a house style. The highest-value conventions entries are the negatives — what was tried and rejected — because that evidence is gone from the codebase and nothing else records it.
 
 ### Minimal config:
 
@@ -174,6 +193,8 @@ project-root/
     testing/        # Manual test plans and results from session-post-implementation
     architecture/   # Architecture documentation
     PRD.md          # Product direction doc (optional; used by session-gatekeeper)
+    conventions.md  # House rules (optional; used by session-research-design and code-reviewer)
+    lessons.md      # Conclusions from past work (optional; one-line index)
 ```
 
 ---
