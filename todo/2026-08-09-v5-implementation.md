@@ -101,7 +101,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ## Phase 2: Prescriptiveness trim (v5 §10) — one commit per task for bisectability
 
-### [2A-1] [seq] [ ] P2: Remove Workflow Integration sections from all 13 skills
+### [2A-1] [seq] [x] P2: Remove Workflow Integration sections from all 13 skills
 **Files**: `skills/*/SKILL.md` (13 files — deliberately over the 5-file guideline: one mechanical deletion, one category commit)
 
 **Instructions**:
@@ -116,7 +116,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [2A-2] [seq] [ ] P2: Prune duplicate anti-patterns and template placeholder prose
+### [2A-2] [seq] [x] P2: Prune duplicate anti-patterns and template placeholder prose
 **Files**: `skills/*/SKILL.md` (13 files — same rationale as 2A-1)
 
 **Instructions**:
@@ -131,7 +131,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [2A-3] [parallel-after:2A-2] [ ] P2: Trim code-reviewer checklists and code-simplifier examples
+### [2A-3] [parallel-after:2A-2] [x] P2: Trim code-reviewer checklists and code-simplifier examples
 **Files**: `agents/code-reviewer.md`, `agents/code-simplifier.md`
 
 **Instructions**:
@@ -145,7 +145,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [2A-4] [parallel-after:2A-2] [ ] P2: Fix cross-reference drift; update CONTRIBUTING and README token figure
+### [2A-4] [parallel-after:2A-2] [x] P2: Fix cross-reference drift; update CONTRIBUTING and README token figure
 **Files**: `skills/session-verify/SKILL.md:288`, `references/workflow-overview.md`, `references/customization-guide.md`, `CONTRIBUTING.md`, `README.md`
 
 **Instructions**:
