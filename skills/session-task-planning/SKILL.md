@@ -185,24 +185,8 @@ Before finalizing, verify each task:
 
 ## Anti-Patterns
 
-**Vague instructions:**
-- BAD: "Improve the code structure"
-- GOOD: "Extract `_convert_messages()` from server.py:200-250 into providers/openai.py"
-
-**Unclear acceptance:**
-- BAD: "Code is cleaner"
-- GOOD: "`provider_type='openai'` works end-to-end via new module"
-
 **Missing dependencies:**
 - BAD: Tasks that secretly depend on each other marked as parallel
 - GOOD: If B uses A's output, B has `[parallel-after:A]` or `[seq]` after A
-
-**Too ambitious:**
-- BAD: "Refactor entire backend" as one task
-- GOOD: Split into focused extraction tasks
-
-**Saving task files to plans/:**
-- BAD: Task files mixed with design docs in plans/
-- GOOD: Task files always go to todo/, design docs always go to plans/
 
 Chain context: see `references/workflow-overview.md`.

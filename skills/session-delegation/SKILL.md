@@ -129,18 +129,4 @@ You are implementing task [TASK-ID] from the session plan.
 - If a blocking task fails: pause dependent tasks, report to user
 - If tests fail after implementation: agent should iterate up to 3 times before reporting failure
 
-## Anti-Patterns
-
-**Dispatching without a plan:**
-- BAD: Start executing tasks without a parsed task plan file
-- GOOD: Always have a `/session-task-planning` output with dependency tags before dispatching
-
-**Not tracking progress:**
-- BAD: Fire-and-forget agents without updating the todo file
-- GOOD: Mark `[ ]` -> `[x]` after each task and check for newly unlocked parallel opportunities
-
-**Ignoring parallel opportunities:**
-- BAD: Run all tasks sequentially when some are independent
-- GOOD: Check dependency graph -- tasks with satisfied dependencies can run in a single multi-tool message
-
 Chain context: see `references/workflow-overview.md`.

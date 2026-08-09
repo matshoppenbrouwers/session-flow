@@ -80,16 +80,4 @@ Trivial aligned items flow into the sequence automatically; significant or diver
 - BAD: "This seems fine, adding it" with no reference to direction or architecture
 - GOOD: "Aligned with PRD §3 (offline-first); touches `sync/` per architecture — trivial, adding to sequence"
 
-**Auto-adding a big change:**
-- BAD: Quietly breaking down "migrate to a new database" into sequence tasks
-- GOOD: Escalate to a cowork `/session-research-design` session
-
-**Silently dropping items:**
-- BAD: Deciding an issue is off-direction and ignoring it
-- GOOD: Flag it for the user to decide
-
-**Implementing during triage:**
-- BAD: Starting to write the fix while triaging
-- GOOD: Route to `/session-add-task`; let `/session-next` execute later
-
 Chain context: see `references/workflow-overview.md`.

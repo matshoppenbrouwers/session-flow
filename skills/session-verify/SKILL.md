@@ -248,17 +248,9 @@ Appropriate for:
 
 ## Anti-Patterns
 
-**Claiming green without evidence:**
-- BAD: "The test suite passes — I confirmed this is working."
-- GOOD: "`$ pytest tests/ -v` returned `143 passed in 12.4s`. Log at `_verification/2026-04-18-x-tests.log`."
-
 **Spot-checking instead of exhaustive coverage:**
 - BAD: Verify 3 of 11 event types exist; assume the other 8 do.
 - GOOD: Inventory all 11 in a table with file:line citations.
-
-**Skipping phases:**
-- BAD: Skip defect probes because "the tests passed anyway".
-- GOOD: Run every probe — the whole point is that passing tests are not the same as correct behavior.
 
 **Treating compilation as correctness:**
 - BAD: "TypeScript compiles clean — the UI wiring is correct."
@@ -267,10 +259,6 @@ Appropriate for:
 **Rewriting the plan to match broken code:**
 - BAD: Discover a missing feature; quietly update the plan to say it was out of scope.
 - GOOD: Report it as NOT-IMPLEMENTED in the Spec-vs-Reality Gap section.
-
-**Fixing defects silently:**
-- BAD: Find a bug, edit the code, report the feature as passing.
-- GOOD: Report the bug as a finding with a failing probe; ask the user how to proceed.
 
 **Hand-waving environment limits:**
 - BAD: "I couldn't run the integration tests in my environment."

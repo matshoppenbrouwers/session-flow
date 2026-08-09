@@ -58,22 +58,4 @@ If the entry links to a phase file, invoke `/session-delegation` against that fi
 3. Report: what was implemented, files changed, test result.
 4. Suggest the next entry (or note the backlog is clear / needs grooming).
 
-## Anti-Patterns
-
-**Doing un-broken-down work:**
-- BAD: Improvising an implementation for a `(needs breakdown)` one-liner
-- GOOD: Skip it, run `/session-groom` to research and break it down first
-
-**Not updating state:**
-- BAD: Implement the task, leave the entry `[ ]`
-- GOOD: Mark `[x]` in SEQUENCE.md and the breakdown immediately
-
-**Cherry-picking:**
-- BAD: Jump to an easy P3 while a ready P1 sits at the top
-- GOOD: Take the topmost ready entry, lowest P-number first
-
-**Swallowing a phase:**
-- BAD: Try to implement a whole multi-task phase file in one go
-- GOOD: Hand off to `/session-delegation`
-
 Chain context: see `references/workflow-overview.md`.

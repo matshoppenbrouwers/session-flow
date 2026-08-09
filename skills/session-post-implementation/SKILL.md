@@ -303,16 +303,8 @@ For smaller changes, use `/quick-post-implementation` (equivalent to choosing "Q
 
 ## Anti-Patterns
 
-**Skipping the test suite:**
-- BAD: Commit sanitized code without running the full test suite
-- GOOD: Always run the full test suite (Step 6) before the final commit
-
-**Committing without review:**
-- BAD: Run simplifier and immediately commit without code review
-- GOOD: Simplify -> Review -> Fix issues -> Commit checkpoint, then sanitize
-
 **Running full suite between every step:**
 - BAD: Run the full test suite after simplify, again after review, again after sanitize
-- GOOD: Run individual tests during steps 1-5, full suite once at Step 6
+- GOOD: Run individual tests during the simplify/review/audit/sanitize steps, full suite once at the test-suite step
 
 Chain context: see `references/workflow-overview.md`.
