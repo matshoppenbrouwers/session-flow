@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0 (2026-08-12)
 
 Completes v5 Phase 5, which 1.3.0 deliberately held back behind the SEQ-001 gatekeeper trial. That trial ran on 2026-08-12 against 14 real intake items; verdicts and findings are recorded in `todo/2026-08-12-seq-001-gatekeeper-trial.md`.
 

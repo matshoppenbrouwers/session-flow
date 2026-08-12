@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Session workflow orchestration for Claude Code",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "plugins": [
     {
       "name": "session-flow",
       "source": "./",
       "description": "Complete development lifecycle chain: init, research-design, task-planning, delegation, post-implementation, verification, release, plus security & liability audit. Features dependency-aware parallelization, collaborative brainstorming, and evidence-based verification.",
-      "version": "1.3.0"
+      "version": "1.4.0"
     }
   ]
 }

@@ -120,8 +120,11 @@ Beyond per-feature task files, session-flow keeps a standing **backlog** at `tod
 ```
 - [ ] SEQ-007 P2: Add rate limiting to the API → todo/tasks/0007-add-rate-limit.md
 - [ ] SEQ-008 P3: Investigate caching layer (needs breakdown)
+- [ ] SEQ-009 P3 [auto]: Retry failed webhook deliveries → todo/tasks/0009-retry-webhooks.md
 - [x] SEQ-006 P1: Fix login redirect loop → todo/tasks/0006-fix-login-redirect.md
 ```
+
+`[auto]` marks an entry a skill enqueued on your behalf — `/session-gatekeeper` triage is the one shipped caller — rather than one you added yourself. It is the veto handle: marked entries sit in the backlog and can be struck on sight, so unattended intake never needs your approval up front. `/session-groom` reports them separately, `/session-next` never lets one outrank a manual entry of the same priority, and `/session-status` counts them.
 
 Each linked breakdown in `todo/tasks/` is a self-contained, bite-sized prompt (Files / Instructions / Accept / Test) ready for an agent to execute. **Files** entries may be exact paths (`src/api/routes.py`) or directory globs (`src/lib/governor/**`) when a task owns a whole subtree — and the field doubles as the write boundary: `/session-delegation` injects it into every dispatch as "you may only create or modify these paths."
 
@@ -141,9 +144,13 @@ Each linked breakdown in `todo/tasks/` is a self-contained, bite-sized prompt (F
 
 `/session-gatekeeper` is the front-of-chain funnel for incoming work — GitHub issues, feature requests, or ideas that surface mid-session. It grounds each item in your architecture docs and product direction (a `PRD.md` in the docs root by default, configurable via `paths.direction`), then routes it:
 
-- **Trivial, aligned, and clear** → straight into the sequence via `session-add-task`.
+- **Touches database schema or a spine / canonical status field** → back to you regardless of size.
+- **Unknown alignment** → escalated. If the direction could not be established, nothing is auto-added.
+- **Trivial, aligned, and clear** → straight into the sequence via `session-add-task`, marked `[auto]`.
 - **Significant, divergent, or unclear** → escalated to a cowork `/session-research-design` session with you.
 - **Off-direction** → flagged for your explicit decision.
+
+Escalation is an act, not an annotation: an escalated batch produces a named session proposal — the question to answer, the items it covers, near-duplicates merged — addressed to you in the run's output. A question the code can answer gets answered and cited before it is routed, every cited path is existence-checked before a breakdown is written, and each run leaves a dated record at `{todo}/YYYY-MM-DD-gatekeeper-run.md`.
 
 It triages only — it never implements, and it treats issue text as untrusted data rather than instructions. It pairs with `/loop` for periodic issue intake, queuing anything significant for you rather than auto-processing it.
 

@@ -20,14 +20,16 @@ since the gate blocked the other two items for a while.
   `skills/session-gatekeeper/SKILL.md` **Inputs**, verbatim from ops spec §11. No other
   gatekeeper behaviour moved; escalation formatting stayed in the ops workflow prompts.
 
+- [x] **SEQ-008** — the nine gatekeeper defects the SEQ-001 trial exposed, fixed across six
+  sequential tasks (`todo/2026-08-12-seq-008-gatekeeper-defects.md`). The two with the most
+  reach: the direction-doc chain now runs when `paths.direction` is misconfigured and reports
+  the dead path, and every claim is marked verified (`file:line`) or assumed while every cited
+  path is existence-checked before a breakdown is written.
+
+- [x] **Release** — 1.4.0. Phase 5 and the SEQ-008 fixes ship together; version bumped across
+  both manifests and `CITATION.cff`, satellite surfaces scanned.
+
 ## Open
 
-- [ ] **SEQ-008** — fix the nine gatekeeper defects the SEQ-001 trial exposed. Broken down into
-  six sequential tasks in `todo/2026-08-12-seq-008-gatekeeper-defects.md`. The two with the most reach:
-  the direction-doc fallback never executes when `paths.direction` is misconfigured, and
-  nothing in gatekeeper's output distinguishes a grepped claim from an assumed one (source
-  refs came back 20/20, test paths 2/10).
-
-- [ ] **Release** — Phase 5 sits under `## Unreleased` in the CHANGELOG. The v5 phase file
-  calls for its own 1.4.0 entry rather than an edit to 1.3.0; the version bump across both
-  manifests is a `/session-release` decision, not done here.
+Nothing tracked here. New work goes to `todo/SEQUENCE.md` via `/session-add-task` or
+`/session-gatekeeper`.
