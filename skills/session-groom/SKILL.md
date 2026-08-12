@@ -48,6 +48,8 @@ For each un-prepared entry:
 
 Reuse the `session-add-task` / `session-task-planning` breakdown template (header + Files / Instructions / Accept / Test). Files entries may be exact paths or directory globs (`src/lib/governor/**`), and the field doubles as the **dispatch write boundary** delegation injects into agent payloads — list everything the task must touch. Write it to `{tasks}/NNNN-slug.md`, where `NNNN` is the entry's existing `SEQ-NNN` number (zero-padded) so the file and entry stay aligned. Never overwrite an existing file. Then update the sequence entry to drop `(needs breakdown)` and add the `→` link.
 
+**Preserve any ` ⇄ <url>` annotations on the line, in place.** They sit immediately before the trailing status token, so swapping `(needs breakdown)` for the `→` link leaves them exactly where they belong — but you are rewriting that region of the line, and dropping one is silent. The annotation is the only key that stops the source item being imported a second time by another writer (see `session-add-task`'s Provenance section); grooming an entry is not a reason to lose it.
+
 ### Step 4: Escalate when needed
 
 If the entry is too big or diverges from the app's direction, do not break it down. Instead:

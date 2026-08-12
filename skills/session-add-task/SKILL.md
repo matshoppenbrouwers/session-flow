@@ -39,11 +39,18 @@ Resolve paths using the standard order:
 | `[ ]` | Open |
 | `[x]` | Done |
 | `[auto]` (after the priority) | Enqueued by a bot, not by the user — see Provenance below |
+| ` ⇄ <url>` (before the trailing link) | This entry and that external item are the same work — see Provenance below |
 | `(needs breakdown)` (trailing) | Captured but not yet researched/linked |
 
 The link target is **either** a per-task breakdown file (`todo/tasks/NNNN-slug.md`, the default) **or** an anchor into a `session-task-planning` phase file (`todo/2026-06-03-feature.md#NA-1`) for multi-task work.
 
-## Provenance — the `[auto]` marker
+## Provenance
+
+Two independent markers, answering two different questions. `[auto]` says **who** put the entry in the
+file; ` ⇄ <url>` says **where the work came from**. An entry may carry either, both, or neither — a
+gatekeeper enqueue from a GitHub issue carries both.
+
+### Who added it — the `[auto]` marker
 
 Add-task takes an optional **auto-provenance flag**. It is off by default: a user invoking `/session-add-task` produces an unmarked entry. Set it only when the caller is a skill enqueuing on the user's behalf without the user having seen the item — `/session-gatekeeper` triage is the one shipped caller.
 
@@ -58,6 +65,24 @@ Nothing else about the entry changes — same id rules, same breakdown, same lin
 Consumers: `/session-groom` grooms marked entries normally but reports them separately; `/session-next` never lets `[auto]` outrank a manual entry of the same priority; `/session-status` counts them.
 
 **Before relying on this with session-scribe:** scribe parses `SEQUENCE.md` by file-format convention, not shared code. `[auto]` changes the line format it reads. Verify scribe's parser against a marked line before trusting the Notion mirror.
+
+### Where it came from — the ` ⇄ <url>` source key
+
+Add-task also takes an optional **source URL**: the external item this task was captured from — a GitHub issue, a Notion task, a tracker ticket. When the caller passes one, render it as ` ⇄ <url>` **immediately before the trailing ` → <breakdown-link>`**:
+
+```
+- [ ] SEQ-011 P3 [auto]: Retry failed webhook deliveries ⇄ https://github.com/owner/repo/issues/42 → todo/tasks/0011-retry-webhooks.md
+```
+
+Zero or more per line, each dispatched on its hostname by whoever reads it, never on position. Presence means one thing: **this line and that URL are the same work.**
+
+**Why record it.** A second importer must be able to see the item is already in the file. session-scribe's `/scribe-pull` imports GitHub issues into `SEQUENCE.md`, and it dedups by excluding any candidate whose URL already appears as a ` ⇄ ` annotation. If the gatekeeper enqueues an issue in CI and writes no annotation, that issue is invisible to the check and gets imported a second time under a second `SEQ-NNN` — after which scribe's mirror files a *third* item for the duplicate. The same key also stops the mirror from re-filing an entry whose issue already exists.
+
+**It is the only key between writers.** Do not fall back to matching on title text: this skill rewrites a raw issue title into task phrasing, so the two never match, and near-matches across unrelated entries do. No URL, no dedup — which is why a caller that knows the URL must pass it.
+
+**Position is load-bearing, in both directions.** `/session-status`, `/session-groom` and `/session-next` all read the breakdown link as *the text after the last ` → `* and open it as a path. An annotation appended after the link makes that path `todo/tasks/0011-retry-webhooks.md ⇄ https://…`, which resolves to nothing — so a fully-groomed entry reads as dangling and gets re-groomed or skipped. And a reader looking for the annotation scans the tail of the line once that trailing token is stripped, so an annotation placed after the token is unfindable.
+
+Both constraints resolve to one rule: **the annotation goes immediately before the entry's trailing status token** — the ` → <breakdown-link>` on a groomed entry, or the `(needs breakdown)` marker on an ungroomed one (mode C), or end-of-line if it has neither. An entry has one such token or the other, never both.
 
 ## Modes
 
@@ -85,6 +110,8 @@ The user just wants it recorded; research/breakdown comes later (via `/session-g
 1. Choose the next `SEQ-NNN` id.
 2. Append a one-liner with a trailing `(needs breakdown)` and no link:
    `- [ ] SEQ-009 P3: Investigate caching layer (needs breakdown)`
+   With a source URL, the annotation goes before the marker:
+   `- [ ] SEQ-009 P3: Investigate caching layer ⇄ https://github.com/owner/repo/issues/42 (needs breakdown)`
 
 When unsure which mode, ask the user one question: "Quick capture, full breakdown now, or is this big enough to plan as multiple tasks?"
 
@@ -123,7 +150,7 @@ Per-task breakdown files reuse the `session-task-planning` task template, wrappe
 2. Determine the next `SEQ-NNN` id by scanning `SEQUENCE.md`.
 3. Pick the mode (A/B/C).
 4. For A: write the breakdown file; for B: invoke task-planning; for C: skip the breakdown.
-5. Append exactly one entry to `SEQUENCE.md`, rendering `[auto]` after the priority if the caller set the auto-provenance flag.
+5. Append exactly one entry to `SEQUENCE.md`, rendering `[auto]` after the priority if the caller set the auto-provenance flag, and ` ⇄ <url>` before the trailing status token if the caller passed a source URL.
 6. Report: the new id, the entry line, and the breakdown path (or that it needs grooming).
 
 ## Anti-Patterns
@@ -135,5 +162,9 @@ Per-task breakdown files reuse the `session-task-planning` task template, wrappe
 **Cramming a refactor into one breakdown:**
 - BAD: "Rewrite the backend" as a single per-task file
 - GOOD: Use Mode B → `/session-task-planning`
+
+**Dropping the source URL because the title says where it came from:**
+- BAD: `- [ ] SEQ-011 P3 [auto]: Retry failed webhook deliveries (from issue #42) → todo/tasks/0011-retry-webhooks.md`
+- GOOD: `- [ ] SEQ-011 P3 [auto]: Retry failed webhook deliveries ⇄ https://github.com/owner/repo/issues/42 → todo/tasks/0011-retry-webhooks.md` — a second importer greps for the URL, not for prose. `(from issue #42)` is readable by a human and invisible to the one check that prevents the item being enqueued twice
 
 Chain context: see `references/workflow-overview.md`.

@@ -69,7 +69,7 @@ If an item is a question answerable from the code, answer it before routing: gre
 |---------|-------|
 | touches schema **or** a spine / canonical status field | User decision, regardless of size. Never auto-add. |
 | unknown alignment | Escalate. Unknown alignment is a hard escalate: an item whose alignment could not be established is never auto-added, no matter how trivial. |
-| trivial **and** aligned **and** clear | Hand to `/session-add-task` **with the auto-provenance flag set** (full breakdown into SEQUENCE.md). Report what was added. |
+| trivial **and** aligned **and** clear | Hand to `/session-add-task` **with the auto-provenance flag set and the item's source URL passed** (full breakdown into SEQUENCE.md). Report what was added. |
 | significant **or** divergent **or** unclear | Escalate to a cowork `/session-research-design` session with the user — see **What escalation means** below. Do **not** auto-wire a breakdown. |
 | off-direction / should-not-do | Flag for an explicit user decision (e.g. close the issue, defer, or reconsider direction). |
 
@@ -83,15 +83,19 @@ Appending `(needs research-design)` to a set of lines is **not escalation**: it 
 
 Add, escalate, and flag-for-decision are all live branches. A run that only ever adds or escalates has not used the third — off-direction items get surfaced for a decision, not quietly folded into one of the other two.
 
-Everything the gatekeeper enqueues carries `[auto]` — the marker is what makes a bot-added entry visible as one:
+Everything the gatekeeper enqueues carries two provenance markers — `[auto]` for who added it, and the source item's URL as ` ⇄ <url>` for where the work came from:
 
 ```
-- [ ] SEQ-011 P3 [auto]: Retry failed webhook deliveries → todo/tasks/0011-retry-webhooks.md
+- [ ] SEQ-011 P3 [auto]: Retry failed webhook deliveries ⇄ https://github.com/owner/repo/issues/42 → todo/tasks/0011-retry-webhooks.md
 ```
 
-This is the veto handle. It buys propose-don't-execute without asking the user to approve every item up front: marked entries sit in the sequence and can be struck on sight. `/session-groom`, `/session-next`, and `/session-status` all read it.
+`[auto]` is the veto handle. It buys propose-don't-execute without asking the user to approve every item up front: marked entries sit in the sequence and can be struck on sight. `/session-groom`, `/session-next`, and `/session-status` all read it.
 
-**Before relying on this with session-scribe:** scribe parses `SEQUENCE.md` by file-format convention, not shared code. `[auto]` changes the line format it reads. Verify scribe's parser against a marked line before trusting the Notion mirror.
+` ⇄ <url>` is there because **a second importer has to be able to see the item is already in the file.** This skill is not the only thing that enqueues from an issue tracker: session-scribe's `/scribe-pull` imports labelled GitHub issues into the same `SEQUENCE.md`, and it dedups by excluding any candidate whose URL already appears as a ` ⇄ ` annotation. Enqueue an issue in CI with no annotation and it stays invisible to that check — so it gets imported again under a second `SEQ-NNN`, and scribe's mirror then files a *third* item for the duplicate. The URL is the only key that spans the two writers; a title is not a fallback, because Step 3 rewrites raw issue titles into task phrasing. Pass it to `/session-add-task`, which renders it immediately before the entry's trailing status token (see that skill's Provenance section — the position is load-bearing for both the link readers and the annotation readers).
+
+An item with no URL — something surfaced in conversation rather than filed anywhere — gets `[auto]` alone. Never invent a URL to fill the slot.
+
+**Before relying on either marker with session-scribe:** scribe parses `SEQUENCE.md` by file-format convention, not shared code. Both markers change the line format it reads. `[auto]` is verified against scribe's parser (it reads the priority and the `SEQ-NNN` id around the marker and carries it through into the mirrored item's title); the ` ⇄ ` convention is written down as a shared contract in scribe's `scribe-tasks` skill, which is what makes it safe to write from here.
 
 Two rules bind before any hand-off to `/session-add-task`:
 
