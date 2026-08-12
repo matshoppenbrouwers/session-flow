@@ -5,7 +5,7 @@
 
 Each task references the design doc — read the relevant section first for full context.
 
-**User gate:** SEQ-001 (a real `/session-gatekeeper` trial run) gates Phase 5 only. The v5 migration list runs it first for everything; the file-dependency graph says only the intake tasks (5A-1, 5A-2) actually consume its outcome, so the rest may proceed. Do not start 5A-1 until the user confirms the trial.
+**User gate:** SEQ-001 (a real `/session-gatekeeper` trial run) gates Phase 5 only. The v5 migration list runs it first for everything; the file-dependency graph says only the intake tasks (5A-1, 5A-2) actually consume its outcome, so the rest may proceed. **Gate cleared 2026-08-12** — the trial ran against 14 real items over two runs; verdicts and findings in `todo/2026-08-12-seq-001-gatekeeper-trial.md`.
 
 ---
 
@@ -257,11 +257,11 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ## Phase 5: Intake features — GATED on SEQ-001 (v5 §7)
 
-### [5A-1] [parallel-after:3B-3] [ ] P3: `[auto]` provenance marker in add-task and gatekeeper
+### [5A-1] [parallel-after:3B-3] [x] P3: `[auto]` provenance marker in add-task and gatekeeper
 **Files**: `skills/session-add-task/SKILL.md`, `skills/session-gatekeeper/SKILL.md`
 
 **Instructions**:
-- **Do not start until the user confirms the SEQ-001 gatekeeper trial**
+- SEQ-001 gatekeeper trial confirmed 2026-08-12 — gate cleared
 - Read v5 spec §7.3 first
 - add-task: accept an auto-provenance flag; when set, entries render as `- [ ] SEQ-NNN P3 [auto]: …`
 - gatekeeper: pass the flag when enqueuing triaged items
@@ -273,7 +273,7 @@ Trim (2A-1, 2A-2) is sequential and sits between fixes and features because it t
 
 ---
 
-### [5A-2] [parallel-after:5A-1] [ ] P3: Teach groom, next, and session-status to read `[auto]`
+### [5A-2] [parallel-after:5A-1] [x] P3: Teach groom, next, and session-status to read `[auto]`
 **Files**: `skills/session-groom/SKILL.md`, `skills/session-next/SKILL.md`, `commands/session-status.md`
 
 **Instructions**:

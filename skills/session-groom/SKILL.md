@@ -34,6 +34,8 @@ Read `SEQUENCE.md`. Collect entries that need work:
 
 Skip entries that are `[x]` done or already linked to an existing breakdown.
 
+An entry may carry `[auto]` after its priority (`- [ ] SEQ-011 P3 [auto]: …`), meaning a bot enqueued it — `/session-gatekeeper` triage, typically. It is a normal groom target: same research, same verification bar, same escalation rules. Note which entries were marked so Step 5 can report them; entries without the marker are unaffected.
+
 ### Step 2: Research and verify each entry
 
 For each un-prepared entry:
@@ -55,6 +57,8 @@ If the entry is too big or diverges from the app's direction, do not break it do
 ### Step 5: Report
 
 Summarize: entries groomed (with new breakdown paths), entries escalated, entries skipped (already healthy).
+
+Call out provenance: state how many of the groomed entries were `[auto]`, and name them. An unattended intake feed is exactly the thing that accumulates unnoticed, so a groom pass is the natural place for the user to see what a bot added since they last looked.
 
 ## Running Periodically with /loop
 
