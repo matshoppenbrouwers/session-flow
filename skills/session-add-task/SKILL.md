@@ -16,6 +16,7 @@ Capture a task into the sequence backlog so it can be picked up later with "impl
 3. **Never overwrite an existing breakdown file.** If `todo/tasks/NNNN-slug.md` exists, pick a new id/slug. Appending to the sequence is additive only.
 4. **One-line entries stay one line.** The sequence is a scannable list. Detail lives in the breakdown file, never inline in SEQUENCE.md.
 5. **Action verbs in the breakdown.** "Create", "Add", "Extract" — not "Consider", "Look into".
+6. **Never cite a path that does not exist.** Existence-check every path in `Files` and `Test` (`test -f`, or `test -d` for a glob's root) before writing the breakdown. The one exception is a path the task's own Instructions create — say so inline (`new file`). A test path inferred from a naming convention the project has abandoned costs the implementer a failed collection run, not a minute of grepping.
 
 ## Path Resolution
 
@@ -37,9 +38,26 @@ Resolve paths using the standard order:
 |--------|---------|
 | `[ ]` | Open |
 | `[x]` | Done |
+| `[auto]` (after the priority) | Enqueued by a bot, not by the user — see Provenance below |
 | `(needs breakdown)` (trailing) | Captured but not yet researched/linked |
 
 The link target is **either** a per-task breakdown file (`todo/tasks/NNNN-slug.md`, the default) **or** an anchor into a `session-task-planning` phase file (`todo/2026-06-03-feature.md#NA-1`) for multi-task work.
+
+## Provenance — the `[auto]` marker
+
+Add-task takes an optional **auto-provenance flag**. It is off by default: a user invoking `/session-add-task` produces an unmarked entry. Set it only when the caller is a skill enqueuing on the user's behalf without the user having seen the item — `/session-gatekeeper` triage is the one shipped caller.
+
+When set, the marker renders immediately after the priority:
+
+```
+- [ ] SEQ-011 P3 [auto]: Retry failed webhook deliveries → todo/tasks/0011-retry-webhooks.md
+```
+
+Nothing else about the entry changes — same id rules, same breakdown, same link. The marker exists so an unattended enqueue is visible as one, and so the user can veto it on sight instead of approving every item up front.
+
+Consumers: `/session-groom` grooms marked entries normally but reports them separately; `/session-next` never lets `[auto]` outrank a manual entry of the same priority; `/session-status` counts them.
+
+**Before relying on this with session-scribe:** scribe parses `SEQUENCE.md` by file-format convention, not shared code. `[auto]` changes the line format it reads. Verify scribe's parser against a marked line before trusting the Notion mirror.
 
 ## Modes
 
@@ -105,7 +123,7 @@ Per-task breakdown files reuse the `session-task-planning` task template, wrappe
 2. Determine the next `SEQ-NNN` id by scanning `SEQUENCE.md`.
 3. Pick the mode (A/B/C).
 4. For A: write the breakdown file; for B: invoke task-planning; for C: skip the breakdown.
-5. Append exactly one entry to `SEQUENCE.md`.
+5. Append exactly one entry to `SEQUENCE.md`, rendering `[auto]` after the priority if the caller set the auto-provenance flag.
 6. Report: the new id, the entry line, and the breakdown path (or that it needs grooming).
 
 ## Anti-Patterns

@@ -45,6 +45,9 @@ Find the backlog file via `.session-flow.json` `paths.sequence`, or detect `{tod
 | Done | `[x]` entries |
 | Ready | `[ ]` entries with a `→` link to an existing breakdown |
 | Needs breakdown | `[ ]` entries with trailing `(needs breakdown)` or a missing/dangling link |
+| Auto | `[ ]` entries carrying an `[auto]` marker after the priority (`SEQ-011 P3 [auto]:`) |
+
+`Auto` overlaps the other categories rather than partitioning them — a marked entry is also counted as ready or needs-breakdown. It reports how much of the open backlog arrived via unattended intake (`/session-gatekeeper`). Count 0 when nothing is marked.
 
 If there is no sequence file, treat all counts as 0.
 
@@ -61,7 +64,7 @@ Output exactly this structure. Fixed fields, no substitutions.
 **Blocked:** {count of blocked tasks, or "none"}
 **Parallel opportunities:** {list of task IDs that can run concurrently, or "none"}
 **Recent activity:** {last completed task ID and title, or "no completions yet"}
-**Sequence backlog:** {done}/{total} done · {ready} ready · {needs_breakdown} need breakdown (or "no sequence")
+**Sequence backlog:** {done}/{total} done · {ready} ready · {needs_breakdown} need breakdown · {auto} auto (or "no sequence")
 
 **Next:** {recommended action — see Step 4}
 ```

@@ -13,7 +13,7 @@ Pick up and execute the next ready task from the sequence backlog.
 
 1. **Only execute entries with a valid linked breakdown.** An entry marked `(needs breakdown)` or with a dangling link is not ready. Skip it and offer `/session-groom`.
 2. **Mark `[x]` on completion.** Always update the entry in `SEQUENCE.md`. For a per-task breakdown, also set `**Status**: [x]` in the file. (A phase-file anchor has no per-task `**Status**` line — `/session-delegation` marks the phase tasks `[x]`; you just close the entry.) Do not batch — a backlog reader must see live state.
-3. **Respect order and priority.** Pick the topmost open entry; among equals, prefer lower P-number (P1 before P3). Don't cherry-pick the easy one.
+3. **Respect order and priority.** Pick the topmost open entry; among equals, prefer lower P-number (P1 before P3). At equal priority, a manual entry outranks one marked `[auto]` — a bot's enqueue never jumps ahead of what the user asked for. Don't cherry-pick the easy one.
 4. **Hand off multi-task breakdowns.** If the link points to a `session-task-planning` phase file, dispatch via `/session-delegation` — do not try to do a whole phase as one task.
 5. **One task per invocation unless told otherwise.** Finish, report, and suggest the next. Don't silently churn through the whole backlog.
 
@@ -31,7 +31,7 @@ Read `SEQUENCE.md`. From top to bottom, find the first entry that is:
 - `[ ]` (open), and
 - has a link to a breakdown (per-task file or phase-file anchor).
 
-Among otherwise-equal candidates, prefer the lowest P-number. If the topmost open entries are all `(needs breakdown)`, report that and offer to run `/session-groom` to prepare them.
+Among otherwise-equal candidates, prefer the lowest P-number; at equal priority, prefer the entry **without** an `[auto]` marker (a bot enqueued the marked one — see Non-Negotiable 3). If the topmost open entries are all `(needs breakdown)`, report that and offer to run `/session-groom` to prepare them.
 
 ### Step 2: Open the breakdown
 
@@ -55,7 +55,7 @@ If the entry links to a phase file, invoke `/session-delegation` against that fi
 
 1. Mark the entry `[x]` in `SEQUENCE.md`.
 2. Set `**Status**: [x]` in the breakdown file (for per-task files).
-3. Report: what was implemented, files changed, test result.
+3. Report: what was implemented, files changed, test result. If the entry carried `[auto]`, say so — the user is seeing a bot-enqueued item's outcome, and that is worth one clause.
 4. Suggest the next entry (or note the backlog is clear / needs grooming).
 
 Chain context: see `references/workflow-overview.md`.

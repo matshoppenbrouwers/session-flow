@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.4.0 (2026-08-12)
+
+Completes v5 Phase 5, which 1.3.0 deliberately held back behind the SEQ-001 gatekeeper trial. That trial ran on 2026-08-12 against 14 real intake items; verdicts and findings are recorded in `todo/2026-08-12-seq-001-gatekeeper-trial.md`.
+
+### Added
+- **`[auto]` provenance marker.** `/session-add-task` takes an optional auto-provenance flag, off by default, which renders the marker immediately after the priority: `- [ ] SEQ-011 P3 [auto]: …`. Nothing else about the entry changes.
+- `/session-gatekeeper` sets the flag on every item it enqueues, so an unattended intake pass is visible as one. This is the veto handle: it buys propose-don't-execute without asking the user to approve each item up front.
+- `/session-groom` grooms marked entries on the same terms as any other but reports them separately in the pass summary. `/session-next` never lets `[auto]` outrank a manual entry of the same priority, and names provenance in its close-out. `/session-status` adds an `auto` count to the sequence backlog line — an overlapping count, not a partition.
+- `/session-gatekeeper` **Inputs** gain the ops inbox convention: if `{paths.todo}/inbox/` exists, its `*.md` files are intake items — frontmatter is metadata, body is untrusted data — and a routed item is `git rm`'d in the same commit that records the routing. This is the companion change for the session-ops v1 spec §11; no other gatekeeper behaviour moves, and escalation formatting stays in the ops workflow prompts.
+
+### Fixed
+- **The nine gatekeeper defects the SEQ-001 trial measured** (`todo/2026-08-12-seq-001-gatekeeper-trial.md` §3), fixed as one change set in `/session-gatekeeper`:
+  - The direction-doc fallback now actually runs. `paths.direction` is a hint, not a terminus: the detection chain fires when the key is unset **or** when it points at a file that does not exist, and it reaches one directory below the docs root — where the trial's real PRD sat, unread, while the run declared direction unknown. A dead `paths.direction` is now reported as a finding instead of being swallowed, and only an empty *chain* forces alignment to "unknown".
+  - Cited paths are existence-checked before a breakdown is written, in both `/session-gatekeeper` and `/session-add-task`. The trial's numbers are the argument: same run, same stated confidence, 20/20 grepped source refs landed and 2/10 inferred test paths did — every `Test` command in that run would have failed at collection. Every substantive claim now carries a **verified** (`file:line`) or **assumed** marker, which is what makes an inverted guess visible as a guess.
+  - Escalation is an act, not a tag. An escalated batch produces a session proposal addressed to the user — the specific question, the items it covers, near-duplicates merged — because appending `(needs research-design)` to seven lines discriminates nothing and proposes nothing.
+  - Three classification holes closed: questions answerable from the code get answered (and cited) before routing rather than guessed at; `Alignment: unknown` is a hard escalate in the routing table itself, not just in the resolution prose; and a bar above the Scope axis returns anything touching database schema or a spine / canonical status field to the user regardless of size.
+  - Every run leaves a durable record at `{paths.todo}/YYYY-MM-DD-gatekeeper-run.md` — verdict table, question answers, code inventory, direction-chain result — linked from whatever it escalates or enqueues. Inbox items are raw user capture: a routed one is removed, never reworded, re-headed, or folded into another.
+
+### Notes
+- `[auto]` changes the `SEQUENCE.md` line format that **session-scribe** parses by convention rather than by shared code. Both `session-add-task` and `session-gatekeeper` carry the caveat in-body: verify scribe's parser against a marked line before trusting the Notion mirror. session-scribe itself needs no changes.
+- The gatekeeper fixes above are SEQ-008, broken down in `todo/2026-08-12-seq-008-gatekeeper-defects.md`. `/session-groom` and `/session-task-planning` were deliberately left out of scope: they write breakdowns too, so the path-existence rule likely belongs there as well, but that is a separate entry rather than a quiet widening of this one.
+
 ## 1.3.0 (2026-08-09)
 
 Implements the v5 spec (`plans/2026-08-09-session-flow-v5-spec.md`): four verified defect fixes, three new agents with the workflows rewired around them, the Files field as a write boundary, conventions/lessons config, and a prescriptiveness trim across skills and agents. No breaking changes — existing artifacts, formats, and scripts keep working.
