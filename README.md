@@ -252,16 +252,16 @@ Security audit reference files (~900 lines total) are only loaded when the audit
 
 ## Companion Plugins
 
-### session-scribe — Notion mirror
+### session-scribe — Notion and GitHub Issues mirror
 
-[**session-scribe**](https://github.com/matshoppenbrouwers/session-scribe) bridges the same workflow into Notion: ended sessions become dated Agent log entries on the mapped project page, and the `SEQUENCE.md` backlog is mirrored into a Notion Tasks database with project relations. session-flow produces the work and the backlog; session-scribe makes both reviewable outside the terminal.
+[**session-scribe**](https://github.com/matshoppenbrouwers/session-scribe) bridges the same workflow into Notion, GitHub Issues, or both: ended sessions become dated Agent log entries on a mapped Notion project page or comments on a dedicated GitHub log issue, and the `SEQUENCE.md` backlog is mirrored out to a Notion Tasks database with project relations or to GitHub Issues. Work marked ready on either side — a `scribe:ready` label, a `Scribe ready` checkbox — pulls back into `SEQUENCE.md` as a `(needs breakdown)` entry. session-flow produces the work and the backlog; session-scribe makes both reviewable outside the terminal.
 
 ```
 /plugin marketplace add matshoppenbrouwers/session-scribe
 /plugin install session-scribe@session-scribe
 ```
 
-The two integrate by convention — session-scribe reads the `SEQUENCE.md` format, neither depends on the other's code, and either works standalone.
+The two integrate by convention — session-scribe reads the `SEQUENCE.md` format, neither depends on the other's code, and either works standalone. The one convention they share as writers is the ` ⇄ <url>` provenance annotation: whichever tool files an entry from an outside item writes it, so no two writers file the same work twice.
 
 ### claude-mem — cross-session recall
 
