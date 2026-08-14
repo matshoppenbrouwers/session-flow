@@ -254,14 +254,16 @@ Security audit reference files (~900 lines total) are only loaded when the audit
 
 ### session-scribe — Notion and GitHub Issues mirror
 
-[**session-scribe**](https://github.com/matshoppenbrouwers/session-scribe) bridges the same workflow into Notion, GitHub Issues, or both: ended sessions become dated Agent log entries on a mapped Notion project page or comments on a dedicated GitHub log issue, and the `SEQUENCE.md` backlog is mirrored out to a Notion Tasks database with project relations or to GitHub Issues. Work marked ready on either side — a `scribe:ready` label, a `Scribe ready` checkbox — pulls back into `SEQUENCE.md` as a `(needs breakdown)` entry. session-flow produces the work and the backlog; session-scribe makes both reviewable outside the terminal.
+[**session-scribe**](https://github.com/matshoppenbrouwers/session-scribe) bridges the same workflow into Notion, GitHub Issues, or both: ended sessions become dated Agent log entries on a mapped Notion project page or comments on a dedicated GitHub log issue, and the `SEQUENCE.md` backlog is mirrored out to a Notion Tasks database with project relations or to GitHub Issues. Work marked ready on either side — a `scribe:ready` label, a `Scribe ready` checkbox — pulls back into `SEQUENCE.md` as a `(needs breakdown)` entry. Since 0.3.0 it also captures: `/scribe code` appends one entry to `SEQUENCE.md`, `/scribe task` and `/scribe note` file straight into Notion. session-flow produces the work and the backlog; session-scribe makes both reviewable outside the terminal, and gives you a one-line way in when a thought arrives mid-session.
 
 ```
 /plugin marketplace add matshoppenbrouwers/session-scribe
 /plugin install session-scribe@session-scribe
 ```
 
-The two integrate by convention — session-scribe reads the `SEQUENCE.md` format, neither depends on the other's code, and either works standalone. The one convention they share as writers is the ` ⇄ <url>` provenance annotation: whichever tool files an entry from an outside item writes it, so no two writers file the same work twice.
+The two integrate by convention — session-scribe reads the `SEQUENCE.md` format, neither depends on the other's code, and either works standalone. The one convention they share as writers is the ` ⇄ <url>` provenance annotation: whichever tool files an entry **from an outside item** writes it, so no two writers file the same work twice.
+
+That qualifier is load-bearing now that `/scribe code` also writes to `SEQUENCE.md`. A capture has no outside item behind it — it is a thought typed into the terminal — so it is filed unannotated on purpose, and the annotation is written later by whichever mirror first files it outward. An unannotated entry means *not yet mirrored*, never *not yet checked for duplicates*. Both plugins allocate `SEQ-NNN` from the highest id already in the file; count `[DEFERRED]` entries when you do, since they hold retired ids that no active-only scan will see.
 
 ### claude-mem — cross-session recall
 
