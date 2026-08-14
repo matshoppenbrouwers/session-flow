@@ -32,7 +32,7 @@ Read `SEQUENCE.md`. Collect entries that need work:
 - A link whose target file is missing (dangling).
 - No link at all on an open `[ ]` entry.
 
-Skip entries that are `[x]` done or already linked to an existing breakdown.
+Skip entries that are `[x]` done or already linked to an existing breakdown. Also skip entries with an escalation comment on the line below (`<!-- session-flow: SEQ-NNN escalated to research-design … -->`) — they are waiting on a `/session-research-design` session, and re-researching them each pass breaks idempotence (Non-Negotiable 1).
 
 An entry may carry `[auto]` after its priority (`- [ ] SEQ-011 P3 [auto]: …`), meaning a bot enqueued it — `/session-gatekeeper` triage, typically. It is a normal groom target: same research, same verification bar, same escalation rules. Note which entries were marked so Step 5 can report them; entries without the marker are unaffected.
 
@@ -53,7 +53,10 @@ Reuse the `session-add-task` / `session-task-planning` breakdown template (heade
 ### Step 4: Escalate when needed
 
 If the entry is too big or diverges from the app's direction, do not break it down. Instead:
-- Leave the entry as-is and annotate it (e.g. `(needs research-design)`).
+- **Leave the entry line untouched.** Do not append a `(needs research-design)` tag to it: the shared line grammar allows exactly one trailing status token, and session-scribe parses entries by stripping exactly that one (` → <link>` or `(needs breakdown)`) — a second, unknown tag blocks the strip and hides any ` ⇄ ` annotations behind it, defeating the dedup key.
+- Record the escalation on its own line **immediately below** the entry, as an HTML comment:
+  `<!-- session-flow: SEQ-NNN escalated to research-design YYYY-MM-DD -->`
+  Comment lines are invisible to all three `SEQUENCE.md` parsers (session-flow's skills, scribe's flows, ops' portfolio script); `/scribe-pull` already writes its divergence markers the same way.
 - Recommend `/session-research-design` for a cowork session with the user.
 
 ### Step 5: Report

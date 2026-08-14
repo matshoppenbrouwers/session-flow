@@ -71,7 +71,7 @@ Create `{todo}/SEQUENCE.md` (only if absent) -- the backlog of one-line task ent
 Backlog of tasks to do, in roughly priority order. Each entry links to a detailed
 breakdown. To work the next item, say "implement the next task" (or run /session-next).
 
-**Legend:** `[ ]` open · `[x]` done · trailing `(needs breakdown)` = awaiting research/breakdown
+**Legend:** `[ ]` open · `[x]` done · `[DEFERRED]` retired, id stays taken · `[auto]` after the priority = enqueued by a bot · ` ⇄ <url>` before the trailing token = same work as that external item · trailing `(needs breakdown)` = awaiting research/breakdown
 
 Add entries with `/session-add-task` or `/session-gatekeeper`. Prepare raw ones with `/session-groom`.
 

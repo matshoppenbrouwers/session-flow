@@ -15,3 +15,5 @@ Add entries with `/session-add-task` or `/session-gatekeeper`. Prepare raw ones 
 - [x] SEQ-006 P3: v5 Phase 5 — [auto] intake marker → todo/2026-08-09-v5-implementation.md#5A-1
 - [x] SEQ-007 P1: v5 Phase 6 — README, CHANGELOG 1.3.0, version bump → todo/2026-08-09-v5-implementation.md#6A-1
 - [x] SEQ-008 P1: Fix the nine gatekeeper defects found by the SEQ-001 trial, §3 of its record → todo/2026-08-12-seq-008-gatekeeper-defects.md#8A-1
+- [x] SEQ-009 P2: Gatekeeper and add-task consult existing provenance annotations before enqueueing → todo/tasks/0009-consult-provenance-key-before-enqueue.md
+- [x] SEQ-010 P3: Make the SEQUENCE.md grammar one written contract → todo/tasks/0010-sequence-grammar-single-contract.md

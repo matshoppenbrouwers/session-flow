@@ -12,7 +12,7 @@ Capture a task into the sequence backlog so it can be picked up later with "impl
 ## Non-Negotiables
 
 1. **Every breakdown has Files, Instructions, Accept, Test.** A linked breakdown missing any field is not valid. The only exception is a deliberate `(needs breakdown)` capture (mode C), which has no breakdown yet by design.
-2. **Sequence IDs are unique and monotonic.** Scan existing ids and use the next integer. The entry id is `SEQ-NNN` (zero-padded to 3 digits); the breakdown file uses the same number zero-padded to 4 (`NNNN-slug.md`). Never reuse or duplicate an id.
+2. **Sequence IDs are unique and monotonic.** Scan **every line carrying a `SEQ` id — open `[ ]`, done `[x]`, and `[DEFERRED]` alike** — and use the next integer. The highest id ever used is the floor, not the highest open one: a `[DEFERRED]` entry holds a retired id that an active-only scan misses, and reusing its number collides. The entry id is `SEQ-NNN` (zero-padded to 3 digits); the breakdown file uses the same number zero-padded to 4 (`NNNN-slug.md`). Never reuse or duplicate an id.
 3. **Never overwrite an existing breakdown file.** If `todo/tasks/NNNN-slug.md` exists, pick a new id/slug. Appending to the sequence is additive only.
 4. **One-line entries stay one line.** The sequence is a scannable list. Detail lives in the breakdown file, never inline in SEQUENCE.md.
 5. **Action verbs in the breakdown.** "Create", "Add", "Extract" — not "Consider", "Look into".
@@ -38,11 +38,14 @@ Resolve paths using the standard order:
 |--------|---------|
 | `[ ]` | Open |
 | `[x]` | Done |
+| `[DEFERRED]` (in the checkbox slot) | Retired without being done — the id stays taken, and the id-allocation scan must count it (Non-Negotiable 2) |
 | `[auto]` (after the priority) | Enqueued by a bot, not by the user — see Provenance below |
-| ` ⇄ <url>` (before the trailing link) | This entry and that external item are the same work — see Provenance below |
+| ` ⇄ <url>` (before the trailing status token) | This entry and that external item are the same work — see Provenance below |
 | `(needs breakdown)` (trailing) | Captured but not yet researched/linked |
 
 The link target is **either** a per-task breakdown file (`todo/tasks/NNNN-slug.md`, the default) **or** an anchor into a `session-task-planning` phase file (`todo/2026-06-03-feature.md#NA-1`) for multi-task work.
+
+This table is the whole entry-line grammar — every token any shipped writer (this skill, `/session-gatekeeper`, `/session-groom`, session-scribe's three flows) puts on an entry line. An entry ends in **exactly one trailing status token** — the ` → <link>` or the `(needs breakdown)` marker, never both, never a third species — because session-scribe parses entries by stripping exactly one and reading the ` ⇄ ` annotations from the tail of what remains; an unknown trailing tag blocks that strip and hides the annotations behind it. Anything that doesn't fit on the line goes **below** it as an HTML comment (`<!-- … -->`): comment lines are invisible to all three `SEQUENCE.md` parsers (session-flow's skills, scribe's flows, ops' portfolio script), and both `/scribe-pull` (divergence markers) and `/session-groom` (escalation markers) already write them.
 
 ## Provenance
 
@@ -83,6 +86,10 @@ Zero or more per line, each dispatched on its hostname by whoever reads it, neve
 **Position is load-bearing, in both directions.** `/session-status`, `/session-groom` and `/session-next` all read the breakdown link as *the text after the last ` → `* and open it as a path. An annotation appended after the link makes that path `todo/tasks/0011-retry-webhooks.md ⇄ https://…`, which resolves to nothing — so a fully-groomed entry reads as dangling and gets re-groomed or skipped. And a reader looking for the annotation scans the tail of the line once that trailing token is stripped, so an annotation placed after the token is unfindable.
 
 Both constraints resolve to one rule: **the annotation goes immediately before the entry's trailing status token** — the ` → <breakdown-link>` on a groomed entry, or the `(needs breakdown)` marker on an ungroomed one (mode C), or end-of-line if it has neither. An entry has one such token or the other, never both.
+
+### Id allocation is lock-free — discipline makes it safe
+
+Four writers append to the same file (this skill, `/session-gatekeeper` in CI, session-scribe's `/scribe-pull` and `/scribe code`), and all allocate ids the same way: highest existing id plus one, with no locking. Nothing in the format stops a concurrent CI enqueue and a local import from minting the same id. What makes the scheme safe is operating discipline, not mechanism: **at most one scheduled writer per repo**, and **pull before any local edit to the sequence**. Both halves are load-bearing — enrolling a second bot writer on the same repo, or appending to a stale local copy, reintroduces the collision no code will catch.
 
 ## Modes
 
@@ -147,11 +154,12 @@ Per-task breakdown files reuse the `session-task-planning` task template, wrappe
 ## Workflow
 
 1. Resolve paths (config → detect → suggest init).
-2. Determine the next `SEQ-NNN` id by scanning `SEQUENCE.md`.
-3. Pick the mode (A/B/C).
-4. For A: write the breakdown file; for B: invoke task-planning; for C: skip the breakdown.
-5. Append exactly one entry to `SEQUENCE.md`, rendering `[auto]` after the priority if the caller set the auto-provenance flag, and ` ⇄ <url>` before the trailing status token if the caller passed a source URL.
-6. Report: the new id, the entry line, and the breakdown path (or that it needs grooming).
+2. **If the caller passed a source URL, scan `SEQUENCE.md` for it among the existing ` ⇄ ` annotations before allocating an id.** On a hit, stop: report the existing entry's `SEQ-NNN` and append nothing — the URL already appears in the file, so the work is already enqueued. This is the same exclusion session-scribe's `/scribe-pull` runs in the other direction (it drops any import candidate whose URL already appears as an annotation); the two checks together are what make the key symmetric between writers.
+3. Determine the next `SEQ-NNN` id by scanning `SEQUENCE.md`.
+4. Pick the mode (A/B/C).
+5. For A: write the breakdown file; for B: invoke task-planning; for C: skip the breakdown.
+6. Append exactly one entry to `SEQUENCE.md`, rendering `[auto]` after the priority if the caller set the auto-provenance flag, and ` ⇄ <url>` before the trailing status token if the caller passed a source URL.
+7. Report: the new id, the entry line, and the breakdown path (or that it needs grooming).
 
 ## Anti-Patterns
 
@@ -162,6 +170,10 @@ Per-task breakdown files reuse the `session-task-planning` task template, wrappe
 **Cramming a refactor into one breakdown:**
 - BAD: "Rewrite the backend" as a single per-task file
 - GOOD: Use Mode B → `/session-task-planning`
+
+**Deduping by title instead of URL:**
+- BAD: skipping the source-URL scan because "no existing entry has this title"
+- GOOD: grep for the URL among existing ` ⇄ ` annotations. This skill rewrites raw issue titles into task phrasing, so an entry's title never matches its source's — and near-matches across unrelated entries do. The URL is the only key.
 
 **Dropping the source URL because the title says where it came from:**
 - BAD: `- [ ] SEQ-011 P3 [auto]: Retry failed webhook deliveries (from issue #42) → todo/tasks/0011-retry-webhooks.md`
