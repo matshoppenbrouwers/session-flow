@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.6.0 (2026-08-14)
+
+1.5.0 taught session-flow to **write** the ` ⇄ <url>` provenance key; this release teaches it to **read** it first. A key only one side checks is not a dedup key — it is a label. Closes conflicts C1, C2 and C5 of the three-plugin alignment review, which measured the drift across the three plugins that parse `SEQUENCE.md`.
+
+### Added
+
+- **Dedup on enqueue.** `/session-add-task` scans `SEQUENCE.md` for the caller's source URL among existing ` ⇄ ` annotations *before* allocating an id: on a hit it stops, names the existing `SEQ-NNN`, and appends nothing. `/session-gatekeeper` runs the same grep before handing an item off, recording a hit as already-enqueued in the run record. This is the exclusion `/scribe-pull` already ran from the other side; run from both, the key is symmetric.
+  Two double-intake paths are the reason it exists: a reopened, previously-imported issue re-triaging in CI (ops-triage skips only `scribe:mirror` and `ops-dashboard`, not `scribe:imported`), and a `scribe:ready` issue that triage *escalates* — still a `/scribe-pull` candidate, so the import files it and a later dashboard box-tick enqueues the same work again.
+- **A no-title-matching anti-pattern in both skills.** Triage rewrites raw issue titles into task phrasing, so an entry's title never matches its source's — while near-matches across unrelated entries do. The URL is the only key.
+- **`[DEFERRED]` is in the grammar.** It joins `/session-add-task`'s marker table, and the id rule now scans every line carrying a `SEQ` id — `[ ]`, `[x]`, and `[DEFERRED]` alike. The highest id ever used is the floor, not the highest open one; `README.md` and session-scribe already worked this way, no session-flow skill said so.
+- **Id allocation's concurrency discipline is written down** in `/session-add-task`'s Provenance section and `README.md`. Four writers append with no locking: safety is at most one scheduled writer per repo, and pulling before any local edit. Both halves are load-bearing — a second bot writer, or an append to a stale local copy, reintroduces a collision no code catches.
+- **`/session-init`'s starter legend covers the whole grammar** — `[DEFERRED]`, `[auto]`, and ` ⇄ <url>` alongside the checkbox states — so a new project's in-file legend matches what siblings parse.
+- **A stated enqueue priority:** everything `/session-gatekeeper` enqueues is P3. Triage established that work is aligned and trivial, not that it is urgent; anything higher is a claim only the user can make. Priorities are never carried through from an issue label.
+
+### Changed
+
+- **`/session-groom` records escalation below the entry, not on it.** The entry line is left untouched and the escalation goes on its own HTML comment line: `<!-- session-flow: SEQ-NNN escalated to research-design YYYY-MM-DD -->`. The old `(needs research-design)` trailing tag collided with the one-trailing-token grammar session-scribe parses by — a second, unknown tag blocks its strip and hides the ` ⇄ ` annotations behind it, defeating the very key this release hardens. Comment lines are invisible to all three parsers, and `/scribe-pull` already writes its divergence markers the same way.
+- **Groom skips entries carrying an escalation comment.** They are waiting on a `/session-research-design` session; re-researching them every pass broke idempotence.
+
+### Notes
+
+- The entry-line marker table in `/session-add-task` is now the whole grammar — every token any shipped writer emits — and states the rule the others were only implying: an entry ends in **exactly one** trailing status token (` → <link>` *or* `(needs breakdown)`), and anything that doesn't fit goes below it as an HTML comment.
+- Still convention, not code. No plugin imports another's parser; the contract is documented on both sides and each works standalone.
+
 ## 1.5.0 (2026-08-14)
 
 Closes the duplicate-entry hole that opens as soon as session-flow is not the only thing writing to `SEQUENCE.md`. 1.4.0 taught the gatekeeper to enqueue from an issue tracker; this release makes those entries recognisable to the other writers, so the same issue cannot be filed twice under two ids.
