@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.5.0 (2026-08-14)
+
+Closes the duplicate-entry hole that opens as soon as session-flow is not the only thing writing to `SEQUENCE.md`. 1.4.0 taught the gatekeeper to enqueue from an issue tracker; this release makes those entries recognisable to the other writers, so the same issue cannot be filed twice under two ids.
+
+### Added
+
+- **` ⇄ <url>` provenance annotation.** `/session-add-task` takes an optional source URL and renders it immediately before the entry's trailing status token — before the ` → ` link, or before `(needs breakdown)` in mode C. The position is load-bearing in both directions: after the link it breaks path readers, after the token it is invisible to annotation readers.
+- `/session-gatekeeper` passes the item's source URL on every enqueue, alongside the `[auto]` flag and the reason. No URL means `[auto]` alone — it never invents one.
+- `/session-groom` preserves annotations when it swaps `(needs breakdown)` for the breakdown link. It rewrites exactly that region, so a dropped annotation would have been silent.
+
+`[auto]` and ` ⇄ ` are independent markers answering different questions: who put the entry in the file, and where the work came from. A gatekeeper enqueue from a GitHub issue carries both.
+
+### Notes
+
+- **Why a title is not a fallback.** session-scribe's `/scribe-pull` dedups imports by excluding candidates whose URL already appears as a ` ⇄ ` annotation. An entry enqueued in CI without one leaves the issue invisible to that check, so it is imported again under a second `SEQ-NNN` — and scribe's mirror then files a third item for the duplicate. Matching on titles cannot substitute: triage rewrites raw issue titles into task phrasing.
+- File-format convention only. Neither plugin imports the other's code, and either works standalone; the contract is documented on both sides.
+- An entry with no annotation means *not yet mirrored outward* — never *not yet checked for duplicates*. A `/scribe code` capture is filed unannotated on purpose, since a thought typed into the terminal has no outside item behind it.
+- When allocating `SEQ-NNN`, count `[DEFERRED]` entries too: they hold retired ids that an active-only scan will not see.
+
 ## 1.4.0 (2026-08-12)
 
 Completes v5 Phase 5, which 1.3.0 deliberately held back behind the SEQ-001 gatekeeper trial. That trial ran on 2026-08-12 against 14 real intake items; verdicts and findings are recorded in `todo/2026-08-12-seq-001-gatekeeper-trial.md`.
