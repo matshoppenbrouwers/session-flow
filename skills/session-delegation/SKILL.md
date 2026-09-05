@@ -16,7 +16,7 @@ Orchestrate task execution from a session task plan file.
 3. **Mark `[x]` in the todo file as soon as a task completes.** Other tasks may be waiting on it. Don't batch updates.
 4. **Parallel = one message with multiple Task tool calls.** Not multiple sequential messages. The whole point of parallelism is concurrent execution.
 5. **Stop on blocking failure.** If a task fails and other tasks depend on it, pause the dependent branch and report to the user. Do not silently skip and continue.
-6. **The tests come first and implementers never touch them.** `test-author` writes a phase's acceptance tests before that phase's implementers are dispatched. An implementer that writes or edits its own tests has replaced the oracle with its own opinion of the task.
+6. **The acceptance tests are written before the implementers start, by a different agent, and implementers never edit them.** `test-author` writes them from the plan's Accept criteria, so the tests measure the specification rather than the implementation's own opinion of it. This is about who writes the oracle, not about designing through tests: the behaviour was fixed when the plan was approved.
 
 ## Prerequisites
 
@@ -62,7 +62,7 @@ Task tool:
 
 Record the returned test paths **per task** — they go into each implementer's dispatch payload as its oracle. If a task comes back with no test path, note it and say so when you dispatch that task; do not invent one.
 
-**Red-phase caveat.** These tests fail, and some will not even collect until the tasks they depend on land. That is expected TDD behaviour, not a blocking failure — do not treat a red or uncollectable oracle as a reason to pause the phase, and do not ask an implementer to "fix" it. The only failures that stop a phase are the ones the Error Handling section names.
+**Expected failures.** These tests fail, and some will not even collect until the tasks they depend on land. That is the expected state before implementation, not a blocking failure — do not treat a red or uncollectable oracle as a reason to pause the phase, and do not ask an implementer to "fix" it. The only failures that stop a phase are the ones the Error Handling section names.
 
 One dispatch per phase, not per task.
 
@@ -177,7 +177,7 @@ If a test looks wrong, stop and report it — do not edit around it.
 
 ## Error Handling
 
-- Oracle tests failing or not collecting before implementation is not a failure — see the red-phase caveat in Step 2
+- Oracle tests failing or not collecting before implementation is not a failure — see **Expected failures** in Step 2
 - If an agent fails: log the error, skip the task, continue with independent tasks
 - If an implementer reports a test it believes is wrong: stop that task, surface the test and the Accept criterion to the user, and fix the test with `test-author` if the user agrees — never let the implementer edit it
 - If a blocking task fails: pause dependent tasks, report to user
