@@ -7,11 +7,13 @@ Reference document connecting all session-flow skills. Load on-demand when you n
 ## The Chain
 
 ```
-session-init ──> gatekeeper ──> research-design ──> task-planning ──> delegation ──> post-impl ──> verify ──> release
- (one-time)      (triage)        (optional)                            │             (optional,
-                                                                 update-architecture   heavy)
+session-init ──> gatekeeper ──> brainstorm ──> research-design ──> task-planning ──> delegation ──> post-impl ──> verify ──> release
+ (one-time)      (triage)       (an idea)      (optional)                                │                       (optional,
+                                                                                 update-architecture                heavy)
 
        sequence layer:  gatekeeper / add-task / task-planning ──> SEQUENCE.md ──> groom ──> next
+
+       side entry:      debug ──> the cause of a bug or failing test, found and fixed
 ```
 
 **Data flows left to right.** Each stage produces artifacts consumed by the next. Stages can be entered independently if their input artifacts already exist. The **sequence layer** runs alongside the chain: a standing backlog (`todo/SEQUENCE.md`) that gatekeeper/add-task fill, groom prepares, and next executes.
@@ -46,6 +48,7 @@ Not every workflow starts at `session-init`. Pick your entry based on what alrea
 | Nothing — new project or feature | `session-init` | Creates config and directory structure |
 | Incoming issues or ideas to triage | `gatekeeper` | Routes each to the sequence or a design session, grounded in direction |
 | A running backlog with ready items | `session-next` | Implements the next ready task from `SEQUENCE.md` |
+| An idea, not yet a task | `session-brainstorm` | Shapes it into a short design you approve before anything is built |
 | A vague idea or complex problem | `research-design` | Explores the problem space collaboratively before planning |
 | A clear plan or spec | `task-planning` | Breaks the plan into session-sized executable tasks |
 | A task file with items ready | `delegation` | Dispatches agents to execute tasks in parallel |
@@ -53,6 +56,7 @@ Not every workflow starts at `session-init`. Pick your entry based on what alrea
 | Feature/plan done, needs evidence it works | `session-verify` | Falsification-based proof artifact against design spec |
 | Code polished, ready to ship | `release` | Version bump, changelog, tag, satellite verification |
 | Code changed, docs stale | `update-architecture` | Surgically updates architecture docs to match code |
+| A bug or failing test | `session-debug` | Finds the cause before anything is changed |
 
 ---
 
@@ -145,6 +149,7 @@ Each skill ends by suggesting the next skill in the chain. This creates a guided
 
 ```
 session-init       → "Run /session-gatekeeper to triage issues, or /session-research-design / /session-task-planning."
+brainstorm         → "Spike answered / bounded change approved / run /session-research-design."
 gatekeeper         → "Trivial → added to the sequence. Significant → run /session-research-design together."
 research-design    → "Run /session-task-planning to break this into tasks."
 task-planning      → "Run /session-delegation to execute, or register tasks in the sequence."
@@ -154,6 +159,7 @@ next               → "Run /session-post-implementation to polish, or /session-
 delegation         → "Run /session-post-implementation to polish the code."
 post-implementation → "Run /session-verify (if plan/feature complete) or /session-release if ready to ship."
 session-verify     → "Run /session-release if verdict is PASS, otherwise fix findings first."
+debug              → "Cause found and fixed; run /session-post-implementation if the fix is more than a line."
 ```
 
 ### Sequence (backlog) layer

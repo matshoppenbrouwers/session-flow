@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.7.0 (2026-09-05)
+
+Aligns the skill and agent text with current Claude prompting guidance, adds two conversational
+skills, and lets several repos share one backlog.
+
+### Added
+
+- **`/session-brainstorm`.** A design conversation for an idea that is not yet a task. It
+  classifies the request as a spike, a bounded change, or an architectural one; asks one question
+  at a time; presents options with a recommendation; and gets an explicit yes on a short design
+  before anything is built. Bounded work is implemented or captured with `/session-add-task`;
+  architectural work hands to `/session-research-design`.
+- **`/session-debug`.** A four-phase debugging discipline: investigate, compare, hypothesise,
+  fix. One hypothesis and one change at a time; after three failed fixes it stops and questions
+  the design. Ships with a root-cause-tracing reference.
+  Both skills are derived from superpowers by Jesse Vincent (MIT); see `THIRD_PARTY_NOTICES.md`.
+- **Shared backlogs.** `.session-flow.json` paths may point outside the repo, so several repos in
+  one parent folder can share a `SEQUENCE.md`. `/session-init` asks; every path-resolving skill
+  honours it; `/session-status` says which file it read.
+- **`references/sequence-grammar.md`.** The entry-line grammar and the cross-writer contract in
+  one place. The skills keep the rules and point here for the reasoning.
+
+### Changed
+
+- **Reporters report; callers filter.** `code-reviewer`, `security-auditor` and the security
+  audit skill label every finding high, medium or low confidence instead of withholding below a
+  threshold. Callers act on high and medium and list the rest. Current models follow "be
+  conservative" literally and under-report. `code-simplifier`'s duplication heuristic now reads
+  "substantially identical" rather than a percentage, so it is not mistaken for a confidence gate.
+- **Sanitize folded into simplify.** `code-simplifier` now also removes dead code, temporary
+  helpers and debug output; `code-sanitizer` is gone and post-implementation has one step fewer.
+  Two agents were hunting the same leftovers. The security vocabulary for unsanitized input and
+  missing sanitization stays where it belongs, in the reviewer and the audit references.
+- **Test framing.** Delegation keeps its independent test oracle and drops the test-first
+  language: the oracle exists so a different agent writes the test, not because design happens
+  through tests. `test-author` writes one test per Accept criterion plus boundaries the design
+  names. `/session-next` implements, then adds the regression test, deferring to the project's
+  own testing rule.
+- **Skip rule.** The overview no longer says "when in doubt, run it".
+- **Openers.** Skills ask for one sentence of your own on what is about to happen, in place of a
+  canned announce line.
+- **Shorter add-task, gatekeeper and groom.** Rationale moved to the grammar reference.
+
+### Removed
+
+- The dead `/quick-post-implementation` reference. The "Quick" scope option covers it.
+
 ## 1.6.0 (2026-08-14)
 
 1.5.0 taught session-flow to **write** the ` ⇄ <url>` provenance key; this release teaches it to **read** it first. A key only one side checks is not a dedup key — it is a label. Closes conflicts C1, C2 and C5 of the three-plugin alignment review, which measured the drift across the three plugins that parse `SEQUENCE.md`.

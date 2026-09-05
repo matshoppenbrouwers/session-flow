@@ -1,9 +1,9 @@
 # session-flow — Claude Code plugin for session workflow orchestration
 
-**session-flow** is a [Claude Code](https://claude.com/claude-code) plugin that orchestrates the full software development lifecycle — a chain of **13 skills** and **7 agents** covering research, design, task planning, agent delegation, post-implementation, evidence-based verification, and release. It adds dependency-aware parallelization, a standing task backlog, collaborative brainstorming, and a security & liability audit, with user gates at every critical decision.
+**session-flow** is a [Claude Code](https://claude.com/claude-code) plugin that orchestrates the full software development lifecycle — a chain of **15 skills** and **6 agents** covering research, design, task planning, agent delegation, post-implementation, evidence-based verification, and release. It adds dependency-aware parallelization, a standing task backlog, collaborative brainstorming, and a security & liability audit, with user gates at every critical decision.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Skills: 13](https://img.shields.io/badge/Skills-13-green)
+![Skills: 15](https://img.shields.io/badge/Skills-15-green)
 ![Agents: 6](https://img.shields.io/badge/Agents-6-orange)
 
 > **Install in Claude Code:** `/plugin marketplace add matshoppenbrouwers/session-flow` then `/plugin install session-flow@session-flow`
@@ -48,6 +48,7 @@ Works on macOS, Linux, and Windows.
 | Skill | Trigger | Produces |
 |-------|---------|----------|
 | **session-init** | `/session-init` | Directory structure, `SEQUENCE.md`, `.session-flow.json` config |
+| **session-brainstorm** | `/session-brainstorm` | An approved short design for an idea that is not yet a task |
 | **session-gatekeeper** | `/session-gatekeeper` | Triaged issues routed to the sequence or to research-design |
 | **session-research-design** | `/session-research-design` | Research report + implementation plan |
 | **session-task-planning** | `/session-task-planning` | Task file with dependency tags `[seq]`, `[parallel-after:X]` |
@@ -60,6 +61,7 @@ Works on macOS, Linux, and Windows.
 | **session-release** | `/session-release` | Versioned artifacts, updated satellite content |
 | **update-architecture** | `/update-architecture` | Surgical architecture doc updates |
 | **security-liability-audit** | `/security-liability-audit` | Technical security + legal liability findings |
+| **session-debug** | `/session-debug` | A root cause found and fixed, one hypothesis at a time |
 
 ## Entry Points
 
@@ -69,6 +71,7 @@ You don't have to start at step 1:
 |-------------|------------|
 | Incoming issues or ideas to triage | `/session-gatekeeper` — route them to the backlog or a design session |
 | A running backlog | `/session-next` — implement the next ready task |
+| An idea, not yet a task | `/session-brainstorm` — shape it into a design you approve |
 | A vague idea | `/session-research-design` — collaborative brainstorming refines it |
 | A plan or spec | `/session-task-planning` — break it into session-sized tasks |
 | A task list | `/session-delegation` — dispatch agents to execute |
@@ -76,6 +79,7 @@ You don't have to start at step 1:
 | A completed feature/plan that needs proof it works | `/session-verify` — falsification-based evidence artifact |
 | Tested code ready to ship | `/session-release` — bump version, package, verify |
 | A specific security concern | `/security-liability-audit` — standalone security + liability scan |
+| A bug or failing test | `/session-debug` — find the cause before changing anything |
 
 ## The Chain in Practice
 

@@ -9,7 +9,7 @@ repository-code: "https://github.com/matshoppenbrouwers/session-flow"
 url: "https://github.com/matshoppenbrouwers/session-flow"
 abstract: >-
   session-flow is a Claude Code plugin that orchestrates the full software
-  development lifecycle through a chain of 13 skills and 7 agents — research,
+  development lifecycle through a chain of 15 skills and 6 agents — research,
   design, task planning, agent delegation, post-implementation, evidence-based
   verification, and release — with dependency-aware parallelization, a standing
   task backlog, and a security & liability audit.
@@ -26,5 +26,5 @@ keywords:
   - task-planning
   - code-review
 license: MIT
-version: 1.6.0
-date-released: "2026-08-14"
+version: 1.7.0
+date-released: "2026-09-05"
