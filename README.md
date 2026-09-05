@@ -180,7 +180,7 @@ When the security audit is included, you choose how it runs:
 
 The audit covers two dimensions:
 
-**Technical security** — LLM/AI security (prompt injection, unsanitized output, tool validation), OWASP Top 10, secrets detection, agentic security (Lethal Trifecta), desktop app security, dependency supply chain, webhook/integration security. Findings use confidence-based filtering (80% gate) to avoid noise.
+**Technical security** — LLM/AI security (prompt injection, unsanitized output, tool validation), OWASP Top 10, secrets detection, agentic security (Lethal Trifecta), desktop app security, dependency supply chain, webhook/integration security. Findings carry a high, medium or low confidence label and the caller decides what to act on.
 
 **Legal liability** — ToS/EULA coverage gaps, GDPR compliance (privacy policy, DPAs, data retention, user rights), EU AI Act obligations (risk classification, transparency), Digital Content Directive (conformity, updates), consumer protection (withdrawal, pricing, cancellation), AI output disclaimers, cross-border data transfer requirements. Designed for EU-based developers with a worldwide userbase.
 

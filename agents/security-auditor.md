@@ -65,7 +65,7 @@ New cross-border flows, new AI providers (DPF/SCC status), non-EU infrastructure
 
 ## Filtering
 
-- **Technical**: >= 80% confidence to report. Apply hard exclusions from the reference.
+- **Technical**: report every finding and label it high, medium or low confidence; the caller decides what to act on. Apply hard exclusions from the reference.
 - **Legal**: Flag as ADVISORY. No confidence gate but label uncertainty.
 
 ## Output Format

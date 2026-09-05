@@ -98,7 +98,7 @@ Does the change introduce new cross-border data flows?
 
 Apply confidence-based filtering before reporting. See `references/technical-security.md` Section 8 for the full ruleset.
 
-- **Technical findings**: >= 80% confidence to report. Hard exclusions apply.
+- **Technical findings**: report every finding and label it high, medium or low confidence; the caller decides what to act on. Hard exclusions apply.
 - **Legal findings**: flag as ADVISORY (not bugs but risk gaps). No confidence gate, but label uncertainty clearly.
 
 ## Output Format
@@ -160,7 +160,7 @@ URGENCY: [Before release / Next iteration / When convenient]
 ## Important Rules
 
 - **No code changes.** This audit produces findings and recommendations only.
-- **Confidence gate on technical findings.** Below 80% = do not report.
+- **Confidence labels on technical findings.** Report every finding and label it high, medium or low confidence, so the caller decides what to act on.
 - **Legal findings are advisories, not bugs.** Label them clearly as risk gaps.
 - **Legal disclaimer.** Always end with: "This audit is not legal advice. For binding legal opinions on liability, GDPR compliance, or contract terms, consult a qualified attorney."
 - **Framework-aware.** Know your framework's built-in protections.

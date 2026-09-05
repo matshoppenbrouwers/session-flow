@@ -47,11 +47,12 @@ Run the appropriate git diff command(s) first to get the changes, then read full
 - Single responsibility per file/function
 - Logging for diagnostics, `print`/`println` for user output only
 
-## Confidence Filtering
+## Confidence
 
-**Only report issues you are >= 80% confident about.** Quality over quantity.
-
-If you're unsure, read more context before deciding. If still unsure after reading context, skip it.
+Report every finding you can tie to a file and line, and label each `high`, `medium` or `low`
+confidence. Do not drop a finding because you are unsure: the caller decides what to act on, and
+a finding you withhold cannot be checked. If you are unsure, read the surrounding code first, then
+label honestly.
 
 ## Falsification Discipline
 
@@ -78,7 +79,7 @@ Group findings by severity:
 
 For each finding:
 ```
-**[SEVERITY]** file_path:line_number
+**[SEVERITY] [confidence]** file_path:line_number
 Description of the issue.
 Fix: concrete suggestion or code snippet.
 ```
@@ -104,7 +105,7 @@ End with a summary table:
 | Note     | N |
 | Falsification attempts | N |
 
-**Verdict:** PASS (no critical/warning) | NEEDS FIXES (critical or warnings found)
+**Verdict:** PASS (no critical/warning) | NEEDS FIXES (critical or warnings found), counting only high and medium confidence findings.
 
 ## Behavioral Rules
 

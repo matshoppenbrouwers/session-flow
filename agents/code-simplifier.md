@@ -45,7 +45,7 @@ Drop redundant comparisons, collapse three-or-more-branch value maps into dict l
 If a function parameter is never used in the body, remove it and update all call sites.
 
 ### Consolidate Duplicate Logic
-If two or more code blocks within the same file are near-identical (>5 lines, >80% similarity), extract a shared helper. Do not extract across files -- keep changes local.
+If two or more code blocks within the same file are substantially identical (>5 lines), extract a shared helper. Do not extract across files -- keep changes local.
 
 ### Improve Naming
 Rename variables that are single letters (except loop counters `i`, `j`, `k`) or misleading. Ensure the new name describes the value, not the type.

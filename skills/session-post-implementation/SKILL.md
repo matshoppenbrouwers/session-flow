@@ -95,9 +95,11 @@ prompt: "Review the recent code changes for bugs, logic errors, security vulnera
 ```
 
 If issues are found:
-1. Present findings to the user
-2. Fix each identified issue
-3. Re-run the code-reviewer to verify fixes
+1. Present the findings, high confidence first.
+2. Fix Critical and Warning findings labelled high or medium confidence.
+3. List low-confidence findings for the user with one line each; do not act on them unless the
+   user asks.
+4. Re-run the reviewer once on the fixes.
 
 Loop until the reviewer passes with no significant issues, but do not yet run the full test suite at this stage (you can run individual tests)
 
@@ -135,10 +137,12 @@ Read the reference files directly and perform the audit in the main conversation
 **After audit (either mode):**
 
 If findings are reported:
-1. Present findings to the user
-2. **Technical CRITICAL/HIGH**: fix before proceeding
-3. **Legal/Liability HIGH**: note for follow-up (may require ToS/privacy policy updates, not code fixes)
-4. **MEDIUM and below**: track, proceed
+1. Present the findings, high confidence first.
+2. Fix technical Critical and High findings labelled high or medium confidence.
+3. Note Legal/Liability High findings for follow-up; they may need ToS or privacy policy updates
+   rather than code fixes.
+4. List low-confidence and Medium findings for the user with one line each; do not act on them
+   unless the user asks.
 
 ### Step 4: Commit (Checkpoint)
 

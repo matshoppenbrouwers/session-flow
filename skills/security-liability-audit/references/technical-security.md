@@ -249,8 +249,8 @@ Patterns specific to Tauri, Electron, and similar desktop frameworks.
 
 Source: /cso Phase 12.
 
-### Confidence Gate
-Only report findings at >= 80% confidence. Quality over quantity.
+### Confidence Labels
+Report every finding and label it high, medium or low confidence; the caller decides what to act on.
 
 ### Severity Definitions
 - **CRITICAL** (9-10/10): Verified exploit path exists. Could write a PoC.
