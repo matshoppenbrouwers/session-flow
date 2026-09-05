@@ -30,7 +30,7 @@ session-init ──> gatekeeper ──> research-design ──> task-planning �
 | **groom** | Breakdowns attached to raw `(needs breakdown)` entries; escalations for big items | next |
 | **next** | The next ready backlog task implemented, entry marked `[x]` | post-implementation |
 | **delegation** | Completed implementations, updated task file (`[x]` markers), commit history | post-implementation |
-| **post-implementation** | Refined code (simplified, reviewed, sanitized), test results, updated arch docs | verify (optional) or release |
+| **post-implementation** | Refined code (simplified, reviewed), test results, updated arch docs | verify (optional) or release |
 | **session-verify** | Evidence artifact `_verification/YYYY-MM-DD-{label}-verification.md` + probes under `_verification/probes/` | release (pre-flight gate) |
 | **update-architecture** | Updated architecture markdown files reflecting current code state | (consumed by humans and future sessions) |
 | **release** | Version-bumped files, changelog entry, tagged commit, verified satellite content | (end of chain) |
@@ -49,7 +49,7 @@ Not every workflow starts at `session-init`. Pick your entry based on what alrea
 | A vague idea or complex problem | `research-design` | Explores the problem space collaboratively before planning |
 | A clear plan or spec | `task-planning` | Breaks the plan into session-sized executable tasks |
 | A task file with items ready | `delegation` | Dispatches agents to execute tasks in parallel |
-| Code done, needs polish | `post-implementation` | Simplify, review, sanitize, test, document |
+| Code done, needs polish | `post-implementation` | Simplify, review, test, document |
 | Feature/plan done, needs evidence it works | `session-verify` | Falsification-based proof artifact against design spec |
 | Code polished, ready to ship | `release` | Version bump, changelog, tag, satellite verification |
 | Code changed, docs stale | `update-architecture` | Surgically updates architecture docs to match code |
@@ -82,12 +82,11 @@ need it. The table above says what "too small" means for each stage.
 Skills dispatch agents for specialized work. Here is the mapping:
 
 ### post-implementation dispatches:
-1. **code-simplifier** (Simplify step) — Simplifies recently changed code for clarity and maintainability
+1. **code-simplifier** (Simplify step) — Simplifies recently changed code for clarity and maintainability, and removes what the implementation left behind
 2. **code-reviewer** (Review step) — Finds bugs, security issues, and convention violations
-3. **code-sanitizer** (Sanitize step) — Detects dead code, temporary artifacts, and cleanup opportunities
 
 ### post-implementation also invokes:
-4. **update-architecture** (Update Architecture Docs step) — Surgically updates architecture docs to reflect code changes
+3. **update-architecture** (Update Architecture Docs step) — Surgically updates architecture docs to reflect code changes
 
 ### delegation dispatches:
 - **General-purpose agents** for task execution (one agent per independent task or parallel group)
@@ -186,7 +185,7 @@ Every skill pauses for user approval at critical decision points:
 | `/session-groom` | session-groom | Research and attach breakdowns to backlog entries |
 | `/session-next` | session-next | Implement the next ready task from the backlog |
 | `/session-delegation` | session-delegation | Dispatch agents to execute tasks |
-| `/session-post-implementation` | session-post-implementation | Simplify, review, sanitize, test |
+| `/session-post-implementation` | session-post-implementation | Simplify, review, test |
 | `/session-verify` | session-verify | Evidence-based verification against design spec |
 | `/session-release` | session-release | Version bump, tag, publish |
 | `/update-architecture` | update-architecture | Update architecture docs |

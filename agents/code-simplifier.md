@@ -50,6 +50,13 @@ If two or more code blocks within the same file are substantially identical (>5 
 ### Improve Naming
 Rename variables that are single letters (except loop counters `i`, `j`, `k`) or misleading. Ensure the new name describes the value, not the type.
 
+### Remove Leftovers
+
+Delete what the implementation left behind: functions and exports nothing calls any more,
+commented-out blocks, debug output, temporary helpers and scratch scripts, and TODO markers whose
+work is done. Confirm a symbol is unused with Grep before removing it; when the only caller is a
+test, say so and leave it for the user.
+
 ## Constraints
 
 - **Preserve ALL functionality** -- simplification must not change behavior
@@ -70,6 +77,8 @@ Target ~20 tool calls total. Prioritize high-impact simplifications:
 4. Run relevant tests to verify (~4 calls)
 
 If a file has only minor opportunities, skip it. Do not burn tool calls on cosmetic tweaks.
+
+Batch searches; a whole pass should fit in roughly fifteen tool calls.
 
 ## Safety
 
@@ -94,6 +103,7 @@ End with exactly this structure. No freeform summaries.
 
 **Files examined:** 6
 **Files changed:** 2
+**Removed:** 2 (list each leftover deleted, with what proved it unused)
 **Tool calls used:** 18/20
 **Reverted changes:** 0 (list each if >0, with reason)
 ```

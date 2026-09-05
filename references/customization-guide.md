@@ -62,7 +62,7 @@ Skills will auto-detect other directories. Only configure what deviates from con
 
 ## Override Agents
 
-Session-flow bundles four agents: `code-reviewer`, `code-sanitizer`, `code-simplifier`, and `security-auditor`. You can replace any of them with your own.
+Session-flow bundles three agents: `code-reviewer`, `code-simplifier`, and `security-auditor`. You can replace any of them with your own.
 
 ### Precedence order (highest wins):
 
@@ -93,7 +93,7 @@ If you have a marketplace plugin installed (e.g., `code-simplifier:code-simplifi
 
 ## Model Selection
 
-Bundled agents (`code-reviewer`, `code-sanitizer`, `code-simplifier`, `security-auditor`) declare **`model: inherit`** in their frontmatter. They run on the parent session's model. So:
+Bundled agents (`code-reviewer`, `code-simplifier`, `security-auditor`) declare **`model: inherit`** in their frontmatter. They run on the parent session's model. So:
 
 - A user running Claude Code on Opus 4.7 gets Opus 4.7 subagents automatically.
 - A user running Sonnet gets Sonnet subagents.

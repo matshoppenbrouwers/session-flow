@@ -1,13 +1,13 @@
 ---
 name: session-post-implementation
-description: Post-implementation refinement workflow. Use after completing a major feature or plan implementation to simplify, review, sanitize, and document the code. Triggers on "/session-post-implementation" or when user says "run the iteration workflow" or "polish this implementation".
+description: Post-implementation refinement workflow. Use after completing a major feature or plan implementation to simplify, review, and document the code. Triggers on "/session-post-implementation" or when user says "run the iteration workflow" or "polish this implementation".
 ---
 
 # Post-Implementation Refinement
 
 Execute this sequential workflow after completing a major feature or plan implementation.
 
-**Announce:** "Using session-post-implementation to simplify, review, sanitize, and test the implementation."
+**Announce:** "Using session-post-implementation to simplify, review, and test the implementation."
 
 ## Workflow Configuration
 
@@ -20,8 +20,8 @@ Use AskUserQuestion:
 - header: "Scope"
 - multiSelect: false
 - options:
-  - A) label: "Full pipeline (Recommended)", description: "All steps: simplify, review, security & liability audit, sanitize, test suite, architecture docs, and manual test plan. Best after completing a major feature."
-  - B) label: "Standard", description: "Simplify, review, sanitize, test suite, and commit. Skips security audit, architecture docs, and manual test plan."
+  - A) label: "Full pipeline (Recommended)", description: "All steps: simplify, review, security & liability audit, test suite, architecture docs, and manual test plan. Best after completing a major feature."
+  - B) label: "Standard", description: "Simplify, review, test suite, and commit. Skips security audit, architecture docs, and manual test plan."
   - C) label: "Quick", description: "Simplify, review, and commit only. Fastest option for minor changes."
 
 **Scope reference:**
@@ -32,13 +32,12 @@ Use AskUserQuestion:
 | 2. Review | yes | yes | yes |
 | 3. Security & Liability Audit | yes | - | - |
 | 4. Commit checkpoint | yes | yes | yes |
-| 5. Sanitize | yes | yes | - |
-| 6. Test suite | yes | yes | - |
-| 7. Architecture docs | yes | - | - |
-| 8. Manual test plan | yes | - | - |
-| 9. Final commit | yes | yes | - |
+| 5. Test suite | yes | yes | - |
+| 6. Architecture docs | yes | - | - |
+| 7. Manual test plan | yes | - | - |
+| 8. Final commit | yes | yes | - |
 
-Verification (`/session-verify`) is always optional — offered after Step 8 on Full completions only; see Step 8.5 below.
+Verification (`/session-verify`) is always optional — offered after Step 7 on Full completions only; see Step 7.5 below.
 
 **Question 2: Add-ons** (only ask if user chose Standard or Quick)
 
@@ -80,7 +79,7 @@ If neither is available, skip this step and proceed to Step 2.
 
 ```
 Task tool: subagent_type=[resolved from above]
-prompt: "Simplify and refine the recently modified code for clarity, consistency, and maintainability while preserving all functionality. Do not run the full test suite at this stage (but you can run individual tests)"
+prompt: "Simplify and refine the recently modified code for clarity, consistency, and maintainability while preserving all functionality, and remove what the implementation left behind: dead code, temporary helpers, debug output, scratch files. Do not run the full test suite at this stage; individual tests are fine."
 ```
 
 Wait for completion. Review the changes made.
@@ -152,23 +151,9 @@ Commit the simplified and reviewed code:
 git add -A && git commit -m "refactor: simplify and address review feedback"
 ```
 
-This creates a checkpoint before the sanitization phase.
+This creates a checkpoint before the test suite and documentation steps.
 
-### Step 5: Sanitize
-
-Run the code-sanitizer agent for final cleanup.
-
-```
-Task tool: subagent_type="code-sanitizer", max_turns=20
-prompt: "Analyze recent commits for cleanup opportunities: dead code and temporary functions. Stay within ~15 tool calls. Use Grep/Glob/Read tools instead of Bash for searches."
-```
-
-Apply any recommended cleanups. This catches:
-- Dead code that can be removed
-- Temporary test functions left behind
-- Complexity hotspots
-
-### Step 6: Run Test Suite
+### Step 5: Run Test Suite
 
 Run the project's full test suite to verify all changes work correctly.
 
@@ -184,7 +169,7 @@ Detect and use the project's test runner:
 
 **Phase exit criterion:** full test suite returns zero failures. The exact command + pass/fail counts must be captured in the final commit message or a note to the user. "Tests probably pass" is not acceptable — show the output.
 
-### Step 7: Update Architecture Docs
+### Step 6: Update Architecture Docs
 
 If the project has architecture documentation (detect via `.session-flow.json` config or scan for `architecture/`, `_devdocs/architecture/`, `docs/architecture/`, `ARCHITECTURE.md`), use the `/update-architecture` skill for surgical, token-efficient documentation updates.
 
@@ -195,7 +180,7 @@ If the project has architecture documentation (detect via `.session-flow.json` c
 
 Skip this step if the project has no architecture docs.
 
-### Step 8: Generate Manual Test Plan
+### Step 7: Generate Manual Test Plan
 
 Generate a manual test plan for the feature that was just implemented.
 
@@ -261,7 +246,7 @@ Generate a manual test plan for the feature that was just implemented.
 
 Skip this step if the implementation is purely internal (no user-facing behavior to test).
 
-### Step 8.5: Verification (optional, for feature/plan completions)
+### Step 7.5: Verification (optional, for feature/plan completions)
 
 If this session closed out an implementation plan (not just a bugfix or small change), consider running `/session-verify` before the final commit. Verification produces an evidence artifact proving the implementation matches the design doc and plan via falsifiable hypotheses, structural audit, defect probes, and integration probes.
 
@@ -274,41 +259,33 @@ If this session closed out an implementation plan (not just a bugfix or small ch
 **Skip when:**
 - Bugfixes, refactors, single-file features
 - Internal polish with no design doc
-- Small changes where the test suite in Step 6 is sufficient evidence
+- Small changes where the test suite in Step 5 is sufficient evidence
 
-Do not run automatically. Present the option to the user; proceed to Step 9 if they decline.
+Do not run automatically. Present the option to the user; proceed to Step 8 if they decline.
 
-### Step 9: Final Commit
+### Step 8: Final Commit
 
-Commit the sanitization, documentation updates, and test plan:
+Commit the documentation updates and test plan:
 
 ```bash
-git add -A && git commit -m "chore: sanitize code, update docs, and add manual test plan"
+git add -A && git commit -m "chore: update docs and add manual test plan"
 ```
-
-## Quick Variant
-
-For smaller changes, use `/quick-post-implementation` (equivalent to choosing "Quick" scope):
-- Steps 1, 2, 4 only (simplify, review, commit)
-- Skips security audit, sanitize, test suite, doc updates, and test plan generation
-- Faster iteration for minor features
-- Skips the workflow configuration questions entirely
 
 ## Execution Notes
 
 - Run each step sequentially -- each depends on the previous
 - If any step reveals significant issues, address them before proceeding
-- The two commits create clear checkpoints: one for the refined implementation, one for cleanup/docs
-- Tests run once after all code changes (Step 6) to minimize test suite execution time
+- The two commits create clear checkpoints: one for the refined implementation, one for docs and the test plan
+- Tests run once after all code changes (Step 5) to minimize test suite execution time
 - Step 3 (security audit) can be skipped for trivial changes (typos, docs-only)
-- Step 8 generates a manual test plan for QA -- skip if the feature has no user-facing behavior
-- Step 8.5 (verification) is always optional -- present but do not auto-run
-- If no changes are made in steps 5-8, skip the final commit
+- Step 7 generates a manual test plan for QA -- skip if the feature has no user-facing behavior
+- Step 7.5 (verification) is always optional -- present but do not auto-run
+- If no changes are made in steps 5-7, skip the final commit
 
 ## Anti-Patterns
 
 **Running full suite between every step:**
-- BAD: Run the full test suite after simplify, again after review, again after sanitize
-- GOOD: Run individual tests during the simplify/review/audit/sanitize steps, full suite once at the test-suite step
+- BAD: Run the full test suite after simplify, again after review, again after the audit
+- GOOD: Run individual tests during the simplify/review/audit steps, full suite once at the test-suite step
 
 Chain context: see `references/workflow-overview.md`.

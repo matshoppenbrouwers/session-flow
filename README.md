@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Skills: 13](https://img.shields.io/badge/Skills-13-green)
-![Agents: 7](https://img.shields.io/badge/Agents-7-orange)
+![Agents: 6](https://img.shields.io/badge/Agents-6-orange)
 
 > **Install in Claude Code:** `/plugin marketplace add matshoppenbrouwers/session-flow` then `/plugin install session-flow@session-flow`
 
@@ -98,7 +98,7 @@ Claude: Parses dependency graph → dispatches test-author for the phase's
         those tests → marks tasks [x] as they complete → reports progress
 
 You: /session-post-implementation
-Claude: Simplifies code → reviews for bugs → sanitizes dead code →
+Claude: Simplifies code and removes leftovers → reviews for bugs →
         runs full test suite → updates architecture docs →
         generates manual test plan
 
@@ -156,7 +156,7 @@ It triages only — it never implements, and it treats issue text as untrusted d
 
 ## Post-Implementation Workflow
 
-`/session-post-implementation` runs up to 9 steps. At the start, it asks which scope to use:
+`/session-post-implementation` runs up to 8 steps. At the start, it asks which scope to use:
 
 | Step | Full | Standard | Quick |
 |------|------|----------|-------|
@@ -164,11 +164,10 @@ It triages only — it never implements, and it treats issue text as untrusted d
 | 2. Code review | yes | yes | yes |
 | 3. Security & liability audit | yes | - | - |
 | 4. Commit checkpoint | yes | yes | yes |
-| 5. Sanitize | yes | yes | - |
-| 6. Test suite | yes | yes | - |
-| 7. Architecture docs | yes | - | - |
-| 8. Manual test plan | yes | - | - |
-| 9. Final commit | yes | yes | - |
+| 5. Test suite | yes | yes | - |
+| 6. Architecture docs | yes | - | - |
+| 7. Manual test plan | yes | - | - |
+| 8. Final commit | yes | yes | - |
 
 Standard and Quick scopes can add individual steps as extras (e.g., Quick + architecture docs). Verification (`/session-verify`) is always optional and can be invoked after Full completion.
 
@@ -193,10 +192,9 @@ The audit can also run standalone via `/security-liability-audit`.
 | **codebase-researcher** | research-design (research + design phases) | Answer one question about the existing code, with file:line citations. Read-only |
 | **external-researcher** | research-design (research phase) | Research docs, specs, and prior art outside the repo, with source validation. No repo access |
 | **test-author** | delegation (once per phase, before implementers) | Write the acceptance tests that become the implementers' oracle |
-| **code-simplifier** | post-impl step 1 | Simplify recently changed code |
+| **code-simplifier** | post-impl step 1 | Simplify recently changed code and remove what the implementation left behind |
 | **code-reviewer** | post-impl step 2 | Find bugs, security issues, convention violations |
 | **security-auditor** | post-impl step 3 | Technical security + legal liability audit |
-| **code-sanitizer** | post-impl step 5 | Detect dead code and temporary artifacts |
 
 Bundled agents inherit the parent session's model — an Opus 4.7 session gets Opus 4.7 subagents, a Sonnet session gets Sonnet. Two deliberate exceptions: `codebase-researcher` and `external-researcher` pin `model: sonnet`, because both do bounded read-and-report work where the frontier tier buys nothing and the dispatch count is high. Override either by placing your own version in `.claude/agents/`.
 

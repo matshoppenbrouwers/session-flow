@@ -49,7 +49,6 @@
   ],
   "agents": [
     "./agents/code-reviewer.md",
-    "./agents/code-sanitizer.md",
     "./agents/code-simplifier.md",
     "./agents/codebase-researcher.md",
     "./agents/external-researcher.md",
