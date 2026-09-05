@@ -171,7 +171,7 @@ Detect and use the project's test runner:
 
 ### Step 6: Update Architecture Docs
 
-If the project has architecture documentation (detect via `.session-flow.json` config or scan for `architecture/`, `_devdocs/architecture/`, `docs/architecture/`, `ARCHITECTURE.md`), use the `/update-architecture` skill for surgical, token-efficient documentation updates.
+If the project has architecture documentation (detect via `.session-flow.json` config or scan for `architecture/`, `_devdocs/architecture/`, `docs/architecture/`, `ARCHITECTURE.md`), use the `/update-architecture` skill for surgical, token-efficient documentation updates. Paths may point outside the repo; resolve them relative to the repo root.
 
 1. Identify which layer docs need updating based on changed files
 2. Make surgical edits (update counts, signatures, entries -- not rewrites)
@@ -186,7 +186,7 @@ Generate a manual test plan for the feature that was just implemented.
 
 1. Analyze the feature from recent commits and changed files
 2. Determine a short kebab-case feature label (e.g. `banner`, `mcp`, `credentials`)
-3. Save to the project's testing directory (from `.session-flow.json` or detect `testing/`, `_devdocs/testing/`, `docs/testing/`)
+3. Save to the project's testing directory (from `.session-flow.json` or detect `testing/`, `_devdocs/testing/`, `docs/testing/`). Paths may point outside the repo; resolve them relative to the repo root.
 4. Populate sections with test cases covering the feature's user-facing behavior
 
 **Template:**

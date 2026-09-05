@@ -22,7 +22,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 
 Resolve paths using the standard order:
 
-1. Read `.session-flow.json` for `paths.todo`, `paths.tasks`, `paths.sequence`.
+1. Read `.session-flow.json` for `paths.todo`, `paths.tasks`, `paths.sequence`. Paths may point outside the repo; resolve them relative to the repo root.
 2. If missing, detect `todo/`, `_devdocs/todo/`, `docs/todo/`; the sequence file is `{todo}/SEQUENCE.md` and breakdowns live in `{todo}/tasks/`.
 3. If nothing is found, suggest running `/session-init` and stop.
 

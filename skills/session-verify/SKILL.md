@@ -32,7 +32,7 @@ Collect verification inputs through a **brief collaborative dialogue**. Ask one 
 
 Required inputs:
 
-- **Design doc path** — the spec this implementation targets (the implementation plan produced by `/session-research-design` *is* the design doc). Look in `.session-flow.json.paths.plans` first, then `.paths.research`; otherwise scan `plans/`, `_devdocs/plans/`, `docs/plans/`. If none exists, offer: (a) run `/session-research-design` first, or (b) proceed in **code-as-spec** mode (verify against recent commits + architecture docs + CHANGELOG).
+- **Design doc path** — the spec this implementation targets (the implementation plan produced by `/session-research-design` *is* the design doc). Look in `.session-flow.json.paths.plans` first, then `.paths.research`; otherwise scan `plans/`, `_devdocs/plans/`, `docs/plans/`. Paths may point outside the repo; resolve them relative to the repo root. If none exists, offer: (a) run `/session-research-design` first, or (b) proceed in **code-as-spec** mode (verify against recent commits + architecture docs + CHANGELOG).
 - **Implementation plan path** — the `YYYY-MM-DD-{topic}-implementation.md` that was executed. Same auto-detection from `.session-flow.json.paths.plans`.
 - **Scope label** — kebab-case, used for artifact naming (e.g. `banner-redesign`, `hybrid-search`).
 - **Memory source (optional)** — claude-mem MCP, session transcripts, or PR list that captures implementation history and any flagged defects.

@@ -126,7 +126,7 @@ Add ASCII diagram at top of task file:
 
 ## File Structure
 
-Save the task file to the project's **todo** directory (read path from `.session-flow.json` config, or detect `todo/`, `_devdocs/todo/`, `docs/todo/`). If not found, suggest running `/session-init`. **Never** save task files to `plans/` -- that directory is for implementation plans from `/session-research-design`.
+Save the task file to the project's **todo** directory (read path from `.session-flow.json` config, or detect `todo/`, `_devdocs/todo/`, `docs/todo/`). Paths may point outside the repo; resolve them relative to the repo root. If not found, suggest running `/session-init`. **Never** save task files to `plans/` -- that directory is for implementation plans from `/session-research-design`.
 
 ```markdown
 # Phase N: [Phase Name]

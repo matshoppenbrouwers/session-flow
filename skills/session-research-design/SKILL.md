@@ -24,7 +24,7 @@ Complex features require understanding before planning. This skill produces two 
 1. **Research report** (saved to the project's research directory) -- explores the problem space. Skippable when the understanding already exists (Step 2).
 2. **Implementation plan** (saved to the project's plans directory) -- defines the build path. Always produced.
 
-Both use the `YYYY-MM-DD-{topic}.md` naming convention. Directory paths are read from `.session-flow.json` config, or auto-detected by looking for `research/`, `_devdocs/research/`, `docs/research/` (and `plans/`, `_devdocs/plans/`, `docs/plans/` respectively). If no matching directory is found, suggest running `/session-init`.
+Both use the `YYYY-MM-DD-{topic}.md` naming convention. Directory paths are read from `.session-flow.json` config, or auto-detected by looking for `research/`, `_devdocs/research/`, `docs/research/` (and `plans/`, `_devdocs/plans/`, `docs/plans/` respectively). Paths may point outside the repo; resolve them relative to the repo root. If no matching directory is found, suggest running `/session-init`.
 
 Both go through user review before proceeding. The implementation plan feeds directly into `/session-task-planning`.
 

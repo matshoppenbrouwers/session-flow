@@ -21,7 +21,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 
 Resolve project context before judging anything:
 
-1. Read `.session-flow.json` for `paths.architecture`, `paths.plans`, `paths.sequence`, and `paths.direction`.
+1. Read `.session-flow.json` for `paths.architecture`, `paths.plans`, `paths.sequence`, and `paths.direction`. Paths may point outside the repo; resolve them relative to the repo root.
 2. **Direction doc:** `paths.direction` is a hint, not a terminus (it defaults to a `PRD.md` in the docs root, e.g. `_devdocs/PRD.md`). Run the detection chain when the key is **unset** *or* when it points at a file that does not exist — `test -f` the configured path before trusting it. Walk the chain in order and stop at the first hit:
    1. `paths.direction`
    2. `PRD.md` / `DIRECTION.md` / `VISION.md` in the docs root

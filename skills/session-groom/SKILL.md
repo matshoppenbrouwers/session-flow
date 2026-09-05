@@ -19,7 +19,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 
 ## Path Resolution
 
-1. Read `.session-flow.json` for `paths.sequence`, `paths.tasks`, `paths.todo`.
+1. Read `.session-flow.json` for `paths.sequence`, `paths.tasks`, `paths.todo`. Paths may point outside the repo; resolve them relative to the repo root.
 2. If missing, detect `{todo}/SEQUENCE.md` and `{todo}/tasks/`.
 3. If no sequence file exists, report nothing to groom and suggest `/session-add-task` or `/session-init`.
 
