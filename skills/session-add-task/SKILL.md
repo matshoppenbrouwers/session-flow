@@ -45,51 +45,17 @@ Resolve paths using the standard order:
 
 The link target is **either** a per-task breakdown file (`todo/tasks/NNNN-slug.md`, the default) **or** an anchor into a `session-task-planning` phase file (`todo/2026-06-03-feature.md#NA-1`) for multi-task work.
 
-This table is the whole entry-line grammar — every token any shipped writer (this skill, `/session-gatekeeper`, `/session-groom`, session-scribe's three flows) puts on an entry line. An entry ends in **exactly one trailing status token** — the ` → <link>` or the `(needs breakdown)` marker, never both, never a third species — because session-scribe parses entries by stripping exactly one and reading the ` ⇄ ` annotations from the tail of what remains; an unknown trailing tag blocks that strip and hides the annotations behind it. Anything that doesn't fit on the line goes **below** it as an HTML comment (`<!-- … -->`): comment lines are invisible to all three `SEQUENCE.md` parsers (session-flow's skills, scribe's flows, ops' portfolio script), and both `/scribe-pull` (divergence markers) and `/session-groom` (escalation markers) already write them.
+This table is the whole entry-line grammar — every token any shipped writer puts on an entry line. An entry ends in **exactly one trailing status token** — the ` → <link>` or the `(needs breakdown)` marker, never both, never a third species — because external parsers strip exactly one, and an unknown trailing tag hides the annotations behind it. Anything that doesn't fit on the line goes **below** it as an HTML comment (`<!-- … -->`), which every `SEQUENCE.md` parser ignores.
 
 ## Provenance
 
-Two independent markers, answering two different questions. `[auto]` says **who** put the entry in the
-file; ` ⇄ <url>` says **where the work came from**. An entry may carry either, both, or neither — a
-gatekeeper enqueue from a GitHub issue carries both.
+`[auto]`, rendered immediately after the priority, says a skill enqueued the entry on the user's behalf. It is off by default — a user invoking `/session-add-task` produces an unmarked entry — and set only when the caller is a skill enqueuing without the user having seen the item, `/session-gatekeeper` triage being the one shipped caller.
 
-### Who added it — the `[auto]` marker
+` ⇄ <url>`, rendered when the caller passes a source URL, says this entry and that external item are the same work. Never invent one: it is the only key another writer can dedup on, because this skill rewrites raw issue titles into task phrasing and the titles never match.
 
-Add-task takes an optional **auto-provenance flag**. It is off by default: a user invoking `/session-add-task` produces an unmarked entry. Set it only when the caller is a skill enqueuing on the user's behalf without the user having seen the item — `/session-gatekeeper` triage is the one shipped caller.
+The annotation goes immediately before the entry's trailing status token — the ` → <breakdown-link>` on a groomed entry, the `(needs breakdown)` marker on an ungroomed one, or end of line when the entry has neither.
 
-When set, the marker renders immediately after the priority:
-
-```
-- [ ] SEQ-011 P3 [auto]: Retry failed webhook deliveries → todo/tasks/0011-retry-webhooks.md
-```
-
-Nothing else about the entry changes — same id rules, same breakdown, same link. The marker exists so an unattended enqueue is visible as one, and so the user can veto it on sight instead of approving every item up front.
-
-Consumers: `/session-groom` grooms marked entries normally but reports them separately; `/session-next` never lets `[auto]` outrank a manual entry of the same priority; `/session-status` counts them.
-
-**Before relying on this with session-scribe:** scribe parses `SEQUENCE.md` by file-format convention, not shared code. `[auto]` changes the line format it reads. Verify scribe's parser against a marked line before trusting the Notion mirror.
-
-### Where it came from — the ` ⇄ <url>` source key
-
-Add-task also takes an optional **source URL**: the external item this task was captured from — a GitHub issue, a Notion task, a tracker ticket. When the caller passes one, render it as ` ⇄ <url>` **immediately before the trailing ` → <breakdown-link>`**:
-
-```
-- [ ] SEQ-011 P3 [auto]: Retry failed webhook deliveries ⇄ https://github.com/owner/repo/issues/42 → todo/tasks/0011-retry-webhooks.md
-```
-
-Zero or more per line, each dispatched on its hostname by whoever reads it, never on position. Presence means one thing: **this line and that URL are the same work.**
-
-**Why record it.** A second importer must be able to see the item is already in the file. session-scribe's `/scribe-pull` imports GitHub issues into `SEQUENCE.md`, and it dedups by excluding any candidate whose URL already appears as a ` ⇄ ` annotation. If the gatekeeper enqueues an issue in CI and writes no annotation, that issue is invisible to the check and gets imported a second time under a second `SEQ-NNN` — after which scribe's mirror files a *third* item for the duplicate. The same key also stops the mirror from re-filing an entry whose issue already exists.
-
-**It is the only key between writers.** Do not fall back to matching on title text: this skill rewrites a raw issue title into task phrasing, so the two never match, and near-matches across unrelated entries do. No URL, no dedup — which is why a caller that knows the URL must pass it.
-
-**Position is load-bearing, in both directions.** `/session-status`, `/session-groom` and `/session-next` all read the breakdown link as *the text after the last ` → `* and open it as a path. An annotation appended after the link makes that path `todo/tasks/0011-retry-webhooks.md ⇄ https://…`, which resolves to nothing — so a fully-groomed entry reads as dangling and gets re-groomed or skipped. And a reader looking for the annotation scans the tail of the line once that trailing token is stripped, so an annotation placed after the token is unfindable.
-
-Both constraints resolve to one rule: **the annotation goes immediately before the entry's trailing status token** — the ` → <breakdown-link>` on a groomed entry, or the `(needs breakdown)` marker on an ungroomed one (mode C), or end-of-line if it has neither. An entry has one such token or the other, never both.
-
-### Id allocation is lock-free — discipline makes it safe
-
-Four writers append to the same file (this skill, `/session-gatekeeper` in CI, session-scribe's `/scribe-pull` and `/scribe code`), and all allocate ids the same way: highest existing id plus one, with no locking. Nothing in the format stops a concurrent CI enqueue and a local import from minting the same id. What makes the scheme safe is operating discipline, not mechanism: **at most one scheduled writer per repo**, and **pull before any local edit to the sequence**. Both halves are load-bearing — enrolling a second bot writer on the same repo, or appending to a stale local copy, reintroduces the collision no code will catch.
+Reasoning and the cross-writer contract: `references/sequence-grammar.md`.
 
 ## Modes
 

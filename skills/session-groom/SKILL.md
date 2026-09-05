@@ -48,15 +48,14 @@ For each un-prepared entry:
 
 Reuse the `session-add-task` / `session-task-planning` breakdown template (header + Files / Instructions / Accept / Test). Files entries may be exact paths or directory globs (`src/lib/governor/**`), and the field doubles as the **dispatch write boundary** delegation injects into agent payloads — list everything the task must touch. Write it to `{tasks}/NNNN-slug.md`, where `NNNN` is the entry's existing `SEQ-NNN` number (zero-padded) so the file and entry stay aligned. Never overwrite an existing file. Then update the sequence entry to drop `(needs breakdown)` and add the `→` link.
 
-**Preserve any ` ⇄ <url>` annotations on the line, in place.** They sit immediately before the trailing status token, so swapping `(needs breakdown)` for the `→` link leaves them exactly where they belong — but you are rewriting that region of the line, and dropping one is silent. The annotation is the only key that stops the source item being imported a second time by another writer (see `session-add-task`'s Provenance section); grooming an entry is not a reason to lose it.
+**Preserve any ` ⇄ <url>` annotations on the line, in place.** They sit immediately before the trailing status token, so swapping `(needs breakdown)` for the `→` link leaves them exactly where they belong — but you are rewriting that region of the line, and dropping one is silent. Why the annotation matters and what it costs to lose: `references/sequence-grammar.md`.
 
 ### Step 4: Escalate when needed
 
 If the entry is too big or diverges from the app's direction, do not break it down. Instead:
-- **Leave the entry line untouched.** Do not append a `(needs research-design)` tag to it: the shared line grammar allows exactly one trailing status token, and session-scribe parses entries by stripping exactly that one (` → <link>` or `(needs breakdown)`) — a second, unknown tag blocks the strip and hides any ` ⇄ ` annotations behind it, defeating the dedup key.
+- **Leave the entry line untouched.** Do not append a `(needs research-design)` tag to it: an entry carries exactly one trailing status token, and a second, unknown tag hides the ` ⇄ ` annotations behind it (`references/sequence-grammar.md`).
 - Record the escalation on its own line **immediately below** the entry, as an HTML comment:
   `<!-- session-flow: SEQ-NNN escalated to research-design YYYY-MM-DD -->`
-  Comment lines are invisible to all three `SEQUENCE.md` parsers (session-flow's skills, scribe's flows, ops' portfolio script); `/scribe-pull` already writes its divergence markers the same way.
 - Recommend `/session-research-design` for a cowork session with the user.
 
 ### Step 5: Report
