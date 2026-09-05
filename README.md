@@ -246,9 +246,9 @@ Only 1-2 skills are loaded at a time (triggered by description matching):
 
 | Component | Est. Tokens |
 |-----------|-------------|
-| All 13 skill metadata (always loaded) | ~1,500 |
+| All 15 skill metadata (always loaded) | ~1,700 |
 | Largest single skill body (research-design) | ~2,500 |
-| Typical active session | ~3,400 |
+| Typical active session | ~3,600 |
 
 Security audit reference files (~900 lines total) are only loaded when the audit runs.
 
