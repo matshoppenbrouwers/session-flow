@@ -63,7 +63,7 @@ Payment/subscription changes, harder cancellation, feature degradation, auto-ren
 ### B5: Data Transfers
 New cross-border flows, new AI providers (DPF/SCC status), non-EU infrastructure.
 
-## Filtering
+## Confidence
 
 - **Technical**: report every finding and label it high, medium or low confidence; the caller decides what to act on. Apply hard exclusions from the reference.
 - **Legal**: Flag as ADVISORY. No confidence gate but label uncertainty.
@@ -76,14 +76,15 @@ Group findings by type:
 Technical security vulnerabilities with verified exploit paths.
 
 ### High (should fix)
-Technical findings at 8/10+ confidence, or legal gaps that create real liability.
+Clear vulnerability patterns with known exploitation methods, or legal gaps that create real
+liability.
 
 ### Medium (track)
-Lower-confidence technical findings, minor legal gaps.
+Likely issues with no confirmed path, minor legal gaps.
 
 For each finding:
 ```
-**[SEVERITY]** [Category] file_path:line_number
+**[SEVERITY] [confidence]** [Category] file_path:line_number
 Description. Exploit scenario (technical) or risk description (legal).
 Fix: concrete recommendation.
 ```

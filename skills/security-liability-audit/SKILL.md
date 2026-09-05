@@ -94,9 +94,9 @@ Does the change introduce new cross-border data flows?
 - New cloud service in non-EU jurisdiction
 - User data sent to new endpoint
 
-## Confidence Filtering
+## Confidence
 
-Apply confidence-based filtering before reporting. See `references/technical-security.md` Section 8 for the full ruleset.
+Label every finding and let the caller filter. See `references/technical-security.md` Section 8 for the hard exclusions and the false-positive rules.
 
 - **Technical findings**: report every finding and label it high, medium or low confidence; the caller decides what to act on. Hard exclusions apply.
 - **Legal findings**: flag as ADVISORY (not bugs but risk gaps). No confidence gate, but label uncertainty clearly.
@@ -108,10 +108,10 @@ Apply confidence-based filtering before reporting. See `references/technical-sec
 ```
 TECHNICAL SECURITY FINDINGS
 ============================
-#   Sev    Conf   Status      Category         Finding                    File:Line
---  ----   ----   ------      --------         -------                    ---------
-1   CRIT   9/10   VERIFIED    Secrets          API key in source          src/api.ts:42
-2   HIGH   8/10   UNVERIFIED  LLM Security     User input in sys prompt   pkb/agent.py:88
+#   Sev    Conf     Status      Category         Finding                    File:Line
+--  ----   ----     ------      --------         -------                    ---------
+1   CRIT   high     VERIFIED    Secrets          API key in source          src/api.ts:42
+2   HIGH   medium   UNVERIFIED  LLM Security     User input in sys prompt   pkb/agent.py:88
 ```
 
 For each finding include: severity, confidence, status, category, description, exploit scenario (for technical), and recommendation.

@@ -11,7 +11,7 @@ Deep security patterns for the security-liability-audit skill. Read this file wh
 5. [Dependency Supply Chain](#5-dependency-supply-chain)
 6. [Webhook & Integration Security](#6-webhook--integration-security)
 7. [Desktop App Security (Tauri/Electron)](#7-desktop-app-security)
-8. [Confidence Filtering & False Positive Rules](#8-confidence-filtering--false-positive-rules)
+8. [Confidence Labels & False Positive Rules](#8-confidence-labels--false-positive-rules)
 
 ---
 
@@ -245,7 +245,7 @@ Patterns specific to Tauri, Electron, and similar desktop frameworks.
 
 ---
 
-## 8. Confidence Filtering & False Positive Rules
+## 8. Confidence Labels & False Positive Rules
 
 Source: /cso Phase 12.
 
@@ -253,10 +253,13 @@ Source: /cso Phase 12.
 Report every finding and label it high, medium or low confidence; the caller decides what to act on.
 
 ### Severity Definitions
-- **CRITICAL** (9-10/10): Verified exploit path exists. Could write a PoC.
-- **HIGH** (8/10): Clear vulnerability pattern with known exploitation methods.
-- **MEDIUM** (7/10): Likely issue but less certain. Report with caveat.
-- **Below 7**: Do not report.
+- **CRITICAL**: Verified exploit path exists. Could write a PoC.
+- **HIGH**: Clear vulnerability pattern with known exploitation methods.
+- **MEDIUM**: Likely issue, or a pattern you could not confirm by tracing.
+- **LOW**: Worth recording, with no demonstrated path.
+
+Severity is what the finding costs if it is real; confidence is how sure you are that it is real.
+They are separate axes, so report at every severity and carry the confidence label alongside it.
 
 ### Hard Exclusions (auto-discard)
 1. DoS / resource exhaustion (EXCEPT LLM cost amplification)
@@ -282,7 +285,7 @@ Report every finding and label it high, medium or low confidence; the caller dec
 Mark each finding as:
 - **VERIFIED** — Confirmed via code tracing
 - **UNVERIFIED** — Pattern match only
-- **TENTATIVE** — Below 8/10 confidence but high severity warrants mention
+- **TENTATIVE** — High severity with an unconfirmed path; report it and label it low confidence
 
 ### Variant Analysis
 When a finding is VERIFIED, grep the entire codebase for the same pattern. One confirmed SQL injection means there may be more.
