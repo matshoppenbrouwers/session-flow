@@ -284,6 +284,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for skill quality checklists and guidelin
 
 [MIT](LICENSE)
 
+Two skills are derived from superpowers (MIT); see `THIRD_PARTY_NOTICES.md`.
+
 ## Links
 
 - **Repository:** https://github.com/matshoppenbrouwers/session-flow
