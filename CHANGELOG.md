@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.7.1 (2026-09-05)
+
+Finishes what 1.7.0 started. The confidence rewrite reached the lines the plan named and left
+three numeric gates standing in the security audit chain, including one that still told the
+reporter to withhold.
+
+### Fixed
+
+- **The last withholding gate.** `references/technical-security.md` defined severity in confidence
+  numbers and closed with "Below 7: Do not report", which is the behaviour 1.7.0 removed
+  everywhere else. Severity is now defined by what a finding costs if it is real, confidence is
+  stated as the separate axis it is, and nothing is dropped for being uncertain.
+- **`security-auditor` groups by severity, not by a score.** Its High and Medium sections keyed off
+  "8/10+ confidence" and "lower-confidence", so the agent labelled findings one way and sorted them
+  another. Its per-finding output now carries the confidence label it is told to apply.
+- **The audit skill's output table** showed a `Conf` column of `9/10` and `8/10` against a rule
+  asking for high, medium or low. It shows labels.
+- The `TENTATIVE` finding status no longer keys off a confidence number, and the two headings that
+  still read "Confidence Filtering" now say what they do.
+
 ## 1.7.0 (2026-09-05)
 
 Aligns the skill and agent text with current Claude prompting guidance, adds two conversational
