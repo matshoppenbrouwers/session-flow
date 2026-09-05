@@ -72,7 +72,8 @@ Some stages are optional depending on the scope of work:
 | **update-architecture** | No architecture docs in the project, or change doesn't affect system design |
 | **release** | Not versioning the project, or change doesn't warrant a release |
 
-**Rule of thumb:** Skip a stage only if its output already exists or isn't needed. When in doubt, run it — the overhead is small and the quality gain compounds.
+**Rule of thumb:** Skip a stage when its output already exists or the change is too small to
+need it. The table above says what "too small" means for each stage.
 
 ---
 
