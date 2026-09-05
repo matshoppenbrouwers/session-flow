@@ -7,7 +7,7 @@ description: Triage incoming work (GitHub issues, feature requests, surfaced ide
 
 Triage incoming work and route it to the right place, grounded in where the app is and where it's going.
 
-**Announce:** "Using session-gatekeeper to triage this and decide where it belongs."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Non-Negotiables
 

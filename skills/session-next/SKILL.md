@@ -7,7 +7,7 @@ description: Implement the next task from the project's task sequence (backlog).
 
 Pick up and execute the next ready task from the sequence backlog.
 
-**Announce:** "Using session-next to implement the next task from the sequence."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Non-Negotiables
 

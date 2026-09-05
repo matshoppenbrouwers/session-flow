@@ -9,7 +9,7 @@ Maintain the project's architecture docs, wherever they live. Keep updates surgi
 
 Throughout this skill, `{architecture}` means the resolved architecture documentation root (see below) — never a hardcoded directory.
 
-**Announce:** "Using update-architecture for session-flow architecture documentation updates."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Modes
 

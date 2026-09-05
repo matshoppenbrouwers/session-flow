@@ -7,7 +7,7 @@ description: Orchestrate agent execution from a session task plan. Parses depend
 
 Orchestrate task execution from a session task plan file.
 
-**Announce:** "Using session-delegation to orchestrate task execution from the plan."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Non-Negotiables
 

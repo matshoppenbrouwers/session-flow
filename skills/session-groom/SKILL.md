@@ -7,7 +7,7 @@ description: Groom the task sequence (backlog) by researching un-broken-down ent
 
 Keep the sequence backlog ready: research each un-prepared entry, verify it, and attach a breakdown.
 
-**Announce:** "Using session-groom to research and break down the open sequence entries."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Non-Negotiables
 

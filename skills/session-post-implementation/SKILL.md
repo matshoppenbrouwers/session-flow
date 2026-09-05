@@ -7,7 +7,7 @@ description: Post-implementation refinement workflow. Use after completing a maj
 
 Execute this sequential workflow after completing a major feature or plan implementation.
 
-**Announce:** "Using session-post-implementation to simplify, review, and test the implementation."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Workflow Configuration
 

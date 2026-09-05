@@ -7,7 +7,7 @@ description: Evidence-based verification workflow for completed features and pla
 
 Produce evidence-based proof that a completed implementation matches its design and plan, or a falsification artifact identifying gaps. This is a heavy skill — expect hours, not minutes.
 
-**Announce:** "Using session-verify to produce evidence-based verification of the implementation."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Core Principle
 

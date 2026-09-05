@@ -7,7 +7,7 @@ description: Capture a new task into the project's task sequence (backlog) with 
 
 Capture a task into the sequence backlog so it can be picked up later with "implement the next task".
 
-**Announce:** "Using session-add-task to capture this into the task sequence."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Non-Negotiables
 

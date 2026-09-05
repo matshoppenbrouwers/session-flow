@@ -7,7 +7,7 @@ description: Deep research and design workflow for complex features. Use before 
 
 Conduct deep research and produce a design plan before task planning.
 
-**Announce:** "Using session-research-design to research approaches and design an implementation plan."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Non-Negotiables
 

@@ -7,7 +7,7 @@ description: End-to-end release workflow that bumps version, packages artifacts,
 
 Orchestrate a full release cycle: version bump, artifact packaging, and satellite content verification.
 
-**Announce:** "Using session-release to run the full release workflow."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Non-Negotiables
 

@@ -16,7 +16,7 @@ description: >
 
 Perform a combined technical security and legal liability review of recent code changes.
 
-**Announce:** "Running security & liability audit on recent changes."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Scope Detection
 

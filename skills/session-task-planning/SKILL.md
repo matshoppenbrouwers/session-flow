@@ -7,7 +7,7 @@ description: Create Claude Code-scoped tasks with parallelization analysis. Use 
 
 Convert implementation plans into session-scoped tasks with explicit parallelization opportunities.
 
-**Announce:** "Using session-task-planning to break this into Claude Code session-sized tasks."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## Non-Negotiables
 

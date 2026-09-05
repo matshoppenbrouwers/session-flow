@@ -7,7 +7,7 @@ description: Bootstrap the project documentation structure for session-flow skil
 
 Bootstrap the documentation structure that all other session-flow skills depend on.
 
-**Announce:** "Using session-init to bootstrap the project documentation structure."
+Open with one sentence saying what you are about to do and what it will produce.
 
 ## When to Use
 
