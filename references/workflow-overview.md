@@ -119,6 +119,11 @@ Every skill needs to find project directories (todo, tasks, sequence, architectu
      }
    }
    ```
+
+   A configured path may point outside the repo, for example
+   `"sequence": "../_devdocs/todo/SEQUENCE.md"`, when several repos in one parent folder share a
+   backlog. Resolve it relative to the repo root and treat that file as the sequence. Keep
+   `architecture`, `direction`, `plans` and `research` inside the repo unless they are shared too.
 2. **Auto-detect:** Look for common directory names at the project root:
    - Todo: `todo/`, `_devdocs/todo/`, `docs/todo/`
    - Tasks/sequence: `{todo}/tasks/`, `{todo}/SEQUENCE.md`

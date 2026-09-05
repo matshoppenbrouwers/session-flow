@@ -44,6 +44,14 @@ Ask the user **one question**: "Where should I create the documentation root? Su
 **If existing structure found:**
 Report what was found and confirm: "Found `docs/` with existing content. Use this as the session-flow root?"
 
+**Then, once the root is settled:**
+Ask: "Does this repo share its backlog with a parent folder? If so, give the path to that folder's `SEQUENCE.md`."
+
+When the answer is yes:
+- Set `paths.sequence`, `paths.tasks` and `paths.todo` in Step 5 to the shared locations, written as `../` paths relative to the repo root. Leave the other keys pointing inside this repo.
+- Skip Step 3b -- the parent folder already holds the backlog.
+- Use the shared sequence path when you substitute into the CLAUDE.md block in Step 5b, so the wired instruction names the file that will actually be read.
+
 Do not dump a list of options. One question, one answer.
 
 ### Step 3: Create Subdirectories
@@ -63,7 +71,7 @@ Create these directories under the chosen root:
 
 ### Step 3b: Create the Task Sequence
 
-Create `{todo}/SEQUENCE.md` (only if absent) -- the backlog of one-line task entries that `session-next` works through. Use this starter content:
+Create `{todo}/SEQUENCE.md` (only if absent) -- the backlog of one-line task entries that `session-next` works through. Skip this step entirely when Step 2 configured a shared backlog, since that file is the backlog. Use this starter content:
 
 ```markdown
 # Task Sequence
@@ -187,7 +195,7 @@ incoming issues.
 <!-- /session-flow:sequence -->
 ```
 
-If the block already exists (matched by the `<!-- session-flow:sequence -->` markers), replace its contents; otherwise append it. Substitute `<sequence path>` with the resolved sequence path. Never disturb content outside the marked block.
+If the block already exists (matched by the `<!-- session-flow:sequence -->` markers), replace its contents; otherwise append it. Substitute `<sequence path>` with the resolved sequence path -- the shared one when a shared backlog was configured, so the instruction names the file that will actually be read. Never disturb content outside the marked block.
 
 ### Step 6: Suggest Next Step
 
@@ -204,6 +212,7 @@ After creation, suggest the logical next step based on the user's intent:
 - **Minimal INDEX.md**: Under 20 lines of content. Add detail later via update-architecture, not here.
 - **No .gitignore modification**: The user decides what to commit.
 - **Config is source of truth**: Other skills read `.session-flow.json` to find paths. If this file is missing, they should suggest running `/session-init`.
+- **No local backlog beside a shared one**: Never create a local `SEQUENCE.md` when a shared one is configured, because a stale local copy is what a session finds first.
 
 ## Path Resolution Pattern
 

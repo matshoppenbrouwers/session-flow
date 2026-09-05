@@ -28,7 +28,7 @@ Session-flow reads `.session-flow.json` from your project root. This file is cre
 }
 ```
 
-All paths are relative to the project root and live under the nested `paths` object. Every field is optional — skills fall back to auto-detection if a field is missing. `paths.sequence`, `paths.direction`, `paths.conventions`, and `paths.lessons` point at files; the rest are directories.
+All paths are relative to the project root and live under the nested `paths` object. Every field is optional — skills fall back to auto-detection if a field is missing. `paths.sequence`, `paths.direction`, `paths.conventions`, and `paths.lessons` point at files; the rest are directories. A path may also leave the repo, for example `"sequence": "../_devdocs/todo/SEQUENCE.md"`, resolved relative to the repo root. Write one that way when several repos in one parent folder share a backlog: point `sequence`, `todo` and `tasks` at the shared files and leave the rest inside the repo.
 
 | Key | Purpose |
 |-----|---------|

@@ -51,6 +51,8 @@ Find the backlog file via `.session-flow.json` `paths.sequence`, or detect `{tod
 
 If there is no sequence file, treat all counts as 0.
 
+Keep the path you read, written as it is configured, and report it in Step 3 -- a shared backlog resolves outside the repo, so naming the file is what makes a wrong resolution visible.
+
 ## Step 3: Report Status
 
 Output exactly this structure. Fixed fields, no substitutions.
@@ -64,6 +66,7 @@ Output exactly this structure. Fixed fields, no substitutions.
 **Blocked:** {count of blocked tasks, or "none"}
 **Parallel opportunities:** {list of task IDs that can run concurrently, or "none"}
 **Recent activity:** {last completed task ID and title, or "no completions yet"}
+**Sequence file:** {path read, as configured, or "none found"}
 **Sequence backlog:** {done}/{total} done · {ready} ready · {needs_breakdown} need breakdown · {auto} auto (or "no sequence")
 
 **Next:** {recommended action — see Step 4}
