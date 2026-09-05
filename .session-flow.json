@@ -1,0 +1,15 @@
+{
+  "root": "_devdocs",
+  "paths": {
+    "research": "_devdocs/research",
+    "plans": "_devdocs/plans",
+    "todo": "_devdocs/todo",
+    "tasks": "_devdocs/todo/tasks",
+    "sequence": "_devdocs/todo/SEQUENCE.md",
+    "testing": "_devdocs/testing",
+    "architecture": "_devdocs/architecture",
+    "direction": "_devdocs/PRD.md",
+    "conventions": "_devdocs/conventions.md",
+    "lessons": "_devdocs/lessons.md"
+  }
+}
