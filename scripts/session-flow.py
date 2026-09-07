@@ -34,6 +34,7 @@ PLUGIN_MANIFEST = os.path.join(PACKAGE_ROOT, ".claude-plugin", "plugin.json")
 BUILTIN = "builtin"
 DISPATCH = {
     "doctor": BUILTIN,
+    "bind-namespace": "session_flow.store:bind_namespace",
     "show": "session_flow.records:show",
     "capture": "session_flow.records:capture",
     "revise": "session_flow.records:revise",

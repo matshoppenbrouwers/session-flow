@@ -16,9 +16,8 @@ Session-flow reads `.session-flow.json` from your project root. This file is cre
   "paths": {
     "research": "_devdocs/research",
     "plans": "_devdocs/plans",
-    "todo": "_devdocs/todo",
-    "tasks": "_devdocs/todo/tasks",
-    "sequence": "_devdocs/todo/SEQUENCE.md",
+    "work": "_devdocs/work",
+    "sequence": "_devdocs/SEQUENCE.md",
     "testing": "_devdocs/testing",
     "architecture": "_devdocs/architecture",
     "direction": "_devdocs/PRD.md",
@@ -28,13 +27,25 @@ Session-flow reads `.session-flow.json` from your project root. This file is cre
 }
 ```
 
-All paths are relative to the project root and live under the nested `paths` object. Every field is optional — skills fall back to auto-detection if a field is missing. `paths.sequence`, `paths.direction`, `paths.conventions`, and `paths.lessons` point at files; the rest are directories. A path may also leave the repo, for example `"sequence": "../_devdocs/todo/SEQUENCE.md"`, resolved relative to the repo root. Write one that way when several repos in one parent folder share a backlog: point `sequence`, `todo` and `tasks` at the shared files and leave the rest inside the repo.
+All paths are relative to the project root and live under the nested `paths` object. `paths.sequence`, `paths.direction`, `paths.conventions`, and `paths.lessons` point at files; the rest are directories. Auto-detection covers a missing documentation directory, but not the two the runtime needs: `paths.work` and `paths.sequence` fall back to `_devdocs/work` and `_devdocs/SEQUENCE.md`, so set them explicitly whenever the docs root is not `_devdocs`.
 
 | Key | Purpose |
 |-----|---------|
+| `work` | The work root: one directory per work item, plus `namespace.json`. Every record the runtime writes lives here |
+| `sequence` | The generated backlog view of that work root. Read-only output — `render` writes it, nothing edits it by hand |
 | `direction` | Product-direction doc grounding `/session-gatekeeper` triage |
 | `conventions` | House rules read by `session-research-design` at design time and enforced by `code-reviewer` |
 | `lessons` | Conclusions from past work, read as a one-line index by `session-research-design` and `session-delegation` |
+
+`todo` and `tasks` are not written for a new project. A repository that used the earlier layout keeps them, pointing at its existing `todo/` directory so those historical files stay findable; nothing new is written there.
+
+### Sharing one work root
+
+A path may leave the repo, for example `"work": "../work"`, resolved relative to the repo root. Write it that way when several repos in one parent folder share a backlog: point `work` and `sequence` at the shared locations and leave the rest inside the repo.
+
+The shared root keeps one `namespace.json`, and each participating repository is one entry in its `repositories` list — `{"name": ..., "path": ...}`, the path relative to the work root. Every mutation validates those bindings, so a binding that no longer resolves to a directory fails with `invalid-identity` rather than writing. Never give a second repository its own namespace inside a shared root: identity is allocated per root, and a second namespace splits the sequence in two.
+
+`/session-init` asks once whether the work root is tracked in the repository or lives in its own private repository, and acts on the answer. That decision belongs to the root, not to each repository that binds to it — a repository joining a shared root inherits it. See [work-item-contract.md](work-item-contract.md) for the record format and [runtime-integration.md](runtime-integration.md) for how a skill reaches the runtime.
 
 ### Conventions and lessons format
 
@@ -52,11 +63,11 @@ Conventions are rules to design and review against; lessons are conclusions draw
 ```json
 {
   "root": "docs",
-  "paths": { "todo": "docs/tasks" }
+  "paths": { "work": "docs/work", "sequence": "docs/SEQUENCE.md" }
 }
 ```
 
-Skills will auto-detect other directories. Only configure what deviates from convention.
+Skills auto-detect the other documentation directories. Configure what deviates from convention, and always configure the two the runtime writes.
 
 ---
 
@@ -166,7 +177,7 @@ Change the relevant path:
 ```json
 {
   "paths": {
-    "todo": "project-management/tasks",
+    "work": "project-management/work",
     "architecture": "docs/arch"
   }
 }
@@ -187,9 +198,8 @@ project-root/
   _devdocs/
     research/       # Research documents from session-research-design
     plans/          # Implementation plans from session-research-design
-    todo/           # Task files from session-task-planning
-      tasks/        # Per-task breakdown files for sequence entries
-      SEQUENCE.md   # Task backlog: one-line entries linked to breakdowns
+    work/           # Work root: one directory per work item, plus namespace.json
+    SEQUENCE.md     # Generated backlog view of the work root -- never edited by hand
     testing/        # Manual test plans and results from session-post-implementation
     architecture/   # Architecture documentation
     PRD.md          # Product direction doc (optional; used by session-gatekeeper)

@@ -24,6 +24,15 @@ Use AskUserQuestion:
   - B) label: "Standard", description: "Simplify, review, test suite, and commit. Skips security audit, architecture docs, and manual test plan."
   - C) label: "Quick", description: "Simplify, review, and commit only. Fastest option for minor changes."
 
+**Recommend by consequence, not size.** Read the work item's accepted scope first, then name one
+recommended preset and the reason for it in the same message as the question. A change is
+consequential when it touches authority or credentials, writes data the user cannot recreate, has an
+external effect, or changes a contract another repository reads — recommend Full, however few lines
+it changed. A change whose cause is understood, that nothing depends on, and that an existing check
+already covers is ordinary — recommend Quick or Standard, however many files it touched. Line count,
+file count, and elapsed time never decide alone, and the user's answer always wins over the
+recommendation.
+
 **Preset seed:** the chosen preset seeds the step set; it is not consulted again once the set is
 resolved.
 
@@ -118,6 +127,34 @@ git commit --only -- <authorized paths> -m "<message>"
   those paths, and commit nothing.
 - Untracked files outside the authorized set are never staged, at either commit.
 - `--only` keeps index content outside the named paths out of the commit.
+
+## Authority for This Run
+
+Resolve the helper by the one rule for this host (`references/runtime-integration.md`) and confirm it
+answers with `doctor`; `$ENTRYPOINT` below is the absolute path it resolves to. Then read the work
+item this run refines, before Step 1, and re-resolve its authority before every consequential effect —
+each commit, and anything a step proposes beyond one:
+
+```bash
+python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" show --seq SEQ-042
+```
+
+- `acceptance.scope` names the actions the decision covered. Investigate, implement, create PR, merge,
+  deploy, rollback and external posting are separate actions, and authority for one is never authority
+  for the next.
+- When `acceptance.fingerprint` no longer matches the record's `scope_fingerprint`, the accepted scope
+  was edited after it was accepted. Stop before dispatching any agent and report it.
+- A standing policy that covers this run answers the configuration questions without re-asking them.
+  Escalate the decisions that are actually unknown — an action outside the accepted scope, a finding
+  that changes what the work is for — and bring the evidence with the question. Routine reapproval of
+  something already decided is not a safeguard; it teaches the user to wave the question through.
+- Revocation blocks new dependent actions. Effects already completed stay recorded, and rolling one
+  back needs its own authority.
+
+What this run may do: refine, review, audit, test, commit, and write documentation. What it does not
+do: open a pull request, merge, deploy, publish, post externally, or mark the work item `done`.
+Completion is `/session-verify`'s decision against the accepted outcome, and a passing test suite
+here is one input to it.
 
 ## Workflow Steps
 
@@ -326,6 +363,10 @@ If this session closed out an implementation plan (not just a bugfix or small ch
 
 Do not run automatically. Present the option to the user; proceed to Step 8 if they decline.
 
+Verification is also the only step that decides completion: it checks applicable evidence against the
+accepted outcome, including any delivery target the accepted scope requires. Nothing in this workflow
+moves a work item to `done`.
+
 ### Step 8: Final Commit
 
 **Run when:** 8 is in the resolved step set and Steps 5-7 left something to commit.
@@ -342,6 +383,8 @@ git commit --only -- <authorized paths> -m "chore: update docs and add manual te
 ## Execution Notes
 
 - Run each step sequentially -- each depends on the previous
+- Re-resolve the item's authority before each commit; a commit is an effect, and the accepted scope
+  is what says it is permitted
 - If any step reveals significant issues, address them before proceeding
 - The two commits create clear checkpoints: one for the refined implementation, one for docs and the test plan
 - Both commits stage the explicit authorized paths from the ownership snapshot; neither uses `git add -A`
@@ -360,6 +403,10 @@ git commit --only -- <authorized paths> -m "chore: update docs and add manual te
 **Re-deriving a step's applicability from the preset:**
 - BAD: Step 3 checks whether the user chose Standard or Quick, after they added the audit as an add-on
 - GOOD: Step 3 checks whether 3 is in the resolved step set, which the add-on already put there
+
+**Treating one authority as authority for the next action:**
+- BAD: The user approved the implementation, so open the PR and merge it while the tree is green
+- GOOD: Implement and commit under that approval; ask for the PR and the merge as their own decisions
 
 **Running full suite between every step:**
 - BAD: Run the full test suite after simplify, again after review, again after the audit

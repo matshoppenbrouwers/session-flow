@@ -1,0 +1,10 @@
+{
+  "scenario": "unmerged-delivery",
+  "work_root": "work",
+  "summary": "Every task of SEQ-501 passed, the accepted scope requires a merged pull request, and the parent carries no evidence of it.",
+  "completion_gate": {
+    "match": "required delivery target",
+    "code": "inapplicable-evidence",
+    "detail": "SEQ-501 requires a merged pull request and records no evidence that one was merged"
+  }
+}

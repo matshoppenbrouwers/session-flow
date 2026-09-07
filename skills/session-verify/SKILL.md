@@ -17,23 +17,49 @@ The skill treats absence of evidence as failure, not as "probably fine". It runs
 
 ## Non-Negotiables
 
-1. **Evidence-first.** Run the probe before writing the verdict. No conclusion without cited evidence.
-2. **Falsify, don't confirm.** For every spec claim, design a test intended to disprove it. A claim only survives if the falsification attempt fails.
-3. **Run the code.** Passing unit tests are necessary but insufficient. Execute real flows, inspect real state, validate real round-trips.
-4. **Never edit source to make tests pass.** New verification scripts belong under `_verification/` (or `verification/` if the project prefers). Do not modify production code or existing tests to paper over defects.
-5. **Report defects, don't silently fix.** Document each defect with a failing probe or reproducible trace. Escalate to the user; do not patch without explicit authorization.
-6. **Cite on every line.** Format: `path/to/file:LINE` for code, `$ command` + output for execution, `MEMORY #id` for memory citations.
+1. **Verify the accepted outcome, not the newest document.** The behaviour under verification is the work item's accepted scope, identified by its acceptance fingerprint and by the work-root commit of each document that scope references. A plan file that happens to be newest is not the specification.
+2. **Evidence-first.** Run the probe before writing the verdict. No conclusion without cited evidence.
+3. **Falsify, don't confirm.** For every spec claim, design a test intended to disprove it. A claim only survives if the falsification attempt fails.
+4. **Run the code.** Passing unit tests are necessary but insufficient. Execute real flows, inspect real state, validate real round-trips.
+5. **Never edit source to make tests pass.** New verification scripts belong under `_verification/` (or `verification/` if the project prefers). Do not modify production code or existing tests to paper over defects.
+6. **Report defects, don't silently fix.** Document each defect with a failing probe or reproducible trace. Escalate to the user; do not patch without explicit authorization.
+7. **Every task passing is not a delivered outcome.** Tasks can pass while the parent still needs integration or delivery. Completion is judged in *Completion and Evidence* below, against the accepted outcome, and never inferred from task results.
+8. **Cite on every line.** Format: `path/to/file:LINE` for code, `$ command` + output for execution, `MEMORY #id` for memory citations.
 
 ## Workflow
 
+### Step 0: Resolve the Runtime and the Accepted Outcome
+
+Resolve the helper by the one rule for this host (`references/runtime-integration.md`) and confirm it answers with `doctor`. Then read the work item under verification:
+
+```bash
+python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" show --seq SEQ-042
+```
+
+Take from the record:
+
+- **The accepted scope region** — the behaviour being verified, and the text the acceptance fingerprint covers.
+- **`acceptance.fingerprint` against the record's current `scope_fingerprint`** — when they differ, the accepted scope was edited after acceptance. Stop and report it: verifying against text nobody accepted proves nothing. Re-acceptance or a recorded same-meaning decision comes first.
+- **`references`** — each behaviour or criteria document as `path@commit`. Read each one **at that work-root commit**, not at whatever the file says today:
+
+  ```bash
+  git -C "$WORK_ROOT" show <commit>:<path>
+  ```
+
+- **`delivery`** — the delivery target the accepted outcome requires, if any.
+- **`tasks/`** — each task's `result` and `lifecycle`, which are inputs to the verdict and not the verdict.
+
+When the item has no accepted scope, or there is no work item at all, say so and stop: capture and acceptance come first, through `/session-add-task` or `/session-gatekeeper`. There is nothing here to verify against.
+
+**Which artifact prevails.** The accepted scope region is the specification. `spec.md` elaborates the behaviour it references and is read at the referenced commit; `plan.md` carries approach and order and never supplies acceptance criteria. When `spec.md` and `plan.md` disagree, the accepted scope decides, and the disagreement is itself a finding.
+
 ### Step 1: Scope
 
-Collect verification inputs through a **brief collaborative dialogue**. Ask one question at a time. Prefer multiple choice.
+Collect the remaining inputs through a **brief collaborative dialogue**. Ask one question at a time. Prefer multiple choice.
 
 Required inputs:
 
-- **Design doc path** — the spec this implementation targets (the implementation plan produced by `/session-research-design` *is* the design doc). Look in `.session-flow.json.paths.plans` first, then `.paths.research`; otherwise scan `plans/`, `_devdocs/plans/`, `docs/plans/`. Paths may point outside the repo; resolve them relative to the repo root. If none exists, offer: (a) run `/session-research-design` first, or (b) proceed in **code-as-spec** mode (verify against recent commits + architecture docs + CHANGELOG).
-- **Implementation plan path** — the `YYYY-MM-DD-{topic}-implementation.md` that was executed. Same auto-detection from `.session-flow.json.paths.plans`.
+- **Work item identity** — `SEQ-NNN`, resolved in Step 0. Everything else hangs off it.
 - **Scope label** — kebab-case, used for artifact naming (e.g. `banner-redesign`, `hybrid-search`).
 - **Memory source (optional)** — claude-mem MCP, session transcripts, or PR list that captures implementation history and any flagged defects.
 - **Verification ambition** — multiple choice: (A) structural-only, (B) structural + functional, (C) exhaustive (structural + functional + integration + spec-vs-reality gap). Default C unless the user picks otherwise.
@@ -59,8 +85,8 @@ The matrix is a contract. You cannot change it mid-verification. If a row does n
 
 Before running anything, read:
 
-1. The design doc (or the "code-as-spec" sources if no design doc exists)
-2. The implementation plan
+1. The accepted scope region and each referenced document at its recorded commit (Step 0)
+2. The item's `plan.md` and task records, for what was attempted and in which order
 3. The project's architecture index if present (`architecture_index.md`, `ARCHITECTURE.md`, or equivalent per `.session-flow.json.paths.architecture`)
 4. The project's `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` for conventions
 5. Any testing guide (`TESTING.md`, `_devdocs/guides/TESTING.md`) — **note if it is stale**; outdated testing docs are themselves a finding
@@ -150,11 +176,75 @@ Write the final report to `_verification/{date}-{label}-verification.md`, follow
 
 Summarize to the user with:
 - Overall verdict: `PASS` | `PASS-WITH-CAVEATS` | `FAIL`
+- The completion decision from *Completion and Evidence*, stated separately from the verdict
 - Top 3 risks (1 line each)
 - Path to the artifact
 - Any defects that require user decision (ship / fix / defer)
 
 Do not recommend fixes unless the user asks.
+
+## Completion and Evidence
+
+A verdict is a judgement about probes. Completion is a lifecycle transition on the work item, and it
+is allowed only when applicable evidence covers the **accepted outcome** — not when the probes were
+green, and not when every task passed.
+
+### Record the evidence
+
+Each check that survived falsification becomes one evidence entry on the record, named against the
+fingerprint it was gathered at:
+
+```json
+{"expected_revision": 7,
+ "metadata": {"evidence": [
+   {"criteria": "<the accepted criterion this covers>",
+    "fingerprint": "<the record's current scope_fingerprint>",
+    "revision": "<code or artifact revision the check ran against>",
+    "environment": "<where it ran>", "result": "pass | fail",
+    "limitations": ["<what this check does not cover>"]}]}}
+```
+
+```bash
+python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" revise --seq SEQ-042 --input "$PAYLOAD"
+```
+
+The response reports each entry's `applies`. An entry that does not apply is not evidence about this
+outcome, whatever its `result` says. Append entries — never overwrite the ones already recorded.
+
+### The completion gate
+
+Re-resolve the acceptance and its authority immediately before this decision, and check every row
+before calling for a transition. The runtime records a transition; it does not judge whether the
+evidence covers the accepted outcome. That judgement is this step's, which is why the gate is
+checked first.
+
+| Completion is refused when | Named error | What to do |
+|----------------------------|-------------|------------|
+| The accepted scope names a required delivery target that is not delivered — however many tasks passed | `inapplicable-evidence` | Leave the item `active`, name the target and what is missing, and say which authority the delivery needs. Merging is a separate action from implementing |
+| Stale evidence: an entry names a fingerprint the record no longer carries | `inapplicable-evidence` | Re-run that check against the current fingerprint, or record a same-meaning decision if the edit changed no meaning. A stored verdict is evidence about the revision it was recorded against |
+| A task result is `unknown` or `blocked`, or a required check could not run | `inapplicable-evidence` | Report the unknown as unknown. An outcome nobody observed is not evidence, and defaulting it to a pass is how a run becomes untruthful |
+| Acceptance no longer names the record's current scope fingerprint | `missing-authority` | Stop. Re-acceptance or a recorded same-meaning decision comes before any completion |
+| A closure is reopened without a correction record | `missing-authority` | Supply the correction naming why the closure was premature — see below |
+
+When every row passes, transition the item:
+
+```bash
+python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" revise --seq SEQ-042 --input "$PAYLOAD"
+```
+
+with `{"metadata": {"lifecycle": "done"}, "expected_revision": <current>}`. `revise` refuses an illegal
+transition and, for a reopening, refuses without a correction. Use `transition` instead when one
+operation must change several records together.
+
+### Reopening and successor work
+
+- **Premature closure**: reopen under the **same identity**. Send `{"expected_revision": <current>,
+  "metadata": {"lifecycle": "active"}, "correction": {"reason": "<why the closure was premature>",
+  "actor": "<who decided>"}}`. The correction appends to the record's `corrections`; nothing already
+  recorded is rewritten.
+- **An incident after valid delivery**: capture linked successor work under a new `SEQ`, referencing
+  the delivered item. Do not reopen a delivered outcome to hold new work — the delivery happened, and
+  the record has to keep saying so.
 
 ## Evidence Artifact Contract
 
@@ -165,8 +255,10 @@ The artifact at `_verification/{date}-{label}-verification.md` must use exactly 
 
 **Verifier:** {model or agent id}
 **Date:** YYYY-MM-DD
+**Work item:** {SEQ-NNN} — accepted fingerprint {scope_fingerprint}
 **Scope:** Commits {sha_first}..{sha_last} on branch {branch}
 **Verdict:** PASS | PASS-WITH-CAVEATS | FAIL
+**Completion:** done | not yet — {the gate row that refused it}
 
 ## Executive Summary
 <=150 words. Headline finding + top 3 risks.
@@ -228,7 +320,9 @@ You are done when **all** are true:
 4. The full test suite has been executed at least once with complete output preserved.
 5. At least one integration probe has executed, **or** each skipped probe has a cited reason and a user-executable alternative.
 6. The verdict line is one of the three allowed values and is consistent with the Findings Ledger (a FAIL ledger with PASS verdict is not allowed).
-7. No source file outside `_verification/` has been modified.
+7. Each surviving check is recorded as an evidence entry against the current fingerprint, and the response confirms it applies.
+8. The completion line states the decision and, when completion was refused, which gate row refused it.
+9. No source file outside `_verification/` has been modified, and no record outside the item under verification.
 
 ## Performance Budget
 
@@ -255,6 +349,10 @@ Appropriate for:
 **Treating compilation as correctness:**
 - BAD: "TypeScript compiles clean — the UI wiring is correct."
 - GOOD: "TS compiles. The component is mounted at `CaptureFooter.tsx:42` per grep. Runtime path verified by {probe}."
+
+**Reading a task board as a delivered outcome:**
+- BAD: "All six tasks are `passed`, so the item is done."
+- GOOD: "All six tasks are `passed`. The accepted scope requires a merged pull request; PR #58 is open, so the item stays `active`."
 
 **Rewriting the plan to match broken code:**
 - BAD: Discover a missing feature; quietly update the plan to say it was out of scope.

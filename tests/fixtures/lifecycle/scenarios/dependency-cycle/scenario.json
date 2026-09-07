@@ -1,0 +1,16 @@
+{
+  "scenario": "dependency-cycle",
+  "work_root": "work",
+  "summary": "SEQ-301/A1 and SEQ-301/A2 depend on each other, so the closure cannot be ordered.",
+  "request": {
+    "seq": "SEQ-301",
+    "tasks": [
+      "A1"
+    ]
+  },
+  "stop": {
+    "match": "cycle in the permitted closure",
+    "code": "invalid-identity",
+    "detail": "SEQ-301/A1 -> SEQ-301/A2 -> SEQ-301/A1"
+  }
+}

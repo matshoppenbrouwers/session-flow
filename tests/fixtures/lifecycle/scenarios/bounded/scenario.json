@@ -1,0 +1,29 @@
+{
+  "scenario": "bounded",
+  "work_root": "work",
+  "summary": "One expanded item with two tasks, one compact item beside it, and one captured item that outranks both but is not executable.",
+  "request": {
+    "seq": "SEQ-101",
+    "tasks": [
+      "A1"
+    ]
+  },
+  "dispatch_set": [
+    "SEQ-101/A1"
+  ],
+  "out_of_scope": [
+    "SEQ-101/A2",
+    "SEQ-102",
+    "SEQ-103"
+  ],
+  "stop": {
+    "match": "stale claim",
+    "code": "missing-authority",
+    "detail": "SEQ-101/A1 is already claimed by another actor, so a second dispatch of it stops"
+  },
+  "completion_gate": {
+    "match": "is `unknown`",
+    "code": "inapplicable-evidence",
+    "detail": "a task result nobody observed stays unknown and cannot carry the parent to done"
+  }
+}

@@ -1,68 +1,109 @@
 ---
 name: session-groom
-description: Groom the task sequence (backlog) by researching un-broken-down entries and attaching ready-to-execute breakdowns. Use to keep SEQUENCE.md healthy — every entry researched, verified, and linked to a breakdown — especially for items added as raw one-liners. Safe to run periodically via /loop. Triggers on "/session-groom" or when user says "groom the backlog", "prepare the sequence", "fill in the task breakdowns", or "tidy up SEQUENCE.md".
+description: Groom the backlog by researching captured work items that carry no verified breakdown and recording one against each. Use to keep the work root healthy — every item researched, verified, and ready to be accepted — especially for items captured as raw one-liners. Safe to run periodically via /loop. Triggers on "/session-groom" or when user says "groom the backlog", "prepare the sequence", "fill in the task breakdowns", or "tidy up SEQUENCE.md".
 ---
 
 # Session Groom
 
-Keep the sequence backlog ready: research each un-prepared entry, verify it, and attach a breakdown.
+Keep the backlog ready: research each unprepared work item, verify it, and record the breakdown on it.
 
 Open with one sentence saying what you are about to do and what it will produce.
 
 ## Non-Negotiables
 
-1. **Idempotent.** Running groom twice over a healthy sequence changes nothing. Only act on entries that are `(needs breakdown)`, have a dangling/missing link, or are explicitly flagged for re-research.
-2. **Verify before linking.** A breakdown is only attached after the task is confirmed feasible and grounded in the actual code (files exist, the approach is sound). Don't fabricate paths or tests.
-3. **Gate the big ones.** If an entry turns out to be a significant or architecture-touching change, do not auto-break-it-down — escalate to a cowork `/session-research-design` session and leave a note on the entry.
-4. **Never start implementation.** Groom prepares breakdowns; it does not write app code. Execution is `/session-next`'s job.
-5. **Report a summary.** After a pass, list what was groomed, what was escalated, and what was skipped.
+1. **Idempotent.** Running groom twice over a healthy backlog changes nothing. Only act on items marked `needs_breakdown`, items whose body carries no verified instructions, and items explicitly flagged for re-research.
+2. **Verify before recording.** A breakdown goes on the record only after the work is confirmed feasible and grounded in the actual code — files exist, the approach is sound. Don't fabricate paths or tests.
+3. **Grooming is not acceptance.** Clearing `needs_breakdown` prepares an item; it does not make it executable. `select` still refuses a `captured` item by name, and a verified breakdown confers no eligibility — acceptance is a separate decision by someone with the authority to make it. Never treat "I researched it and it's fine" as that decision.
+4. **Never rewrite the scope region.** Instructions, files and tests go in the body, which is outside the fingerprint, so recording them leaves an existing acceptance intact. If the research shows the accepted scope itself is wrong, that is an escalation (Step 4), not a reword.
+5. **Gate the big ones.** If an item turns out to be a significant or architecture-touching change, do not record a breakdown for it — escalate to a cowork `/session-research-design` session and leave a note on the record.
+6. **Never start implementation.** Groom prepares; it does not write app code. Execution is `/session-next`'s job.
+7. **The sequence is generated.** Never edit `paths.sequence`. Change the record and let the runtime re-render; a line typed there is lost at the next render.
+8. **Report a summary.** After a pass, list what was groomed, what was escalated, and what was skipped.
 
 ## Path Resolution
 
-1. Read `.session-flow.json` for `paths.sequence`, `paths.tasks`, `paths.todo`. Paths may point outside the repo; resolve them relative to the repo root.
-2. If missing, detect `{todo}/SEQUENCE.md` and `{todo}/tasks/`.
-3. If no sequence file exists, report nothing to groom and suggest `/session-add-task` or `/session-init`.
+1. Resolve the runtime entrypoint by the one rule for this host — `${CLAUDE_PLUGIN_ROOT}` natively, the discovered installed location under Codex, the `session-flow-runtime.json` descriptor beside this `SKILL.md` for a standalone copy (`references/runtime-integration.md`).
+2. Read `.session-flow.json` for `paths.work`; the records live one directory per item beneath it.
+3. Confirm the root answers before changing anything:
+
+   ```bash
+   python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" doctor
+   ```
+
+   A named error, a missing work root, or a missing `namespace.json` means report it and stop. There is no hand-editing path.
 
 ## Workflow
 
-### Step 1: Scan for un-prepared entries
+### Step 1: Find the unprepared items
 
-Read `SEQUENCE.md`. Collect entries that need work:
-- Trailing `(needs breakdown)`.
-- A link whose target file is missing (dangling).
-- No link at all on an open `[ ]` entry.
+```bash
+python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" select
+```
 
-Skip entries that are `[x]` done or already linked to an existing breakdown. Also skip entries with an escalation comment on the line below (`<!-- session-flow: SEQ-NNN escalated to research-design … -->`) — they are waiting on a `/session-research-design` session, and re-researching them each pass breaks idempotence (Non-Negotiable 1).
+`select` returns every item it considered with its lifecycle and the reasons it is or is not eligible. The groom targets are the items whose reasons include `the item is still marked (needs breakdown)`. Read each one's record for the rest:
 
-An entry may carry `[auto]` after its priority (`- [ ] SEQ-011 P3 [auto]: …`), meaning a bot enqueued it — `/session-gatekeeper` triage, typically. It is a normal groom target: same research, same verification bar, same escalation rules. Note which entries were marked so Step 5 can report them; entries without the marker are unaffected.
+```bash
+python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" show --seq SEQ-NNN
+```
 
-### Step 2: Research and verify each entry
+Skip `done`, `deferred` and `cancelled` items, items whose body already carries verified `Files` / `Instructions` / `Accept` / `Test`, and items carrying an escalation note (`notes` holding `<!-- session-flow: SEQ-NNN escalated to research-design … -->`) — those are waiting on a `/session-research-design` session, and re-researching them each pass breaks idempotence.
 
-For each un-prepared entry:
-1. Read the relevant code to confirm what the task touches and whether it's feasible.
-2. Judge the scope:
-   - **Session-sized & clear** → proceed to write a breakdown (Step 3).
-   - **Significant / divergent / unclear** → escalate (Step 4).
+An item may carry `provenance.auto`, rendering as `[auto]`, meaning a skill enqueued it — `/session-gatekeeper` triage, typically. It is a normal groom target: same research, same verification bar, same escalation rules. Note which items were marked so Step 5 can report them.
 
-### Step 3: Write the breakdown
+### Step 2: Research and verify each item
 
-Reuse the `session-add-task` / `session-task-planning` breakdown template (header + Files / Instructions / Accept / Test). Files entries may be exact paths or directory globs (`src/lib/governor/**`), and the field doubles as the **dispatch write boundary** delegation injects into agent payloads — list everything the task must touch. Write it to `{tasks}/NNNN-slug.md`, where `NNNN` is the entry's existing `SEQ-NNN` number (zero-padded) so the file and entry stay aligned. Never overwrite an existing file. Then update the sequence entry to drop `(needs breakdown)` and add the `→` link.
+For each unprepared item:
 
-**Preserve any ` ⇄ <url>` annotations on the line, in place.** They sit immediately before the trailing status token, so swapping `(needs breakdown)` for the `→` link leaves them exactly where they belong — but you are rewriting that region of the line, and dropping one is silent. Why the annotation matters and what it costs to lose: `references/sequence-grammar.md`.
+1. Read `original_request` and the interpreted intent before the code. The gap between them is where a groom pass finds the real work, and neither is yours to rewrite.
+2. Read the relevant code to confirm what the item touches and whether it is feasible. Existence-check every path you are about to write (`test -f`, `test -d` for a glob's root).
+3. Judge the scope:
+   - **Session-sized and clear** → record the breakdown (Step 3).
+   - **Significant, divergent, or unclear** → escalate (Step 4).
+
+### Step 3: Record the breakdown
+
+One compact record holds it: the breakdown goes in the item's own body, not in a companion file. Write the payload and apply it.
+
+```json
+{
+  "operation": "groom-<unique-token>",
+  "coordinator": "session-groom",
+  "changes": [
+    {
+      "seq": "SEQ-NNN",
+      "expect_revision": 3,
+      "metadata": {"needs_breakdown": null},
+      "body": "## Original request\n\n> unchanged, verbatim\n\n## Interpreted intent\n\nunchanged\n\n**Files**: `src/api/middleware.py`\n\n**Instructions**:\n- Step 1 (action verb)\n\n**Accept**: observable outcome\n\n**Test**: `exact command`\n"
+    }
+  ]
+}
+```
+
+```bash
+python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" transition --input "$PAYLOAD"
+```
+
+`expect_revision` is the revision `show` just reported; a mismatch is refused as `stale-revision`, which is the pass finding that someone else edited the record while you were researching. Re-read it and rebuild the change. `"needs_breakdown": null` removes the field, so the rendered entry drops its `(needs breakdown)` token; carry the whole body forward, because `body` replaces rather than appends. The transition re-renders the sequence and commits the work root itself — run nothing else afterwards.
+
+The ` ⇄ <url>` annotations and the `[auto]` marker are rendered from `annotations` and `provenance.auto`, which this payload does not touch, so they survive the rewrite by construction. Do not restate them in the payload. Why they matter and what it costs to lose one: `references/sequence-grammar.md`.
+
+Work that spans several files or independent outcomes does not become a longer body. Escalate it, or hand the identity to `/session-task-planning`, which attaches expanded artifacts to that same `SEQ-NNN`.
 
 ### Step 4: Escalate when needed
 
-If the entry is too big or diverges from the app's direction, do not break it down. Instead:
-- **Leave the entry line untouched.** Do not append a `(needs research-design)` tag to it: an entry carries exactly one trailing status token, and a second, unknown tag hides the ` ⇄ ` annotations behind it (`references/sequence-grammar.md`).
-- Record the escalation on its own line **immediately below** the entry, as an HTML comment:
-  `<!-- session-flow: SEQ-NNN escalated to research-design YYYY-MM-DD -->`
+If the item is too big or diverges from the app's direction, do not record a breakdown. Instead:
+
+- **Leave `needs_breakdown` set.** The item is not prepared, and the rendered entry should keep saying so.
+- Add the escalation to the record's `notes`, which renders as its own comment line below the entry:
+  `{"metadata": {"notes": ["<!-- session-flow: SEQ-NNN escalated to research-design YYYY-MM-DD -->"]}}`
+  The patch replaces the list, so carry any note already on the record forward with it.
 - Recommend `/session-research-design` for a cowork session with the user.
 
 ### Step 5: Report
 
-Summarize: entries groomed (with new breakdown paths), entries escalated, entries skipped (already healthy).
+Summarize: items groomed, items escalated, items skipped (already prepared).
 
-Call out provenance: state how many of the groomed entries were `[auto]`, and name them. An unattended intake feed is exactly the thing that accumulates unnoticed, so a groom pass is the natural place for the user to see what a bot added since they last looked.
+Call out provenance: state how many of the groomed items were `[auto]`, and name them. An unattended intake feed is exactly the thing that accumulates unnoticed, so a groom pass is the natural place for the user to see what a bot added since they last looked. State also that none of the groomed items became eligible: they are prepared, not accepted.
 
 ## Running Periodically with /loop
 
@@ -72,6 +113,6 @@ Groom is designed to run unattended on an interval:
 /loop 30m /session-groom
 ```
 
-Each tick scans for new raw one-liners (e.g. ones a user pasted in) and prepares them. Because anything significant is escalated rather than auto-actioned, periodic grooming is safe — it never silently commits to a large change.
+Each tick prepares whatever was captured since the last one. Because grooming never accepts an item and anything significant is escalated rather than auto-actioned, periodic grooming is safe — it never silently commits to a large change, and it cannot make one executable.
 
 Chain context: see `references/workflow-overview.md`.

@@ -1191,6 +1191,83 @@ def restore(request: dict) -> dict:
     }
 
 
+def parse_binding(payload: dict):
+    """Return the repository binding to record, or None when the payload names none."""
+    binding = payload.get("repository")
+    if binding is None:
+        return None
+    if not isinstance(binding, dict):
+        raise InvalidRequestError(
+            "`repository` must be an object; pass {\"repository\": {\"name\": \"<repo>\", "
+            "\"path\": \"<path to it, relative to the work root>\"}}",
+            repository=binding,
+        )
+    return records.parse_repositories([binding])[0]
+
+
+def bound_repositories(existing: list, binding) -> list:
+    """Add the binding once. A name already bound elsewhere is a conflict, not an overwrite."""
+    if binding is None:
+        return existing
+    for current in existing:
+        if current["name"] != binding["name"]:
+            continue
+        if current["path"] == binding["path"]:
+            return existing
+        raise InvalidIdentityError(
+            f"repository {binding['name']} is already bound to {current['path']} in "
+            f"{NAMESPACE_FILE}; rename the binding or correct its path rather than rebinding it",
+            binding=binding["name"],
+        )
+    return existing + [binding]
+
+
+def bind_namespace(request: dict) -> dict:
+    """Create the work root's namespace.json, or bind one more repository into it.
+
+    The namespace UUID is allocated once and never rewritten: a second one orphans
+    every record already under the root.
+    """
+    payload = request.get("input") or {}
+    if not isinstance(payload, dict):
+        raise InvalidRequestError(
+            "the bind-namespace payload must be a JSON object carrying an optional `repository` "
+            "binding and `coordinator`; omit --input to create the namespace alone"
+        )
+    binding = parse_binding(payload)
+    work_root = Path(request["work_root"])
+    if work_root.exists() and not work_root.is_dir():
+        raise InvalidIdentityError(
+            f"{work_root} is configured as the work root but is not a directory; correct "
+            "`paths.work` in .session-flow.json or move the file out of the way",
+            work_root=str(work_root),
+        )
+    work_root.mkdir(parents=True, exist_ok=True)
+    with root_lock(work_root, coordinator_name(payload)):
+        created = not namespace_path(work_root).is_file()
+        document = (
+            {"format": RECORD_FORMAT_VERSION, "namespace": str(uuid.uuid4()), "repositories": []}
+            if created
+            else read_namespace(work_root)
+        )
+        repositories = validate_bindings(work_root, bound_repositories(document["repositories"], binding))
+        changed = created or repositories != document["repositories"]
+        document["repositories"] = repositories
+        if changed:
+            write_json(namespace_path(work_root), document)
+        return dict(
+            document,
+            created=created,
+            changed=changed,
+            path=str(namespace_path(work_root)),
+            commit=(
+                commit_work_root(work_root, "session-flow: bind namespace")
+                if changed
+                else git_failure("the namespace was already bound, so there was nothing to commit")
+            ),
+        )
+
+
 def namespace_report(work_root: Path) -> dict:
     try:
         return {"namespace": read_namespace(work_root)["namespace"]}
@@ -1222,21 +1299,44 @@ def journal_report(work_root: Path) -> dict:
         }
 
 
+def unversioned_limitation(work_root: Path, enclosing) -> str:
+    nested = (
+        f" It is ignored by the enclosing repository at {enclosing}, which therefore versions "
+        "nothing under it."
+        if enclosing
+        else ""
+    )
+    return (
+        f"the work root at {work_root} is not a Git repository: backup and restore are "
+        f"unavailable and applied transitions keep no history.{nested} Run "
+        f"`git -C {work_root} init -b main` and commit the records to enable them."
+    )
+
+
+def ignored_by_enclosing(work_root: Path) -> bool:
+    """True when the enclosing repository ignores the work root, so it tracks nothing in it."""
+    completed = run_git(work_root, ["check-ignore", "-q", "."])
+    return completed is not None and completed.returncode == 0
+
+
 def versioning_report(work_root: Path) -> dict:
+    """Report what actually versions the work root: its own repository, an enclosing one, or nothing.
+
+    `git rev-parse --show-toplevel` answers for the nearest enclosing repository, so a
+    gitignored root nested in a tracked repository would otherwise read as versioned.
+    """
     toplevel = git_toplevel(work_root)
-    if toplevel is None:
-        return {
-            "versioned": False,
-            "limitations": [
-                f"the work root at {work_root} is not a Git repository: backup and restore are "
-                "unavailable and applied transitions keep no history. Run "
-                f"`git -C {work_root} init -b main` and commit the records to enable them."
-            ],
-        }
+    own = toplevel is not None and os.path.realpath(toplevel) == os.path.realpath(str(work_root))
+    if toplevel is None or (not own and ignored_by_enclosing(work_root)):
+        report = {"versioned": False, "limitations": [unversioned_limitation(work_root, toplevel)]}
+        if toplevel is not None:
+            report["enclosing_repository"] = toplevel
+        return report
     remotes = git_value(work_root, ["remote"])
     report = {
         "versioned": True,
         "repository": toplevel,
+        "own_repository": own,
         "branch": git_value(work_root, ["symbolic-ref", "--quiet", "--short", "HEAD"]),
         "commit": git_value(work_root, ["rev-parse", "HEAD"]),
         "remotes": remotes.split() if remotes else [],

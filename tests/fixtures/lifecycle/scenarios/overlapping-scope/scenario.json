@@ -1,0 +1,17 @@
+{
+  "scenario": "overlapping-scope",
+  "work_root": "work",
+  "summary": "SEQ-401/A1 and SEQ-401/A2 are both ready and both write records.py.",
+  "request": {
+    "seq": "SEQ-401",
+    "tasks": [
+      "A1",
+      "A2"
+    ]
+  },
+  "stop": {
+    "match": "overlapping write scope",
+    "code": "invalid-request",
+    "detail": "SEQ-401/A1 and SEQ-401/A2 both write scripts/session_flow/records.py"
+  }
+}

@@ -966,6 +966,129 @@ class RestoreTest(StoreCase):
         self.assertTrue((project / "work" / "namespace.json").is_file())
 
 
+@unittest.skipUnless(GIT_AVAILABLE, NEEDS_GIT)
+class VersioningReportTest(StoreCase):
+    """What versions the work root: its own repository, an enclosing one, or nothing.
+
+    `git rev-parse --show-toplevel` run inside the root answers for the nearest
+    enclosing repository, so the report must not read that as the root being versioned.
+    """
+
+    def ignore_the_work_root(self) -> None:
+        (self.project / ".gitignore").write_text("_devdocs/work/\n", encoding="utf-8")
+
+    def report(self) -> dict:
+        return store.versioning_report(self.root)
+
+    def test_a_root_that_is_its_own_repository_is_versioned(self):
+        initialize_repository(self.root)
+        report = self.report()
+        self.assertTrue(report["versioned"])
+        self.assertTrue(report["own_repository"])
+        self.assertEqual(os.path.realpath(self.root), os.path.realpath(report["repository"]))
+
+    def test_a_root_ignored_by_the_enclosing_repository_is_unversioned(self):
+        self.ignore_the_work_root()
+        initialize_repository(self.project)
+        report = self.report()
+        self.assertFalse(report["versioned"])
+        self.assertEqual(
+            os.path.realpath(self.project), os.path.realpath(report["enclosing_repository"])
+        )
+        self.assertIn("ignored by the enclosing repository", report["limitations"][0])
+
+    def test_a_root_tracked_by_the_enclosing_repository_is_versioned_by_it(self):
+        initialize_repository(self.project)
+        report = self.report()
+        self.assertTrue(report["versioned"])
+        self.assertFalse(report["own_repository"])
+        self.assertEqual(os.path.realpath(self.project), os.path.realpath(report["repository"]))
+
+    def test_a_root_in_no_repository_at_all_is_unversioned(self):
+        report = self.report()
+        self.assertFalse(report["versioned"])
+        self.assertNotIn("enclosing_repository", report)
+        self.assertIn("is not a Git repository", report["limitations"][0])
+
+    def test_doctor_reports_an_ignored_nested_root_as_unversioned(self):
+        self.ignore_the_work_root()
+        initialize_repository(self.project)
+        completed, answer = self.run_cli("doctor")
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        storage = answer["result"]["storage"]
+        self.assertFalse(storage["versioned"])
+        self.assertTrue(
+            any("ignored by the enclosing repository" in line for line in storage["limitations"]),
+            storage["limitations"],
+        )
+
+
+class BindNamespaceTest(StoreCase):
+    """`bind-namespace` creates the work root's namespace.json and binds repositories into it."""
+
+    def bind(self, document=None, *, project=None):
+        completed, answer = self.run_cli("bind-namespace", document, project=project)
+        return completed, answer
+
+    def namespace_document(self) -> dict:
+        return json.loads((self.root / "namespace.json").read_text(encoding="utf-8"))
+
+    def test_an_unbound_root_gets_a_namespace_written_by_the_runtime(self):
+        (self.root / "namespace.json").unlink()
+        completed, answer = self.bind()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        result = answer["result"]
+        self.assertTrue(result["created"])
+        self.assertEqual(records.parse_namespace(result["namespace"]), result["namespace"])
+        self.assertEqual(store.RECORD_FORMAT_VERSION, self.namespace_document()["format"])
+        self.assertEqual([], self.namespace_document()["repositories"])
+
+    def test_an_absent_work_root_is_created_with_its_namespace(self):
+        shutil.rmtree(self.root)
+        completed, answer = self.bind()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertTrue(answer["result"]["created"])
+        self.assertTrue((self.root / "namespace.json").is_file())
+
+    def test_a_second_call_never_reallocates_the_namespace(self):
+        before = self.namespace_document()
+        completed, answer = self.bind()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertFalse(answer["result"]["created"])
+        self.assertFalse(answer["result"]["changed"])
+        self.assertEqual(before, self.namespace_document())
+
+    def test_a_repository_binding_is_added_once(self):
+        (self.project / "sibling").mkdir()
+        existing = self.namespace_document()["repositories"]
+        binding = {"repository": {"name": "sibling", "path": "../../sibling"}}
+        _, first = self.bind(binding)
+        self.assertTrue(first["result"]["changed"])
+        self.assertEqual(existing + [binding["repository"]], self.namespace_document()["repositories"])
+        _, second = self.bind(binding)
+        self.assertFalse(second["result"]["changed"])
+        self.assertEqual(existing + [binding["repository"]], self.namespace_document()["repositories"])
+
+    def test_a_binding_that_is_not_a_directory_is_refused_before_writing(self):
+        error = self.assert_fails_without_writing(
+            "bind-namespace", {"repository": {"name": "gone", "path": "../../gone"}}, "invalid-identity"
+        )
+        self.assertIn("not a directory", error["message"])
+
+    def test_a_name_already_bound_elsewhere_is_a_conflict_rather_than_an_overwrite(self):
+        (self.project / "sibling").mkdir()
+        (self.project / "other").mkdir()
+        self.bind({"repository": {"name": "sibling", "path": "../../sibling"}})
+        error = self.assert_fails_without_writing(
+            "bind-namespace", {"repository": {"name": "sibling", "path": "../../other"}}, "invalid-identity"
+        )
+        self.assertIn("already bound", error["message"])
+
+    def test_a_locked_root_refuses_to_bind(self):
+        self.install_owner("live-owner.json", pid=os.getpid())
+        self.assert_fails_without_writing("bind-namespace", None, "root-busy")
+
+
 class DoctorStorageTest(StoreCase):
     """`doctor` reports the work root's recovery and versioning state as limitations."""
 

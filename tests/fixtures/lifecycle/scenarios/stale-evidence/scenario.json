@@ -1,0 +1,10 @@
+{
+  "scenario": "stale-evidence",
+  "work_root": "work",
+  "summary": "SEQ-601 carries acceptance and evidence that both apply to the stored scope, so a meaning-changing revision makes both inapplicable.",
+  "completion_gate": {
+    "match": "stale evidence",
+    "code": "inapplicable-evidence",
+    "detail": "evidence gathered against the previous fingerprint no longer applies after a meaning-changing scope edit"
+  }
+}

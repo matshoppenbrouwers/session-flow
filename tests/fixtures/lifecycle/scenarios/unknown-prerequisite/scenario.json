@@ -1,0 +1,16 @@
+{
+  "scenario": "unknown-prerequisite",
+  "work_root": "work",
+  "summary": "SEQ-201/A1 depends on SEQ-201/A9, which has no record.",
+  "request": {
+    "seq": "SEQ-201",
+    "tasks": [
+      "A1"
+    ]
+  },
+  "stop": {
+    "match": "unknown prerequisite",
+    "code": "invalid-identity",
+    "detail": "SEQ-201/A1 depends on SEQ-201/A9 and no record answers to that identity"
+  }
+}

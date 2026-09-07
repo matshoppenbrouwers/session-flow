@@ -30,6 +30,7 @@ from session_flow import records  # noqa: E402
 COMMAND_FAMILIES = frozenset(
     {
         "doctor",
+        "bind-namespace",
         "show",
         "capture",
         "revise",
