@@ -24,7 +24,8 @@ Use AskUserQuestion:
   - B) label: "Standard", description: "Simplify, review, test suite, and commit. Skips security audit, architecture docs, and manual test plan."
   - C) label: "Quick", description: "Simplify, review, and commit only. Fastest option for minor changes."
 
-**Scope reference:**
+**Preset seed:** the chosen preset seeds the step set; it is not consulted again once the set is
+resolved.
 
 | Step | Full | Standard | Quick |
 |------|------|----------|-------|
@@ -37,7 +38,8 @@ Use AskUserQuestion:
 | 7. Manual test plan | yes | - | - |
 | 8. Final commit | yes | yes | - |
 
-Verification (`/session-verify`) is always optional — offered after Step 7 on Full completions only; see Step 7.5 below.
+Verification (`/session-verify`) is never part of the step set. Step 7.5 offers it on its own
+criteria.
 
 **Question 2: Add-ons** (only ask if user chose Standard or Quick)
 
@@ -63,7 +65,59 @@ Use AskUserQuestion:
   - A) label: "Sub-agent (Recommended)", description: "Dispatch as a subagent (inherits the parent session's model). Faster and cheaper. Good for routine changes."
   - B) label: "Inline", description: "Run in the main conversation using your current model. More thorough. Better for security-sensitive or high-risk changes."
 
-Store the user's choices and apply them throughout the workflow. Merge the base scope with any selected add-ons to determine which steps to run.
+**Resolve the step set now.** Take the step numbers marked "yes" in the preset's column, add every
+step the user selected as an add-on, and write the result out as one explicit list, for example
+`resolved steps: 1, 2, 3, 4`. Show that list to the user before Step 1.
+
+The resolved set is the only thing later steps consult. Do not re-read the preset name after this
+point, and do not drop a selected add-on because the preset excluded it — a selected audit runs
+under Quick exactly as it does under Full. Also carry the audit mode from Question 3 when Step 3 is
+in the set.
+
+## Ownership Snapshot
+
+Take this snapshot before Step 1, whatever the scope was configured to be. Both commits stage from
+it, and nothing outside it may enter them.
+
+1. Record the worktree as it stands:
+
+```bash
+git status --porcelain=v1 --untracked-files=all
+git diff --cached --name-only
+```
+
+2. Split every path the snapshot reports into two lists and show both to the user:
+   - **In scope** — the implementation this run refines.
+   - **Unrelated** — everything else: files the user was editing, files they had already staged,
+     untracked scratch files.
+
+   When a path's side is not obvious from this session's own work, ask with **AskUserQuestion**
+   instead of guessing. A path stays unrelated until the user says it is in scope.
+
+3. If any unrelated path appears in `git diff --cached --name-only`, stop here. Name those paths and
+   ask the user to commit or unstage them before the run continues — a flow commit taken while
+   unrelated content sits in the index carries that content.
+
+4. The **authorized set** is the in-scope list plus the paths this workflow's own steps write later
+   (review fixes, architecture docs, the manual test plan). Add a path when a step writes it. Never
+   add a path from the unrelated list.
+
+### The staging rule
+
+Step 4 and Step 8 both commit this way, substituting the authorized paths and their own message:
+
+```bash
+git add -- <authorized paths>
+git diff --cached --name-only
+git commit --only -- <authorized paths> -m "<message>"
+```
+
+- Stage explicit paths only. Never `git add -A`, never `git add .`, and never a directory pathspec
+  that would sweep in neighbouring files.
+- Read the staged diff before committing. If it names a path this run did not author, stop, report
+  those paths, and commit nothing.
+- Untracked files outside the authorized set are never staged, at either commit.
+- `--only` keeps index content outside the named paths out of the commit.
 
 ## Workflow Steps
 
@@ -104,7 +158,7 @@ Loop until the reviewer passes with no significant issues, but do not yet run th
 
 ### Step 3: Security & Liability Audit
 
-**Skip if:** user chose Standard or Quick scope in workflow configuration.
+**Run when:** 3 is in the resolved step set.
 
 **Resolve the reference paths first (both modes).** The subagent starts in the project CWD and cannot resolve paths relative to the plugin, so *this* skill resolves them and passes absolute paths:
 
@@ -145,15 +199,20 @@ If findings are reported:
 
 ### Step 4: Commit (Checkpoint)
 
-Commit the simplified and reviewed code:
+Commit the simplified and reviewed code, following the staging rule with the authorized paths the
+snapshot and Steps 1-3 produced:
 
 ```bash
-git add -A && git commit -m "refactor: simplify and address review feedback"
+git add -- <authorized paths>
+git diff --cached --name-only
+git commit --only -- <authorized paths> -m "refactor: simplify and address review feedback"
 ```
 
 This creates a checkpoint before the test suite and documentation steps.
 
 ### Step 5: Run Test Suite
+
+**Run when:** 5 is in the resolved step set.
 
 Run the project's full test suite to verify all changes work correctly.
 
@@ -171,6 +230,8 @@ Detect and use the project's test runner:
 
 ### Step 6: Update Architecture Docs
 
+**Run when:** 6 is in the resolved step set.
+
 If the project has architecture documentation (detect via `.session-flow.json` config or scan for `architecture/`, `_devdocs/architecture/`, `docs/architecture/`, `ARCHITECTURE.md`), use the `/update-architecture` skill for surgical, token-efficient documentation updates. Paths may point outside the repo; resolve them relative to the repo root.
 
 1. Identify which layer docs need updating based on changed files
@@ -181,6 +242,8 @@ If the project has architecture documentation (detect via `.session-flow.json` c
 Skip this step if the project has no architecture docs.
 
 ### Step 7: Generate Manual Test Plan
+
+**Run when:** 7 is in the resolved step set.
 
 Generate a manual test plan for the feature that was just implemented.
 
@@ -265,10 +328,15 @@ Do not run automatically. Present the option to the user; proceed to Step 8 if t
 
 ### Step 8: Final Commit
 
-Commit the documentation updates and test plan:
+**Run when:** 8 is in the resolved step set and Steps 5-7 left something to commit.
+
+Commit the documentation updates and test plan, again by the staging rule — the authorized paths
+here are the docs and test-plan files Steps 5-7 wrote, plus any test fixes they required:
 
 ```bash
-git add -A && git commit -m "chore: update docs and add manual test plan"
+git add -- <authorized paths>
+git diff --cached --name-only
+git commit --only -- <authorized paths> -m "chore: update docs and add manual test plan"
 ```
 
 ## Execution Notes
@@ -276,13 +344,22 @@ git add -A && git commit -m "chore: update docs and add manual test plan"
 - Run each step sequentially -- each depends on the previous
 - If any step reveals significant issues, address them before proceeding
 - The two commits create clear checkpoints: one for the refined implementation, one for docs and the test plan
+- Both commits stage the explicit authorized paths from the ownership snapshot; neither uses `git add -A`
 - Tests run once after all code changes (Step 5) to minimize test suite execution time
-- Step 3 (security audit) can be skipped for trivial changes (typos, docs-only)
+- For trivial changes (typos, docs-only), leave the audit out of the step set at configuration time rather than skipping Step 3 once it is in the set
 - Step 7 generates a manual test plan for QA -- skip if the feature has no user-facing behavior
 - Step 7.5 (verification) is always optional -- present but do not auto-run
-- If no changes are made in steps 5-7, skip the final commit
+- If Steps 5-7 changed nothing, there is nothing for Step 8 to stage
 
 ## Anti-Patterns
+
+**Staging everything at a checkpoint:**
+- BAD: `git add -A && git commit` — the user's unrelated edits and stray untracked files ride along
+- GOOD: stage the authorized paths from the ownership snapshot, read the staged diff, then commit
+
+**Re-deriving a step's applicability from the preset:**
+- BAD: Step 3 checks whether the user chose Standard or Quick, after they added the audit as an add-on
+- GOOD: Step 3 checks whether 3 is in the resolved step set, which the add-on already put there
 
 **Running full suite between every step:**
 - BAD: Run the full test suite after simplify, again after review, again after the audit

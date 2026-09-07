@@ -12,49 +12,58 @@ Open with one sentence saying what you are about to do and what it will produce.
 ## Non-Negotiables
 
 1. **Never execute without a parsed task plan.** If no `/session-task-planning` output exists, stop and run that first.
-2. **Respect the dependency graph.** A task with `[parallel-after:X]` where X is still `[ ]` cannot start. No exceptions.
-3. **Mark `[x]` in the todo file as soon as a task completes.** Other tasks may be waiting on it. Don't batch updates.
-4. **Parallel = one message with multiple Task tool calls.** Not multiple sequential messages. The whole point of parallelism is concurrent execution.
-5. **Stop on blocking failure.** If a task fails and other tasks depend on it, pause the dependent branch and report to the user. Do not silently skip and continue.
-6. **The acceptance tests are written before the implementers start, by a different agent, and implementers never edit them.** `test-author` writes them from the plan's Accept criteria, so the tests measure the specification rather than the implementation's own opinion of it. This is about who writes the oracle, not about designing through tests: the behaviour was fixed when the plan was approved.
+2. **Dispatch the named task IDs and nothing else.** Every invocation carries a target scope — a SEQ identity (where one exists) and an explicit list of task IDs. A plan file is a container holding tasks that belong to different scopes; opening it grants no permission to run the tasks the caller did not name.
+3. **Respect the dependency graph.** A task with `[parallel-after:X]` where X is still `[ ]` cannot start. No exceptions.
+4. **Mark `[x]` in the todo file as soon as a task completes.** Other tasks may be waiting on it. Don't batch updates. A task's `[x]` records that its own Test passed — it is progress, not scope acceptance.
+5. **Parallel = one message with multiple Task tool calls.** Not multiple sequential messages. The whole point of parallelism is concurrent execution.
+6. **Stop on blocking failure.** If a task fails and other tasks depend on it, pause the dependent branch and report to the user. Do not silently skip and continue.
+7. **The acceptance tests are written before the implementers start, by a different agent, and implementers never edit them.** `test-author` writes them from the plan's Accept criteria, so the tests measure the specification rather than the implementation's own opinion of it. This is about who writes the oracle, not about designing through tests: the behaviour was fixed when the plan was approved.
 
 ## Prerequisites
 
 - A task plan file produced by `/session-task-planning` with dependency tags
 - The plan should have `[seq]`, `[parallel-after:X]`, and status `[ ]` tags
+- A target scope: the task IDs to build. `/session-next` supplies the SEQ identity and its owned IDs; a direct invocation must name the IDs, and when the user asks for a plan by name, list its open task IDs and have them confirm the set before Step 1.
 
-**Invoked by session-next:** When a `SEQUENCE.md` entry links to a multi-task phase file, `/session-next` hands off to this skill. After the linked phase (or anchored task) is fully `[x]`, mark the source sequence entry `[x]` in `SEQUENCE.md` too.
+**Invoked by session-next:** `/session-next` hands off a resolved scope, not a file. Report the two results separately — per-task progress and the scope's aggregate acceptance — and let `/session-next` close the sequence entry; the entry's marker covers exactly the scope's task IDs.
 
 ## Execution Algorithm
 
-### Step 1: Parse the task plan
+### Step 1: Build the graph from the target scope
 
-Read the todo file. Extract:
-- Task IDs (e.g., `1A-1`, `1A-2`)
+Read the todo file and locate each task ID the scope names. For each one extract:
+- The task heading and its ID (e.g., `1A-1`, `1A-2`)
 - Dependency tags (`[seq]`, `[parallel-after:X]`)
 - Status (`[ ]`, `[x]`)
 - Priority (`P1`, `P2`, `P3`)
+- Files — the task's declared write scope
 
-Build an execution graph from the tags.
+Build nodes for the named IDs and then walk their dependency tags to add the **permitted prerequisite closure**: the tasks the named IDs transitively depend on. A `[seq]` task depends on the preceding task in its own section. Closure members are context, not extra work — a member already `[x]` contributes its result and files to the payload, and nothing else in the file becomes a node.
 
-**Phase exit criterion:** every task in the todo file maps to a node in the graph with dependencies resolved. If a tag is ambiguous (e.g. `[parallel-after:X]` where X doesn't exist), stop and ask the user.
+Stop before dispatching anything and report, when:
 
-### Step 2: Author the phase's acceptance tests
+- **A named ID is missing or matches more than one heading.** Report the ID and what it matched.
+- **A prerequisite is unknown.** `[parallel-after:X]` names an X with no task heading in this file. Report the dangling reference; do not guess which task was meant.
+- **The closure contains a cycle.** Report the ID chain that closes on itself.
+- **A closure member is still `[ ]`.** The named task is not eligible. Report the unmet prerequisite IDs and offer to add them to the scope, which the caller decides — never pull them in yourself.
+- **Two ready tasks declare overlapping write scopes.** See Step 4.
 
-**Before dispatching any of a phase's implementers**, dispatch `test-author` **once for the phase**:
+### Step 2: Author the scope's acceptance tests
+
+**Before dispatching any implementer**, dispatch `test-author` **once for the target scope**:
 
 ```
 Task tool:
   subagent_type: "test-author"
   prompt: |
-    Write the acceptance tests for phase {N} of {plan path}, before implementation.
+    Write the acceptance tests for task IDs {scope IDs} of {plan path}, before implementation.
 
     Design artifact: {absolute path to the plan / design doc}
-    Public interface: {signatures, types, and contracts the phase specifies}
+    Public interface: {signatures, types, and contracts the scope's tasks specify}
 
-    Tasks in this phase:
+    Tasks in the target scope:
     - {TASK-ID}: {title} — Accept: {Accept criterion} — Test: {Test command}
-    {repeat per task}
+    {repeat per task in scope}
 
     The code does not exist yet; red is the expected outcome. Report the
     test paths you wrote, keyed by task ID.
@@ -62,24 +71,26 @@ Task tool:
 
 Record the returned test paths **per task** — they go into each implementer's dispatch payload as its oracle. If a task comes back with no test path, note it and say so when you dispatch that task; do not invent one.
 
-**Expected failures.** These tests fail, and some will not even collect until the tasks they depend on land. That is the expected state before implementation, not a blocking failure — do not treat a red or uncollectable oracle as a reason to pause the phase, and do not ask an implementer to "fix" it. The only failures that stop a phase are the ones the Error Handling section names.
+**Expected failures.** These tests fail, and some will not even collect until the tasks they depend on land. That is the expected state before implementation, not a blocking failure — do not treat a red or uncollectable oracle as a reason to pause the scope, and do not ask an implementer to "fix" it. The only failures that stop a scope are the ones the Error Handling section names.
 
-One dispatch per phase, not per task.
+One dispatch per scope, not per task.
 
-**Small tasks routed from `session-next`:** a single-file backlog task keeps that skill's self-written-test rule. Do not dispatch `test-author` for a 20-minute task — the overhead exceeds the benefit. This step applies when a sequence entry links to a multi-task phase file.
+**Small tasks routed from `session-next`:** a single-file backlog task keeps that skill's self-written-test rule. Do not dispatch `test-author` for a 20-minute task — the overhead exceeds the benefit. This step applies when a scope holds several tasks.
 
 ### Step 3: Execute tasks in dependency order
 
 ```
-for each phase:
-  0. Dispatch test-author once (Step 2); record test paths per task
-  while uncompleted tasks exist in this phase:
-    1. Find all tasks whose dependencies are satisfied (all blockers [x])
-    2. Group into: sequential (single) vs parallel (multiple ready)
-    3. Dispatch accordingly (see below)
-    4. On completion, mark [x] in the todo file
-    5. Repeat
+0. Dispatch test-author once (Step 2); record test paths per task
+while a named task in the target scope is not [x]:
+  1. Find the named tasks whose dependencies are satisfied (all blockers [x])
+  2. Group into: sequential (single) vs parallel (multiple ready)
+  3. Check the group's write scopes do not overlap (Step 4)
+  4. Dispatch accordingly (see below)
+  5. On completion, mark [x] in the todo file
+  6. Repeat
 ```
+
+The loop ends when the named IDs are done. Tasks outside the scope keep whatever status they had.
 
 ### Step 4: Dispatch patterns
 
@@ -113,6 +124,8 @@ This is a prompt-level constraint, not a security boundary — nothing enforces 
 
 Files entries may be exact paths or directory globs (`src/lib/governor/**`). Pass them through verbatim. Because test paths belong to `test-author` and not to any task's Files field, this also keeps implementers out of the test files for free.
 
+**Overlapping write scopes stop the group.** Before dispatching a parallel group, compare the Files entries of its tasks — an identical path, or a path inside another task's glob, is an overlap. Do not dispatch the group and do not quietly serialise it: report the pair and the shared paths. Concurrent agents editing one file corrupt each other's work, and an overlap inside a parallel group means the plan's dependency analysis is wrong, which is the user's call to fix.
+
 **House rules in the payload.** If `.session-flow.json` sets `paths.conventions` and the file exists, include it in implementer payloads — it is designed to be short. Read `paths.lessons` as a one-line index; load nothing further unless a line bears on the task at hand. When neither key is set, dispatch without them.
 
 ### Step 5: Per-task agent workflow
@@ -132,15 +145,18 @@ For complex tasks (P1, multi-file), optionally run after completion:
 
 ### Step 7: Progress tracking
 
-After each task completes:
-1. Update the todo file: `[ ]` -> `[x]`
-2. Log: task ID, files changed, test result
-3. Check if new parallel opportunities are unlocked
+Live progress and aggregate acceptance are two separate records. Keep them separate: per-task progress says a task's own Test passed, and only aggregate acceptance says the scope's outcome holds.
 
-When every task is `[x]`:
-1. Run the project's full test suite
-2. Report summary: tasks completed, files changed, any issues
-3. Suggest running `/session-post-implementation` for refinement
+After each task completes:
+1. Update the todo file: `[ ]` -> `[x]` — this marks that task's own Test as passing, nothing wider
+2. Log: task ID, files changed, test result
+3. Check if new parallel opportunities are unlocked among the named tasks
+
+When every named task in the target scope is `[x]`:
+1. Run the project's full test suite and the scope's own Accept checks
+2. Report the aggregate verdict for the scope separately from the per-task marks. On failure, say the scope is integration-failed, name the failing checks, and leave the per-task marks as they are — they are still true
+3. Report summary: the scope's task IDs, files changed, any issues, and any task in the same plan file left untouched
+4. Suggest running `/session-post-implementation` for refinement
 
 ## Agent Prompt Template
 
@@ -177,6 +193,7 @@ If a test looks wrong, stop and report it — do not edit around it.
 
 ## Error Handling
 
+- A named ID that is missing or ambiguous, a dangling `[parallel-after:X]`, a cycle, an unmet prerequisite, or an overlapping write scope in a parallel group: stop before dispatch and report — see Step 1
 - Oracle tests failing or not collecting before implementation is not a failure — see **Expected failures** in Step 2
 - If an agent fails: log the error, skip the task, continue with independent tasks
 - If an implementer reports a test it believes is wrong: stop that task, surface the test and the Accept criterion to the user, and fix the test with `test-author` if the user agrees — never let the implementer edit it

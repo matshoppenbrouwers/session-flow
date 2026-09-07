@@ -7,6 +7,10 @@ SKILLS_ONLY=false
 DRY_RUN=false
 FORCE=false
 
+# Support files every installed skill entry may name. Removing an item here
+# removes it from the install; tests/test_installation.py checks that.
+SHARED_RESOURCES=("references" "THIRD_PARTY_NOTICES.md")
+
 usage() {
     echo "Usage: install.sh [OPTIONS]"
     echo ""
@@ -52,6 +56,12 @@ install_file() {
     local dest="$2"
     local skip_if_exists="${3:-false}"
 
+    if [[ ! -f "$src" ]]; then
+        echo "Error: missing source file $src"
+        echo "  Run install.sh from a complete session-flow checkout."
+        exit 1
+    fi
+
     if [[ "$DRY_RUN" == "true" ]]; then
         if [[ -f "$dest" && "$FORCE" != "true" ]]; then
             if [[ "$skip_if_exists" == "true" ]]; then
@@ -79,16 +89,106 @@ install_file() {
     echo "  Installed: $dest"
 }
 
+find_files() {
+    local root="$1"
+    local exclude="${2:-}"
+
+    if [[ ! -d "$root" ]]; then
+        echo "Error: missing source directory $root" >&2
+        echo "  Run install.sh from a complete session-flow checkout." >&2
+        exit 1
+    fi
+
+    if [[ -n "$exclude" ]]; then
+        find "$root" -type f ! -name "$exclude" -print0
+    else
+        find "$root" -type f -print0
+    fi
+}
+
+install_tree() {
+    local src_root="${1%/}"
+    local dest_root="${2%/}"
+    local exclude="${3:-}"
+    local file rel
+
+    while IFS= read -r -d '' file; do
+        rel="${file#"$src_root"/}"
+        install_file "$file" "$dest_root/$rel"
+    done < <(find_files "$src_root" "$exclude")
+}
+
+missing_in_tree() {
+    local src_root="${1%/}"
+    local dest_root="${2%/}"
+    local exclude="${3:-}"
+    local file rel
+
+    while IFS= read -r -d '' file; do
+        rel="${file#"$src_root"/}"
+        [[ -f "$dest_root/$rel" ]] || echo "$dest_root/$rel"
+    done < <(find_files "$src_root" "$exclude")
+}
+
+install_shared_resources() {
+    local resource
+
+    for resource in "${SHARED_RESOURCES[@]}"; do
+        if [[ -d "$REPO_DIR/$resource" ]]; then
+            install_tree "$REPO_DIR/$resource" "$TARGET/$resource"
+        else
+            install_file "$REPO_DIR/$resource" "$TARGET/$resource"
+        fi
+    done
+}
+
+missing_shared_resources() {
+    local resource
+
+    for resource in "${SHARED_RESOURCES[@]}"; do
+        if [[ -d "$REPO_DIR/$resource" ]]; then
+            missing_in_tree "$REPO_DIR/$resource" "$TARGET/$resource"
+        else
+            [[ -f "$TARGET/$resource" ]] || echo "$TARGET/$resource"
+        fi
+    done
+}
+
+require_present() {
+    local what="$1"
+    local missing="$2"
+
+    [[ -z "$missing" ]] && return 0
+
+    echo "Error: $what is incomplete after copying:"
+    echo "$missing" | sed 's/^/    /'
+    echo "  Entry files were not activated. Re-run install.sh with write access to $TARGET."
+    exit 1
+}
+
 echo "session-flow installer"
 echo "  Source: $REPO_DIR"
 echo "  Target: $TARGET"
 echo "  Scope:  $SCOPE"
 echo ""
 
+echo "Support files:"
+install_shared_resources
+if [[ "$DRY_RUN" != "true" ]]; then
+    require_present "shared support tree" "$(missing_shared_resources)"
+fi
+
+echo ""
 echo "Skills:"
 for skill_dir in "$REPO_DIR"/skills/*/; do
     skill_name="$(basename "$skill_dir")"
-    install_file "$skill_dir/SKILL.md" "$TARGET/skills/$skill_name/SKILL.md"
+    skill_dest="$TARGET/skills/$skill_name"
+
+    install_tree "$skill_dir" "$skill_dest" SKILL.md
+    if [[ "$DRY_RUN" != "true" ]]; then
+        require_present "$skill_name resources" "$(missing_in_tree "$skill_dir" "$skill_dest" SKILL.md)"
+    fi
+    install_file "$skill_dir/SKILL.md" "$skill_dest/SKILL.md"
 done
 
 if [[ "$SKILLS_ONLY" != "true" ]]; then

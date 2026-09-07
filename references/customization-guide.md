@@ -62,7 +62,7 @@ Skills will auto-detect other directories. Only configure what deviates from con
 
 ## Override Agents
 
-Session-flow bundles three agents: `code-reviewer`, `code-simplifier`, and `security-auditor`. You can replace any of them with your own.
+Session-flow bundles six agents: `code-reviewer`, `code-simplifier`, `codebase-researcher`, `external-researcher`, `security-auditor`, and `test-author`. You can replace any of them with your own.
 
 ### Precedence order (highest wins):
 

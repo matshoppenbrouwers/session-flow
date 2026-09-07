@@ -172,15 +172,17 @@ gatekeeper / add-task / task-planning ──> SEQUENCE.md ──> groom (prepare
 `/session-gatekeeper` and `/session-add-task` fill it, `/session-groom` keeps it ready (great under `/loop`), and `/session-next` works it down. "Implement the next task" is wired into CLAUDE.md/AGENTS.md by `/session-init`.
 
 ### User gates
-Every skill pauses for user approval at critical decision points:
+Skills pause for user approval where the decision is the user's to make:
 - **research-design:** After presenting the plan, before finalizing
-- **task-planning:** After showing the task breakdown, before writing the file
 - **delegation:** Before dispatching agents, showing what will run in parallel
-- **post-implementation:** After each agent completes, before proceeding to the next step
-- **release:** Before version bump, before tagging, before any publish step
+- **release:** Before the build, before satellite content updates, and on the verification reuse-or-rerun decision. Push, tag, and publish are printed as instructions, not executed
+
+Two skills decide up front instead of pausing mid-run:
+- **task-planning:** No save gate. The task file is written once every task passes the validation checklist; sequence registration is offered afterwards
+- **post-implementation:** Scope and add-ons are chosen in one configuration block before Step 1, so the steps then run without pausing between agents
 
 ### Parallel execution
-`delegation` is the only skill that dispatches multiple agents concurrently. It reads `[parallel-after:X]` tags from the task file and groups independent tasks into batches. Each batch runs in parallel; batches run sequentially.
+`delegation` and `research-design` both dispatch multiple agents concurrently. Delegation reads `[parallel-after:X]` tags from the task file and groups independent tasks into batches; each batch runs in parallel, batches run sequentially. Research-design sends its researcher dispatches in a single message.
 
 ---
 

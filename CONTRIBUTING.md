@@ -7,7 +7,7 @@ Before submitting a skill:
 - [ ] YAML frontmatter has only `name` and `description`
 - [ ] Description includes what it does AND when to trigger
 - [ ] SKILL.md is under 500 lines
-- [ ] Has an `**Announce:**` line
+- [ ] Opens with one sentence saying what it is about to do and what it will produce
 - [ ] Cross-references other steps by name, not number
 - [ ] No project-specific paths or tool references
 - [ ] Uses the path resolution pattern (config → detect → suggest init)

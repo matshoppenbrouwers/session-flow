@@ -16,6 +16,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 3. **User approves at both gates.** Step 3 (build) and Step 6 (satellite updates) require explicit user confirmation. No proceeding on silence.
 4. **Final version grep must be clean.** Before commit, grep the repo for the old version — nothing should remain except in `CHANGELOG.md`, lock files, and historical references.
 5. **Never skip the satellite scan.** The whole point of this skill is to catch the docs site, marketing page, and download modal that still say the old version.
+6. **Never accept a verification verdict without comparing its recorded commit range against the candidate revision.** A PASS is evidence about the revision it was recorded against. When they differ, the user decides reuse or rerun explicitly.
 
 ## Core Principle
 
@@ -30,7 +31,7 @@ A release is more than a version bump. Code ships alongside documentation, websi
 - All tests pass (run `/session-post-implementation` or the test suite first)
 - Working tree is clean or changes are committed
 - User knows the target version (or will provide it)
-- If this release ships a feature with a design doc, a PASS verification artifact exists (run `/session-verify` first). Not required for bugfix/refactor releases.
+- If this release ships a feature with a design doc, a PASS verification artifact exists (run `/session-verify` first) and its recorded commit range covers the release candidate, or the user has recorded a reuse decision. Not required for bugfix/refactor releases.
 
 ## Workflow
 
@@ -42,6 +43,19 @@ Verify readiness:
 2. **Test status**: Ask the user to confirm tests pass (or offer to run them).
 3. **Target version**: If not provided as argument, ask the user. Validate semver format.
 4. **Verification status**: If this release ships a feature that had a design doc (check `.session-flow.json.paths.plans`, else a detected `plans/`), look for a corresponding `_verification/{date}-{label}-verification.md` artifact with `Verdict: PASS` (or `PASS-WITH-CAVEATS` if the user accepts the caveats). If the artifact is missing or `FAIL`, offer to run `/session-verify` first. Skip for bugfix/refactor releases with no design doc.
+5. **Evidence applicability**: run the check below on the artifact found in check 4. Skip only when there is no artifact to reuse.
+
+#### Evidence applicability check
+
+A verdict is evidence about the revision it was recorded against, not about the release candidate.
+
+1. Read the artifact's `**Scope:**` line -- `/session-verify` writes it as `Commits {sha_first}..{sha_last} on branch {branch}`. That is the recorded commit range; take `{sha_last}` as the verified revision. If the line is absent or unparseable, or the recorded revision is not in this repository, the evidence has no applicability -- offer `/session-verify` against the candidate and do not proceed on the old verdict.
+2. Resolve the candidate revision with `git rev-parse HEAD` on the branch being released.
+3. Compare. The evidence covers the candidate only when the verified revision equals the candidate revision and the recorded branch is the branch being released. Otherwise report the gap using `git rev-list --count {sha_last}..HEAD` and `git diff --stat {sha_last}..HEAD`.
+4. When they differ, stop and present: artifact path, verdict, verified revision, candidate revision, commit count between them, and the changed paths. Then ask for one explicit decision -- no default and no proceeding on silence:
+   - **Rerun** -- invoke `/session-verify` against the candidate. Required when the diff touches source, tests, dependencies, build/packaging, or the design doc the artifact verified.
+   - **Reuse** -- the user states why the diff cannot change the verified behaviour. Proportionate for documentation, comments, changelog, or satellite-content-only diffs; never inferred from a small diff or a passing test run.
+5. Record the outcome. Add a `Verification evidence` block to the Step 8 commit body and repeat it in the Step 9 summary, naming the artifact path, verified revision, candidate revision, the decision (`reuse` or `rerun`), and the user's stated reason verbatim. A reuse decision that was not recorded did not happen.
 
 ### Step 2: Version bump
 
@@ -206,6 +220,11 @@ Print a summary of what's ready and what the user needs to do next:
 - {Artifacts packaged / listed}
 - {Satellite content updated}
 
+### Verification evidence:
+- Artifact: {path} ({verdict})
+- Verified revision: {sha_last} -- candidate revision: {candidate}
+- Decision: {reuse | rerun} -- {user's stated reason}
+
 ### Next steps:
 1. {Push / tag / create GitHub release / publish -- project-specific}
 2. {Deploy docs site -- if applicable}
@@ -216,6 +235,7 @@ Print a summary of what's ready and what the user needs to do next:
 ## Execution Notes
 
 - Steps 3 and 6 are **user gates** -- always wait for confirmation before proceeding
+- The reuse-or-rerun decision in Step 1 is a third user gate -- it is the user's call, recorded, not the agent's judgement
 - The satellite scan (Step 5) is intentionally broad -- it's better to flag something unnecessary than to miss something important
 - Lock files (`package-lock.json`, `Cargo.lock`, `pnpm-lock.yaml`) should be regenerated by the build, not manually edited
 - Exclude from old-version grep: `CHANGELOG.md`, `*.lock`, `node_modules/`, `.git/`, `target/`, `build/`, `dist/`
@@ -225,5 +245,9 @@ Print a summary of what's ready and what the user needs to do next:
 **Grepping too aggressively:**
 - BAD: Flag every occurrence of "0.2.0" including in unrelated constants
 - GOOD: Focus on config files, docs, and distribution -- skip test fixtures and historical references
+
+**Treating a stored verdict as current:**
+- BAD: Find `Verdict: PASS`, note the tests pass now, and release
+- GOOD: Compare the artifact's recorded commit range with the candidate revision, and release on old evidence only through a recorded reuse decision
 
 Chain context: see `references/workflow-overview.md`.
