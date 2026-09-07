@@ -1,0 +1,24 @@
+{
+  "operation": "op-result-0001",
+  "coordinator": "session-delegation",
+  "actor": "agent:store-implementer",
+  "seq": "SEQ-001",
+  "task": "A1",
+  "expect_revision": 2,
+  "result": {
+    "outcome": "passed",
+    "checks": [
+      {
+        "command": "python3 -B -m unittest -v tests.test_store",
+        "observed": "ok"
+      }
+    ],
+    "evidence": {
+      "criteria": "one effective writer",
+      "environment": "WSL Ubuntu, ext4 fixture root"
+    },
+    "limitations": [
+      "no multi-host run was attempted"
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "operation": "op-claim-0001",
+  "coordinator": "session-delegation",
+  "actor": "agent:store-implementer",
+  "seq": "SEQ-001",
+  "task": "A1",
+  "expect_revision": 1,
+  "allowed_paths": [
+    "scripts/session_flow/store.py",
+    "tests/test_store.py"
+  ]
+}

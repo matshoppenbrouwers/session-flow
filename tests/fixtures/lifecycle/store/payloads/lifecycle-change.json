@@ -1,0 +1,20 @@
+{
+  "operation": "op-lifecycle-0001",
+  "coordinator": "session-next",
+  "provenance": {
+    "actor": "user",
+    "authority": {
+      "source": "user request",
+      "revision": "2026-09-07T10:00:00Z"
+    }
+  },
+  "changes": [
+    {
+      "seq": "SEQ-001",
+      "expect_revision": 1,
+      "metadata": {
+        "lifecycle": "active"
+      }
+    }
+  ]
+}

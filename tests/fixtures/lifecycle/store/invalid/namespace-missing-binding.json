@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "namespace": "6f1d4a02-3c58-4a1e-9b77-0c2f8d5e4411",
+  "repositories": [
+    {
+      "name": "absent-companion",
+      "path": "../../absent-companion"
+    }
+  ]
+}

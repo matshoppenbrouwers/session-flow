@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "entries": [
+    {
+      "seq": "SEQ-002",
+      "state": "reserved",
+      "operation": "op-crashed-reservation",
+      "at": "2026-09-05T09:30:00Z",
+      "note": "the coordinator stopped after reserving the identity and before writing the record"
+    }
+  ]
+}

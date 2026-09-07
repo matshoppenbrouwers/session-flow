@@ -1,0 +1,28 @@
+{
+  "operation": "op-two-record-0001",
+  "coordinator": "session-next",
+  "provenance": {
+    "actor": "user",
+    "authority": {
+      "source": "user request",
+      "revision": "2026-09-07T12:00:00Z"
+    }
+  },
+  "changes": [
+    {
+      "seq": "SEQ-001",
+      "expect_revision": 1,
+      "metadata": {
+        "lifecycle": "active"
+      }
+    },
+    {
+      "seq": "SEQ-001",
+      "task": "A1",
+      "expect_revision": 1,
+      "metadata": {
+        "lifecycle": "active"
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "operation": "op-capture-0001",
+  "coordinator": "session-add-task",
+  "provenance": {
+    "actor": "user",
+    "source": "session-gatekeeper",
+    "captured_at": "2026-09-07T10:05:00Z"
+  },
+  "changes": [
+    {
+      "new": true,
+      "metadata": {
+        "title": "Reserve identities under the root lock",
+        "lifecycle": "captured",
+        "priority": "P2",
+        "order": 20
+      },
+      "scope": "A reserved identity is never handed out twice, whether or not its record was written.",
+      "body": "## Original request\n\nMake sure a crash cannot recycle an identity."
+    }
+  ]
+}

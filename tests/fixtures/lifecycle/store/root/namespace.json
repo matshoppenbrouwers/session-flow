@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "namespace": "6f1d4a02-3c58-4a1e-9b77-0c2f8d5e4411",
+  "created_at": "2026-09-05T09:00:00Z",
+  "repositories": [
+    {
+      "name": "session-flow",
+      "path": "../..",
+      "remote": "git@example.invalid:synthetic/session-flow.git"
+    }
+  ]
+}

@@ -7,9 +7,13 @@ SKILLS_ONLY=false
 DRY_RUN=false
 FORCE=false
 
-# Support files every installed skill entry may name. Removing an item here
+# The self-contained support package: the runtime entrypoint, its Python package,
+# and every support file an installed skill entry may name. Removing an item here
 # removes it from the install; tests/test_installation.py checks that.
-SHARED_RESOURCES=("references" "THIRD_PARTY_NOTICES.md")
+SUPPORT_PACKAGE=("scripts/session-flow.py" "scripts/session_flow" "references" "THIRD_PARTY_NOTICES.md")
+RUNTIME_ENTRYPOINT="scripts/session-flow.py"
+RUNTIME_DESCRIPTOR="session-flow-runtime.json"
+PYTHON_MINIMUM="3.9"
 
 usage() {
     echo "Usage: install.sh [OPTIONS]"
@@ -22,6 +26,10 @@ usage() {
     echo "  --dry-run             Preview what would be installed"
     echo "  --force               Overwrite existing files"
     echo "  -h, --help            Show this help"
+    echo ""
+    echo "Prerequisite: Python $PYTHON_MINIMUM or newer, reachable as python3. The installed"
+    echo "runtime scripts/session-flow.py requires it, so machines without Python cannot"
+    echo "run the plugin. The installer verifies the staged runtime before activating skills."
 }
 
 while [[ $# -gt 0 ]]; do
@@ -99,11 +107,7 @@ find_files() {
         exit 1
     fi
 
-    if [[ -n "$exclude" ]]; then
-        find "$root" -type f ! -name "$exclude" -print0
-    else
-        find "$root" -type f -print0
-    fi
+    find "$root" -name __pycache__ -prune -o -type f ! -name "${exclude:-.}" -print0
 }
 
 install_tree() {
@@ -130,10 +134,10 @@ missing_in_tree() {
     done < <(find_files "$src_root" "$exclude")
 }
 
-install_shared_resources() {
+install_support_package() {
     local resource
 
-    for resource in "${SHARED_RESOURCES[@]}"; do
+    for resource in "${SUPPORT_PACKAGE[@]}"; do
         if [[ -d "$REPO_DIR/$resource" ]]; then
             install_tree "$REPO_DIR/$resource" "$TARGET/$resource"
         else
@@ -142,16 +146,87 @@ install_shared_resources() {
     done
 }
 
-missing_shared_resources() {
+missing_support_package() {
     local resource
 
-    for resource in "${SHARED_RESOURCES[@]}"; do
+    for resource in "${SUPPORT_PACKAGE[@]}"; do
         if [[ -d "$REPO_DIR/$resource" ]]; then
             missing_in_tree "$REPO_DIR/$resource" "$TARGET/$resource"
         else
             [[ -f "$TARGET/$resource" ]] || echo "$TARGET/$resource"
         fi
     done
+}
+
+package_version() {
+    local manifest="$REPO_DIR/.claude-plugin/plugin.json"
+    local version
+
+    version="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest" 2>/dev/null | head -1)"
+    if [[ -z "$version" ]]; then
+        echo "Error: cannot read the package version from $manifest" >&2
+        echo "  Run install.sh from a complete session-flow checkout." >&2
+        exit 1
+    fi
+    printf '%s' "$version"
+}
+
+protocol_version() {
+    local entrypoint="$REPO_DIR/$RUNTIME_ENTRYPOINT"
+    local protocol
+
+    protocol="$(sed -n 's/^PROTOCOL_VERSION[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$entrypoint" 2>/dev/null | head -1)"
+    if [[ -z "$protocol" ]]; then
+        echo "Error: cannot read PROTOCOL_VERSION from $entrypoint" >&2
+        echo "  Run install.sh from a complete session-flow checkout." >&2
+        exit 1
+    fi
+    printf '%s' "$protocol"
+}
+
+# Generated output, so it is rewritten on every install instead of being
+# preserved like an authored file. Paths are relative to the skill directory so
+# a standalone entry resolves the runtime without scanning for an installed copy.
+write_runtime_descriptor() {
+    local skill_dest="${1%/}"
+    local dest="$skill_dest/$RUNTIME_DESCRIPTOR"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo "  INSTALL: $dest"
+        return
+    fi
+
+    mkdir -p "$skill_dest"
+    cat > "$dest" <<DESCRIPTOR
+{
+  "package": "session-flow",
+  "version": "$PACKAGE_VERSION",
+  "protocol": $PROTOCOL,
+  "python_minimum": "$PYTHON_MINIMUM",
+  "entrypoint": "../../$RUNTIME_ENTRYPOINT",
+  "package_root": "../..",
+  "references": "../../references"
+}
+DESCRIPTOR
+    echo "  Installed: $dest"
+}
+
+verify_runtime() {
+    local entrypoint="$TARGET/$RUNTIME_ENTRYPOINT"
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "  Warning: python3 is not on PATH, so the staged runtime was not verified."
+        echo "    session-flow needs Python $PYTHON_MINIMUM or newer; a machine without Python cannot run the plugin."
+        echo "    After installing it, check with: python3 $entrypoint doctor"
+        return 0
+    fi
+
+    if ! python3 -B "$entrypoint" doctor --project-root "$TARGET" >/dev/null; then
+        echo "Error: the staged support package did not answer 'doctor'."
+        echo "  Entry files were not activated. Re-run install.sh from a complete session-flow checkout."
+        exit 1
+    fi
+    echo "  Verified: python3 $entrypoint doctor"
 }
 
 require_present() {
@@ -166,16 +241,22 @@ require_present() {
     exit 1
 }
 
+PACKAGE_VERSION="$(package_version)"
+PROTOCOL="$(protocol_version)"
+
 echo "session-flow installer"
-echo "  Source: $REPO_DIR"
-echo "  Target: $TARGET"
-echo "  Scope:  $SCOPE"
+echo "  Source:   $REPO_DIR"
+echo "  Target:   $TARGET"
+echo "  Scope:    $SCOPE"
+echo "  Package:  $PACKAGE_VERSION (protocol $PROTOCOL)"
+echo "  Requires: Python $PYTHON_MINIMUM or newer as python3"
 echo ""
 
-echo "Support files:"
-install_shared_resources
+echo "Support package:"
+install_support_package
 if [[ "$DRY_RUN" != "true" ]]; then
-    require_present "shared support tree" "$(missing_shared_resources)"
+    require_present "support package" "$(missing_support_package)"
+    verify_runtime
 fi
 
 echo ""
@@ -188,6 +269,7 @@ for skill_dir in "$REPO_DIR"/skills/*/; do
     if [[ "$DRY_RUN" != "true" ]]; then
         require_present "$skill_name resources" "$(missing_in_tree "$skill_dir" "$skill_dest" SKILL.md)"
     fi
+    write_runtime_descriptor "$skill_dest"
     install_file "$skill_dir/SKILL.md" "$skill_dest/SKILL.md"
 done
 
@@ -212,4 +294,5 @@ if [[ "$DRY_RUN" == "true" ]]; then
     echo "Dry run complete. No files were modified."
 else
     echo "Done. Run /session-init in Claude Code to set up your project."
+    echo "  Runtime: python3 $TARGET/$RUNTIME_ENTRYPOINT doctor"
 fi
