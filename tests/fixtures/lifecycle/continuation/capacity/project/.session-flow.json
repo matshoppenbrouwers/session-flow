@@ -1,0 +1,27 @@
+{
+  "root": "_devdocs",
+  "paths": {
+    "work": "_devdocs/work",
+    "sequence": "_devdocs/SEQUENCE.md"
+  },
+  "continuation": {
+    "authority": {
+      "source": "maintainer-standing-policy",
+      "revision": "2026-09-07T10:30:00Z"
+    },
+    "capacity": {
+      "units": 2
+    },
+    "scope": {
+      "seq": [
+        "SEQ-701"
+      ],
+      "actions": [
+        "implement"
+      ]
+    },
+    "stop_conditions": [
+      "result-not-passed"
+    ]
+  }
+}

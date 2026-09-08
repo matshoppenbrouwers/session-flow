@@ -1,0 +1,21 @@
+{
+  "scenario": "stop-condition",
+  "summary": "Capacity is ample; the second unit fails and the configured condition ends the run.",
+  "seq": "SEQ-702",
+  "outcomes": {
+    "A1": "passed",
+    "A2": "failed",
+    "A3": "passed"
+  },
+  "expected": {
+    "units": [
+      "SEQ-702/A1",
+      "SEQ-702/A2"
+    ],
+    "reason": "stop-condition-met",
+    "condition": "result-not-passed"
+  },
+  "untouched": [
+    "A3"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "scenario": "delivery-outstanding",
+  "summary": "The first unit passes and the parent still owes its delivery target.",
+  "seq": "SEQ-703",
+  "outcomes": {
+    "A1": "passed",
+    "A2": "passed"
+  },
+  "expected": {
+    "units": [
+      "SEQ-703/A1"
+    ],
+    "reason": "stop-condition-met",
+    "condition": "delivery-outstanding"
+  },
+  "untouched": [
+    "A2"
+  ]
+}

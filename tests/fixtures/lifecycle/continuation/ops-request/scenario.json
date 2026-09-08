@@ -1,0 +1,17 @@
+{
+  "scenario": "ops-request",
+  "summary": "A bounded ops request naming an eligible item, with no standing policy in force.",
+  "seq": "SEQ-705",
+  "request": "ops-request.json",
+  "outcomes": {
+    "A1": "passed"
+  },
+  "expected": {
+    "units": [],
+    "reason": "missing-authority",
+    "condition": null
+  },
+  "untouched": [
+    "A1"
+  ]
+}

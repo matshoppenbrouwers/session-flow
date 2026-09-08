@@ -1,0 +1,11 @@
+{
+  "source": "session-ops",
+  "capture_id": "ops-2026-09-07-0042",
+  "seq": "SEQ-705",
+  "action": "implement",
+  "requested_at": "2026-09-07T11:15:00Z",
+  "authority": {
+    "source": "session-ops",
+    "revision": "ops-sweep-2026-09-07"
+  }
+}

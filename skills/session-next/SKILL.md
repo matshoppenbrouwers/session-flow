@@ -16,7 +16,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 3. **Claim before executing, and execute only what the claim names.** The claim carries the identity, the expected revision, and the allowed paths. It records a bounded assignment; it does not run that assignment and does not schedule it.
 4. **Record results through `record-result` against the claimed identity.** Never write completion into the sequence view or a task view — both are derived, and the next `render` discards anything typed there.
 5. **A passing task is not a delivered outcome.** A task result never moves its parent to `done`. Parent completion needs applicable evidence for the accepted outcome, which is `/session-verify`'s judgement, not this skill's.
-6. **One bounded unit per invocation.** Finish it, report, and name the next candidate without starting it. Continuation over several units needs its own scoped invocation, or a standing policy that names capacity and stop conditions.
+6. **One bounded unit per invocation.** Finish it, report, and name the next candidate without starting it. Continuation over several units needs its own scoped invocation, or the standing policy **Continuation Over Several Units** defines — capacity, scope, and stop conditions, re-resolved before every dispatch.
 
 ## Step 0: Resolve the Runtime
 
@@ -115,5 +115,43 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" render
 2. The checks behind that outcome, with their output.
 3. What the parent still needs: the tasks not yet `done`, and the `delivery` target the accepted scope requires. Say plainly that a passing task is progress, and that `/session-verify` decides whether the outcome is delivered.
 4. The next candidate from a fresh `select` — named, not started.
+
+## Continuation Over Several Units
+
+Continuation is off unless something outside this run authorizes it: an invocation that names the further units, or a `continuation` policy in `.session-flow.json`. Without one, Step 6 ends the run — name the next candidate and stop.
+
+```json
+"continuation": {
+  "authority": {"source": "maintainer-standing-policy", "revision": "2026-09-07T10:30:00Z"},
+  "capacity": {"units": 3},
+  "scope": {"seq": ["SEQ-042"], "actions": ["implement"]},
+  "stop_conditions": ["result-not-passed", "delivery-outstanding"]
+}
+```
+
+All four keys are required, `authority.source` is a trusted source and never `auto`, and `stop_conditions` holds only the two tokens defined here. A block missing a key, or naming a condition this skill does not define, authorizes nothing: run one unit and stop. `result-not-passed` stops on the first recorded outcome that is not `passed`. `delivery-outstanding` stops when the finished unit's parent still owes the `delivery` target its accepted scope names.
+
+Each round, before claiming anything:
+
+1. Re-read the policy from `.session-flow.json`. Authority is re-resolved every round, never carried over from the round before.
+2. Run `select` and check the candidate against the policy: `scope.seq` must name its identity, and `scope.actions` the action this unit performs.
+3. Check the stops below. The first one that holds ends the run there.
+
+Then claim, execute, and record as Steps 3 to 5 do, and count one unit against `capacity`. A unit already claimed finishes: its result is recorded even when the policy is withdrawn while it runs. Revocation blocks the next dispatch; it does not erase an effect that already happened.
+
+| Continuation stop | Reported as | What to report |
+|-------------------|-------------|----------------|
+| The policy's capacity is spent | `capacity-exhausted` | The units run, the capacity, and the next candidate — named, not started |
+| A configured stop condition holds | `stop-condition-met` | The token that held and the record that met it |
+| The policy is gone, its `revision` changed, or `scope` no longer covers the next unit | `missing-authority` | The authority the run started under and what stands now |
+| The next unit is claimed by another actor | `missing-authority` | The holding actor. Never take a claim over to keep continuing |
+| Acceptance no longer names the record's current fingerprint | `missing-authority` | Both fingerprints, and that re-acceptance is a decision, not a detail |
+| `select` returns no candidate | `no-candidate` | Every considered item with its reasons verbatim |
+
+Report the stop with the run: how many units ran, which identities, and the reason it stopped.
+
+### A Bounded Request From Ops
+
+Ops produces requests, not assignments. A request names the `seq` it concerns, the action it asks for, and the capture identity it came from; everything else it carries is provenance. Treat it as a candidate: run `select --seq` for that identity and apply the policy above. Local execution does the work, under the policy or under a scoped invocation — the request itself confers nothing. With no standing policy covering that identity, the request starts nothing: report `missing-authority`, name the request, and leave it for the user. A request naming its own `authority` is refused the same way.
 
 Chain context: see `references/workflow-overview.md`.

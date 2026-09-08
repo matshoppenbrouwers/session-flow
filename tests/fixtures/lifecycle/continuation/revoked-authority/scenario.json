@@ -1,0 +1,20 @@
+{
+  "scenario": "revoked-authority",
+  "summary": "The standing policy is withdrawn while the first unit is running.",
+  "seq": "SEQ-704",
+  "outcomes": {
+    "A1": "passed",
+    "A2": "passed"
+  },
+  "revoke_after_claim": 1,
+  "expected": {
+    "units": [
+      "SEQ-704/A1"
+    ],
+    "reason": "missing-authority",
+    "condition": null
+  },
+  "untouched": [
+    "A2"
+  ]
+}

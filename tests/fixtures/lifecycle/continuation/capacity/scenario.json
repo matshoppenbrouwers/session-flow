@@ -1,0 +1,21 @@
+{
+  "scenario": "capacity",
+  "summary": "Three eligible tasks under a standing policy with capacity for two units.",
+  "seq": "SEQ-701",
+  "outcomes": {
+    "A1": "passed",
+    "A2": "passed",
+    "A3": "passed"
+  },
+  "expected": {
+    "units": [
+      "SEQ-701/A1",
+      "SEQ-701/A2"
+    ],
+    "reason": "capacity-exhausted",
+    "condition": null
+  },
+  "untouched": [
+    "A3"
+  ]
+}

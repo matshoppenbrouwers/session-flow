@@ -167,7 +167,11 @@ When every named task has a result:
 
 ### Invocation and Continuation
 
-One invocation runs one named set and stops. Running the next set is a new invocation with its own named IDs, or a standing policy that names capacity and stop conditions. This skill never grants itself the next set, and finishing one set is not authority to start another.
+One invocation runs one named set and stops. Running the next set is a new invocation with its own named IDs, or the `continuation` policy `/session-next` defines — capacity, scope, and stop conditions in `.session-flow.json`. This skill never grants itself the next set, and finishing one set is not authority to start another.
+
+Under such a policy, re-resolve the authority before each dispatch and before each consequential effect: re-read the policy, confirm it still covers this SEQ identity and this action, and re-run Step 1's checks for the set about to run. A withdrawn or changed policy stops the next dispatch and is reported as `missing-authority`; tasks already dispatched finish, and their results are recorded. Spent capacity stops the run the same way, reported as `capacity-exhausted`.
+
+A bounded request from ops is a candidate for a named set, never the set itself. It carries no authority of its own — the work runs locally, under the policy or under an invocation that names the IDs — and without one it starts nothing.
 
 ## Agent Prompt Template
 
