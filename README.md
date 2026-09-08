@@ -1,6 +1,6 @@
-# session-flow — Claude Code plugin for session workflow orchestration
+# session-flow - Claude Code plugin for session workflow orchestration
 
-**session-flow** is a [Claude Code](https://claude.com/claude-code) plugin that orchestrates the full software development lifecycle — a chain of **16 skills** and **6 agents** covering research, design, task planning, agent delegation, post-implementation, evidence-based verification, work-root repair, and release. It adds dependency-aware parallelization, a standing task backlog, collaborative brainstorming, and a security & liability audit, with user gates at every critical decision.
+**session-flow** is a [Claude Code](https://claude.com/claude-code) plugin with **16 skills** and **6 agents** covering research, design, task planning, agent delegation, post-implementation, evidence-based verification, work-root repair, and release. Version 2 stores work as persistent records with stable identities, accepted scope, dependencies, claims, and outcomes. Skills guide the AI through the workflow; a Python runtime validates and stores work-item changes. See [enforcement limits](#what-the-runtime-enforces) for the distinction.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Skills: 16](https://img.shields.io/badge/Skills-16-green)
@@ -10,9 +10,9 @@
 
 ## Requirements
 
-**Python 3.9 or newer, reachable as `python3`.** Every work item session-flow reads or writes goes through its own runtime, `scripts/session-flow.py`, which uses the standard library only — no third-party packages. There is no hand-editing path beside it, so a machine without Python — chiefly native Windows outside WSL — cannot run the plugin. When the interpreter is missing or too old, the runtime's `doctor` command reports `unsupported-runtime` with the command that installs it, rather than failing with a traceback.
+**Python 3.9 or newer, reachable as `python3`.** Work-item operations use `scripts/session-flow.py`, which needs only the Python standard library. Hand-editing records is not a supported substitute. If Python is missing, install it before running the plugin: even `doctor` needs an interpreter. A version guard reports `unsupported-runtime` on older Python versions that can parse the entrypoint.
 
-Linux, WSL and macOS are the tested runtimes. Native Windows is out of scope while Python is a hard requirement. Three configurations are unsupported rather than defended against, and a report from one of them is not a defect:
+Linux, WSL and macOS are the supported platforms. Use WSL on Windows; native Windows is outside the supported runtime contract. The following configurations are unsupported:
 
 - A work root on a network or cloud-synchronized filesystem.
 - Editing one work root from another operating system at the same time.
@@ -24,37 +24,52 @@ Linux, WSL and macOS are the tested runtimes. Native Windows is out of scope whi
 session-init ──> gatekeeper ──> research-design ──> task-planning ──> delegation ──> post-impl ──> verify ──> release
  (one-time)       (triage          (collaborative      (break into       (dispatch      (simplify,     (evidence-   (version bump,
                    intake)          brainstorming)      session tasks)    agents)        review,        based proof) package, verify)
-                                                                                         audit, test)   (optional,
-                                                                                            │            heavy)
+                                                                                         audit, test)
+                                                                                            │
                                                                                       update-architecture
 
 work layer:  gatekeeper / add-task / task-planning ──> work root ──> groom ──> next
                                                         └──> SEQUENCE.md (generated view)
 ```
 
-Each skill produces artifacts that feed into the next. Start anywhere in the chain based on what you already have.
+Each skill produces artifacts that feed into the next. Start where your work fits, subject to that step's prerequisites. Small jobs can stay in a single work record; they do not need every step. Releasing a feature with a design document requires applicable verification evidence.
 
 The **work layer** runs alongside the chain. One outcome is one **work item**, stored under the **work root** (`_devdocs/work/` by default); gatekeeper and add-task capture items, groom prepares them, and next works through them. The backlog you read, `_devdocs/SEQUENCE.md`, is generated from those items. A repository coming from an earlier version of session-flow enters this layout through `/session-repair`.
 
 ## Install
 
-**Step 1** — Register the marketplace:
+**Step 1** - Register the marketplace:
 ```
 /plugin marketplace add matshoppenbrouwers/session-flow
 ```
 
-**Step 2** — Install the plugin:
+**Step 2** - Install the plugin:
 ```
 /plugin install session-flow@session-flow
 ```
 
-Tested on Linux, WSL and macOS. Python 3.9+ must be on the host — see [Requirements](#requirements).
+Python 3.9+ must be on the host. See [Requirements](#requirements).
+
+To update an existing Claude Code installation, run these in your terminal, then restart Claude Code:
+
+```bash
+claude plugin marketplace update session-flow
+claude plugin update session-flow@session-flow --scope user
+```
+
+Use the installation's actual scope if it is project or local rather than user.
+
+### Codex packaging
+
+This repository ships Claude Code plugin manifests. It does not ship a Codex manifest or a Codex marketplace. Using it in Codex requires a separately maintained package with `.codex-plugin/plugin.json` and host-appropriate skill/agent setup. That package must include the v2 runtime (`scripts/`), `skills/`, `references/`, and `.claude-plugin/plugin.json`, which the runtime reads for its version. Copying only the skills is insufficient.
+
+Update the adapted package's source and refresh its installation through your Codex marketplace, then start a new session. Updating the Claude Code marketplace does not update a separate Codex package. The repository's `install.sh` targets Claude Code.
 
 ## Getting Started
 
 1. Install session-flow (see above), and confirm `python3 --version` reports 3.9 or newer
-2. Run `/session-init` in Claude Code to create the work root with its namespace and the rest of the documentation structure. If the repository already carries a `todo/SEQUENCE.md` and task files from an earlier version, run `/session-repair` instead — it is the only supported way into the work-root layout
-3. Start building: `/session-research-design` for new features, `/session-task-planning` if you already have a plan
+2. Run `/session-init` in Claude Code to create the work root with its namespace and the rest of the documentation structure. If the repository already carries a `todo/SEQUENCE.md` and task files from an earlier version, run `/session-repair` instead - it is the only supported way into the work-root layout
+3. Use `/session-add-task` to capture a small job, or `/session-research-design` to develop a feature. Approve the outcome and scope before execution. For an accepted item needing multiple tasks, use `/session-task-planning`, approve its breakdown, then `/session-next` or `/session-delegation` with explicit task identities
 
 ## Skills
 
@@ -64,14 +79,14 @@ Tested on Linux, WSL and macOS. Python 3.9+ must be on the host — see [Require
 | **session-repair** | `/session-repair` | A per-item plan for migrating a legacy layout or reconciling a drifted work root, applied only on confirmation |
 | **session-brainstorm** | `/session-brainstorm` | An approved short design for an idea that is not yet a task |
 | **session-gatekeeper** | `/session-gatekeeper` | Triaged issues routed to the sequence or to research-design |
-| **session-research-design** | `/session-research-design` | Research report + implementation plan |
-| **session-task-planning** | `/session-task-planning` | One task record per task under the item's identity, each with dependency tags `[seq]`, `[parallel-after:X]`, a write boundary, and criteria |
+| **session-research-design** | `/session-research-design` | A work item's design, with research and optional specification/plan documents as needed |
+| **session-task-planning** | `/session-task-planning` | Task records under an accepted item's identity, with `depends_on` identities, `allowed_paths`, and acceptance criteria |
 | **session-add-task** | `/session-add-task` | A captured work item, identity allocated by the runtime, and the regenerated sequence entry |
 | **session-groom** | `/session-groom` | Verified breakdowns recorded against captured work items |
 | **session-next** | `/session-next` | One bounded unit of accepted work claimed, executed, and its outcome recorded |
 | **session-delegation** | `/session-delegation` | Completed implementations via parallel agent dispatch |
 | **session-post-implementation** | `/session-post-implementation` | Refined code, security audit, test plan, updated docs |
-| **session-verify** | `/session-verify` | Evidence-based verification artifact proving implementation matches design spec |
+| **session-verify** | `/session-verify` | A verification verdict supported by checks, probes, and recorded evidence gaps |
 | **session-release** | `/session-release` | Versioned artifacts, updated satellite content |
 | **update-architecture** | `/update-architecture` | Surgical architecture doc updates |
 | **security-liability-audit** | `/security-liability-audit` | Technical security + legal liability findings |
@@ -83,18 +98,18 @@ You don't have to start at step 1:
 
 | You have... | Start with |
 |-------------|------------|
-| Incoming issues or ideas to triage | `/session-gatekeeper` — route them to the backlog or a design session |
-| A running backlog | `/session-next` — implement the next ready task |
-| A repository from an earlier version, or a work root that has drifted | `/session-repair` — survey, plan, then apply on your confirmation |
-| An idea, not yet a task | `/session-brainstorm` — shape it into a design you approve |
-| A vague idea | `/session-research-design` — collaborative brainstorming refines it |
-| A plan or spec | `/session-task-planning` — break it into session-sized tasks |
-| A task list | `/session-delegation` — dispatch agents to execute |
-| Working code that needs polish | `/session-post-implementation` — simplify, review, audit, test |
-| A completed feature/plan that needs proof it works | `/session-verify` — falsification-based evidence artifact |
-| Tested code ready to ship | `/session-release` — bump version, package, verify |
-| A specific security concern | `/security-liability-audit` — standalone security + liability scan |
-| A bug or failing test | `/session-debug` — find the cause before changing anything |
+| Incoming issues or ideas to triage | `/session-gatekeeper` - route them to the backlog or a design session |
+| A running backlog | `/session-next` - implement the next ready task |
+| A repository from an earlier version, or a work root that has drifted | `/session-repair` - survey, plan, then apply on your confirmation |
+| An idea, not yet a task | `/session-brainstorm` - shape it into a design you approve |
+| A vague idea | `/session-research-design` - collaborative brainstorming refines it |
+| A plan or spec attached to an accepted work item | `/session-task-planning` - break it into session-sized tasks |
+| Accepted tasks with explicit identities | `/session-delegation` - dispatch agents for the named set |
+| Working code that needs polish | `/session-post-implementation` - simplify, review, audit, test |
+| A completed feature/plan that needs proof it works | `/session-verify` - falsification-based evidence artifact |
+| Tested code ready to ship | `/session-release` - bump version, package, verify |
+| A specific security concern | `/security-liability-audit` - standalone security + liability scan |
+| A bug or failing test | `/session-debug` - find the cause before changing anything |
 
 ## The Chain in Practice
 
@@ -105,15 +120,18 @@ You: /session-research-design
 Claude: "What problem are we solving?" → one question at a time →
         dispatches codebase-researcher + external-researcher in parallel →
         proposes 3 approaches → presents design section by section →
-        writes research report + implementation plan
+        captures or reuses a work item, writes its intent and any needed
+        research, specification and plan -> asks you to accept its scope
 
 You: /session-task-planning
-Claude: Reads the plan → breaks into 8 tasks with dependency tags →
+Claude: Reads the accepted scope and plan -> breaks into tasks with
+        depends_on identities and allowed_paths ->
         identifies 3 parallel opportunities → writes one task record
-        per task under the work item's identity
+        per task under the work item's identity -> asks you to approve
+        the breakdown before accepting tasks for execution
 
-You: /session-delegation
-Claude: Parses dependency graph → dispatches test-author for the phase's
+You: /session-delegation SEQ-042/A1 SEQ-042/A2
+Claude: Checks the named tasks' dependencies -> dispatches test-author for their
         acceptance tests → dispatches 2 implementers in parallel against
         those tests → records each task's outcome against the claimed
         identity → regenerates the sequence → reports progress
@@ -123,7 +141,7 @@ Claude: Simplifies code and removes leftovers → reviews for bugs →
         runs full test suite → updates architecture docs →
         generates manual test plan
 
-You: /session-verify   (optional — for plans/features with a design doc)
+You: /session-verify   (required evidence before releasing a designed feature)
 Claude: Reads design + plan → writes falsifiable hypotheses →
         runs structural audit → executes full tests → writes defect probes →
         produces evidence artifact with PASS/FAIL verdict
@@ -131,14 +149,41 @@ Claude: Reads design + plan → writes falsifiable hypotheses →
 You: /session-release
 Claude: Bumps version → waits for build → packages artifacts →
         scans docs site, website, changelog for stale content →
-        presents checklist → commits release
+        presents checklist -> commits release
+        Tags, pushes and publishes only when those actions are authorized.
 ```
 
 ## Work Items and the Sequence
 
-One outcome is one **work item**: a directory under the **work root** (`_devdocs/work/` by default) holding `intent.md` and, when the work warrants them, `spec.md`, `plan.md`, and `tasks/`. A `namespace.json` at the root carries the **namespace** — the identity scope within which `SEQ-NNN` numbers are unique — and its repository bindings, so several repositories can share one root.
+One outcome is one **work item**: a directory under the **work root** (`_devdocs/work/` by default) holding `intent.md` and, when the work warrants them, `spec.md`, `plan.md`, and `tasks/`. A `namespace.json` at the root carries the **namespace** - the identity scope within which `SEQ-NNN` numbers are unique - and its repository bindings, so several repositories can share one root.
 
-The **sequence** at `_devdocs/SEQUENCE.md` is the backlog you read: a flat, priority-ordered list with one line per work item.
+The default layout is:
+
+```text
+_devdocs/
+  SEQUENCE.md              Generated backlog
+  work/
+    namespace.json         Identity scope and repository bindings
+    .state/                Local runtime state, excluded from Git
+    seq-042/
+      intent.md            The outcome, scope, status and evidence
+      spec.md              Optional detailed requirements
+      plan.md              Optional implementation approach
+      tasks/               Optional breakdown for multi-step work
+        A1.md              A task record: SEQ-042/A1
+        _index.md          Generated task index
+  research/                Shared research reports
+  plans/                   Shared plans and existing plan documents
+  testing/                 Manual test plans and test results
+  architecture/            Current architecture documentation
+  todo/                    Earlier-version archive, when present
+```
+
+A small job can use only `intent.md`. Larger jobs keep their specification, plan and tasks beside it, so the next session can find the context from the same identity. Shared documentation remains available across items. Existing `todo/` files keep their names and locations after import; new work goes into `work/`. Paths are configurable, including a work root outside the repository.
+
+`/session-verify` separately writes its reports, logs and probes under `_verification/` at the project root (`verification/` if the project prefers).
+
+The **sequence** at `_devdocs/SEQUENCE.md` is the backlog you read: one line per work item in stored display order. Selection for execution separately considers readiness and priority.
 
 ```
 - [ ] SEQ-007 P2: Add rate limiting to the API → work/seq-007/tasks/_index.md
@@ -148,19 +193,28 @@ The **sequence** at `_devdocs/SEQUENCE.md` is the backlog you read: a flat, prio
 - [DEFERRED] SEQ-005 P3: Rewrite the importer
 ```
 
-**The sequence is generated output, not a file you edit.** The runtime renders it from the work items and nothing else writes it. Anything typed into it is read by nothing and is gone at the next render, so an entry changes by changing its work item through the runtime. `/session-repair` reports a hand-edited sequence as drift rather than overwriting it without saying so. The line grammar — every token and the record field it came from — is in [references/sequence-grammar.md](references/sequence-grammar.md).
+**The sequence is generated output, not a file you edit.** Change its underlying work item through the plugin. Editing the sequence does not update stored records, and a later render replaces those edits. `/session-repair` reports a hand-edited sequence as drift before applying repairs. The line grammar is in [references/sequence-grammar.md](references/sequence-grammar.md).
 
-`[DEFERRED]` retires an item without doing it, and its identity stays taken. No `SEQ-NNN` is ever reused: the runtime reserves the next one under the work-root lock, against both the stored items and the tombstone index, so an id that once addressed a GitHub issue or a Notion task never comes back pointing at different work.
+`[DEFERRED]` represents a deferred or cancelled item; its identity stays taken. No `SEQ-NNN` is ever reused: the runtime reserves new identities under the work-root lock, against both stored items and the tombstone index.
 
-`[auto]` marks an entry a skill captured on your behalf — `/session-gatekeeper` triage is the one shipped caller — rather than one you added yourself. It is the veto handle: marked entries sit in the backlog and can be struck on sight, so unattended intake never needs your approval up front. `/session-groom` reports them separately, `/session-next` never lets one outrank a manual entry of the same priority, and `/session-status` counts them.
+`[auto]` marks an entry captured on your behalf by `/session-gatekeeper`. You can ask the plugin to retire it. Capture alone does not authorize implementation. `/session-groom` reports these items separately, `/session-next` prefers a ready manual entry of the same priority, and `/session-status` counts them.
 
-Each item's breakdown is one or more task records under its own identity, each a self-contained, bite-sized prompt (Files / Instructions / Accept / Test) ready for an agent to execute. **Files** entries may be exact paths (`src/api/routes.py`) or directory globs (`src/lib/governor/**`) when a task owns a whole subtree — and the field doubles as the write boundary: `/session-delegation` injects it into every dispatch as "you may only create or modify these paths."
+When an item needs a breakdown, each task is a self-contained prompt with files, instructions, acceptance criteria and a test. Dependencies use identities such as `SEQ-042/A1`. Declared `allowed_paths` can be exact paths (`src/api/routes.py`) or directory globs (`src/lib/governor/**`). Delegation includes those boundaries in the agent's instructions.
 
 | Want to... | Use |
 |------------|-----|
-| Capture something for later | `/session-add-task` — captures a work item |
-| Implement the next item | `/session-next` — or just say "implement the next task" |
-| Prepare raw one-liners | `/session-groom` — researches and records verified breakdowns |
+| Capture something for later | `/session-add-task` - captures a work item |
+| Implement the next item | `/session-next` - or just say "implement the next task" |
+| Prepare raw one-liners | `/session-groom` - researches and records verified breakdowns |
+| See current work without starting it | `/session-status` - refreshes generated views and reports status without changing work records |
+
+### What the Runtime Enforces
+
+The runtime checks record revisions, lifecycle transitions and claim ownership. Before assigning work, it rejects unknown, cyclic or unfinished dependencies and overlapping declared write scopes held by different actors. Completion checks reject recorded contradictions such as stale evidence, child tasks still open or deferred, or a missing receipt for required delivery.
+
+These checks do not establish that a feature works. Verification still needs tests and evidence about the accepted outcome. Recording a passing task result also does not automatically close its parent item.
+
+Declared paths are coordination checks, not a filesystem sandbox: the runtime does not intercept an agent's file writes. Instructions also govern reviewing changed scope, judging stale claims, checking remaining session capacity and deciding when to continue. `/session-next` defaults to one bounded unit; further work needs authority covering continuation. See the [work-item contract](references/work-item-contract.md) for the precise limits.
 
 `session-init` wires a `<!-- session-flow:sequence -->` block into your `CLAUDE.md` and `AGENTS.md` so "implement the next task" works without naming a file. Pair grooming with the built-in `/loop` for hands-off upkeep:
 
@@ -170,7 +224,7 @@ Each item's breakdown is one or more task records under its own identity, each a
 
 ### Gatekeeper / Intake
 
-`/session-gatekeeper` is the front-of-chain funnel for incoming work — GitHub issues, feature requests, or ideas that surface mid-session. It grounds each item in your architecture docs and product direction (a `PRD.md` in the docs root by default, configurable via `paths.direction`), then routes it:
+`/session-gatekeeper` is the front-of-chain funnel for incoming work - GitHub issues, feature requests, or ideas that surface mid-session. It grounds each item in your architecture docs and product direction (a `PRD.md` in the docs root by default, configurable via `paths.direction`), then routes it:
 
 - **Touches database schema or a spine / canonical status field** → back to you regardless of size.
 - **Unknown alignment** → escalated. If the direction could not be established, nothing is auto-added.
@@ -178,9 +232,9 @@ Each item's breakdown is one or more task records under its own identity, each a
 - **Significant, divergent, or unclear** → escalated to a cowork `/session-research-design` session with you.
 - **Off-direction** → flagged for your explicit decision.
 
-Escalation is an act, not an annotation: an escalated batch produces a named session proposal — the question to answer, the items it covers, near-duplicates merged — addressed to you in the run's output. A question the code can answer gets answered and cited before it is routed, every cited path is existence-checked before a breakdown is written, and each run leaves a dated report beside your docs root, at `YYYY-MM-DD-gatekeeper-run.md`.
+Escalation is an act, not an annotation: an escalated batch produces a named session proposal - the question to answer, the items it covers, near-duplicates merged - addressed to you in the run's output. A question the code can answer gets answered and cited before it is routed, every cited path is existence-checked before a breakdown is written, and each run leaves a dated report beside your docs root, at `YYYY-MM-DD-gatekeeper-run.md`.
 
-It triages only — it never implements, and it treats issue text as untrusted data rather than instructions. It pairs with `/loop` for periodic issue intake, queuing anything significant for you rather than auto-processing it.
+It triages only - it never implements, and it treats issue text as untrusted data rather than instructions. It pairs with `/loop` for periodic issue intake, queuing anything significant for you rather than auto-processing it.
 
 ## Post-Implementation Workflow
 
@@ -197,19 +251,20 @@ It triages only — it never implements, and it treats issue text as untrusted d
 | 7. Manual test plan | yes | - | - |
 | 8. Final commit | yes | yes | - |
 
-Standard and Quick scopes can add individual steps as extras (e.g., Quick + architecture docs). Verification (`/session-verify`) is always optional and can be invoked after Full completion.
+Standard and Quick scopes can add individual steps as extras (e.g., Quick + architecture docs). Verification (`/session-verify`) is a separate workflow outside these presets. Releasing a feature with a design document requires a PASS artifact covering the candidate, or an explicit decision to reuse earlier evidence. Accepted caveats are permitted; bugfix/refactor releases without a design document do not have this prerequisite.
 
 When the security audit is included, you choose how it runs:
-- **Sub-agent** — dispatches an agent (faster, lower cost)
-- **Inline** — runs in the main conversation with your current model (more thorough)
+
+- **Sub-agent** - dispatches a dedicated audit agent.
+- **Inline** - runs in the main conversation with your current model.
 
 ### Security & Liability Audit
 
 The audit covers two dimensions:
 
-**Technical security** — LLM/AI security (prompt injection, unsanitized output, tool validation), OWASP Top 10, secrets detection, agentic security (Lethal Trifecta), desktop app security, dependency supply chain, webhook/integration security. Findings carry a high, medium or low confidence label and the caller decides what to act on.
+**Technical security** - LLM/AI security (prompt injection, unsanitized output, tool validation), OWASP Top 10, secrets detection, agentic security (Lethal Trifecta), desktop app security, dependency supply chain, webhook/integration security. Findings carry a high, medium or low confidence label and the caller decides what to act on.
 
-**Legal liability** — ToS/EULA coverage gaps, GDPR compliance (privacy policy, DPAs, data retention, user rights), EU AI Act obligations (risk classification, transparency), Digital Content Directive (conformity, updates), consumer protection (withdrawal, pricing, cancellation), AI output disclaimers, cross-border data transfer requirements. Designed for EU-based developers with a worldwide userbase.
+**Legal liability** - ToS/EULA coverage gaps, GDPR compliance (privacy policy, DPAs, data retention, user rights), EU AI Act obligations (risk classification, transparency), Digital Content Directive (conformity, updates), consumer protection (withdrawal, pricing, cancellation), AI output disclaimers, cross-border data transfer requirements. Designed for EU-based developers with a worldwide userbase.
 
 The audit can also run standalone via `/security-liability-audit`.
 
@@ -219,14 +274,14 @@ The audit can also run standalone via `/security-liability-audit`.
 |-------|---------|---------|
 | **codebase-researcher** | research-design (research + design phases) | Answer one question about the existing code, with file:line citations. Read-only |
 | **external-researcher** | research-design (research phase) | Research docs, specs, and prior art outside the repo, with source validation. No repo access |
-| **test-author** | delegation (once per phase, before implementers) | Write the acceptance tests that become the implementers' oracle |
+| **test-author** | delegation (once for the named multi-task set, before implementers) | Write acceptance tests for the selected work |
 | **code-simplifier** | post-impl step 1 | Simplify recently changed code and remove what the implementation left behind |
 | **code-reviewer** | post-impl step 2 | Find bugs, security issues, convention violations |
 | **security-auditor** | post-impl step 3 | Technical security + legal liability audit |
 
-Bundled agents inherit the parent session's model — an Opus 4.7 session gets Opus 4.7 subagents, a Sonnet session gets Sonnet. Two deliberate exceptions: `codebase-researcher` and `external-researcher` pin `model: sonnet`, because both do bounded read-and-report work where the frontier tier buys nothing and the dispatch count is high. Override either by placing your own version in `.claude/agents/`.
+Four bundled Claude Code agents declare `model: inherit`; `codebase-researcher` and `external-researcher` declare `model: sonnet`. Override agents with your own versions in `.claude/agents/`. A Codex adaptation needs its own mapping of these agent settings.
 
-Subagents also inherit the parent session's permission mode. `external-researcher` has no `Read` tool at all — it cannot see your repository, only the sources it fetches.
+`external-researcher` declares only `WebSearch` and `WebFetch` tools, with no repository-reading tool. Compact work through `/session-next` does not require a separate test-author dispatch.
 
 If you have the marketplace `code-simplifier:code-simplifier` plugin installed, session-post-implementation uses it automatically instead of the bundled agent.
 
@@ -251,63 +306,53 @@ session-flow adapts to your project via `.session-flow.json` (created by `/sessi
 }
 ```
 
-`paths.work` is where the runtime stores work items and `paths.sequence` is the generated view of them; every session-flow command resolves both from this file through `--project-root`. A repository that adopted session-flow before 2.0.0 also keeps `todo` and `tasks` keys pointing at its archived files, so links into them still resolve — nothing new is written there.
+`paths.work` is where the runtime stores work items and `paths.sequence` is the generated view of them; every session-flow command resolves both from this file through `--project-root`. A repository that adopted session-flow before 2.0.0 also keeps `todo` and `tasks` keys pointing at its archived files, so links into them still resolve - nothing new is written there.
 
-`paths.direction` points `/session-gatekeeper` at your product-direction doc. It defaults to a `PRD.md` inside the docs root (e.g. `_devdocs/PRD.md`) — let `/session-init` scaffold it, or set this to an existing PRD/vision file anywhere in the repo.
+`paths.direction` points `/session-gatekeeper` at your product-direction doc. It defaults to a `PRD.md` inside the docs root (e.g. `_devdocs/PRD.md`) - let `/session-init` scaffold it, or set this to an existing PRD/vision file anywhere in the repo.
 
-`paths.conventions` and `paths.lessons` are optional one-line-entry files, both in the same `rule — reason` format (~140 characters, reason mandatory):
+`paths.conventions` and `paths.lessons` are optional one-line-entry files, both in the same `rule - reason` format (~140 characters, reason mandatory):
 
 ```
-Repository methods return domain objects, never ORM rows — keeps persistence swappable and out of the service layer.
+Repository methods return domain objects, never ORM rows - keeps persistence swappable and out of the service layer.
 ```
 
-**Conventions** are house rules: `/session-research-design` loads them at design time and `code-reviewer` enforces them alongside `CLAUDE.md`. **Lessons** are conclusions drawn after the fact, read as a one-line index by research-design and delegation. Both are kept out of `CLAUDE.md` on purpose — that file costs tokens on every turn of every session, while these matter only at design and review time. If a rule doesn't fit on one line it's an architecture decision, and `/update-architecture` owns those. When a key is unset or the file is missing, the consuming skills say so and fall back to `CLAUDE.md` plus observed patterns rather than inventing a house style.
+**Conventions** are house rules: `/session-research-design` loads them at design time and `code-reviewer` enforces them alongside `CLAUDE.md`. **Lessons** are conclusions drawn after the fact, read as a one-line index by research-design and delegation. Both are kept out of `CLAUDE.md` on purpose - that file costs tokens on every turn of every session, while these matter only at design and review time. If a rule doesn't fit on one line it's an architecture decision, and `/update-architecture` owns those. When a key is unset or the file is missing, the consuming skills say so and fall back to `CLAUDE.md` plus observed patterns rather than inventing a house style.
 
 Override agents by placing custom versions at `~/.claude/agents/` (user) or `.claude/agents/` (project). See [references/customization-guide.md](references/customization-guide.md) for details.
 
-## Token Budget
+## Context Usage
 
-Only 1-2 skills are loaded at a time (triggered by description matching):
-
-| Component | Est. Tokens |
-|-----------|-------------|
-| All 16 skill metadata (always loaded) | ~1,800 |
-| Largest single skill body (research-design) | ~2,500 |
-| Typical active session | ~3,600 |
-
-Security audit reference files (~900 lines total) are only loaded when the audit runs.
+Skill descriptions support discovery; selected skills direct the host to load their instructions and relevant references. Actual context use depends on the host, selected workflow, repository and conversation. This release does not establish a measured typical token budget or a fixed limit on how many skills a host loads.
 
 ## Companion Plugins
 
-### session-scribe — Notion and GitHub Issues mirror
+### session-scribe - Notion and GitHub Issues mirror
 
-[**session-scribe**](https://github.com/matshoppenbrouwers/session-scribe) bridges the same workflow into Notion, GitHub Issues, or both: ended sessions become dated Agent log entries on a mapped Notion project page or comments on a dedicated GitHub log issue, and the `SEQUENCE.md` backlog is mirrored out to a Notion Tasks database with project relations or to GitHub Issues. Work marked ready on either side — a `scribe:ready` label, a `Scribe ready` checkbox — pulls back into `SEQUENCE.md` as a `(needs breakdown)` entry. Since 0.3.0 it also captures: `/scribe code` files one entry into this project's backlog, `/scribe task` and `/scribe note` file straight into Notion. session-flow produces the work and the backlog; session-scribe makes both reviewable outside the terminal, and gives you a one-line way in when a thought arrives mid-session.
+[**session-scribe**](https://github.com/matshoppenbrouwers/session-scribe) provides session logging and work mirroring to Notion and GitHub Issues. Integration with v2 work records requires a compatible session-scribe adapter that calls the session-flow runtime. An older integration that appends lines directly to `SEQUENCE.md` cannot create v2 work items.
 
 ```
 /plugin marketplace add matshoppenbrouwers/session-scribe
 /plugin install session-scribe@session-scribe
 ```
 
-The two integrate by convention — session-scribe reads the `SEQUENCE.md` format, neither depends on the other's code, and either works standalone. The one convention they share as writers is the ` ⇄ <url>` provenance annotation: whichever tool files an entry **from an outside item** writes it, so no two writers file the same work twice.
+Lifecycle-dependent companion commands check the runtime's protocol version and refuse incompatible installations. Standalone features such as session logging and direct Notion capture do not require flow's lifecycle runtime. See [Runtime Integration](references/runtime-integration.md) for the protocol contract.
 
-That qualifier is load-bearing now that `/scribe code` also captures work. A capture has no outside item behind it — it is a thought typed into the terminal — so it is filed unannotated on purpose, and the annotation is written later by whichever mirror first files it outward. An unannotated entry means *not yet mirrored*, never *not yet checked for duplicates*.
+The generated sequence can carry a ` ⇄ <url>` provenance annotation linking an item to its external counterpart. Integration writes provenance to the underlying record, then regenerates the view. A locally captured thought has no external link until it is mirrored.
 
-Identity comes from one place. session-flow's runtime allocates every `SEQ-NNN` under the work-root lock, against the stored items and the tombstone index; the generated sequence is never scanned for the next free number, and a retired one is never handed out again. Anything filing work into this backlog goes through that path — `/session-add-task`, or the runtime's `capture` command — because a line appended to `SEQUENCE.md` is not a record and does not survive the next render.
+For new work, `/session-add-task` uses the runtime's new-record transition to allocate an identity under the work-root lock. The lower-level `capture` command requires an explicit identity; it is not the allocator. Companion integrations must use the supported record protocol and must not scan the generated sequence for the next free number.
 
-### claude-mem — cross-session recall
+### claude-mem - cross-session recall
 
-session-flow deliberately ships no memory system. If you want recall across sessions, use [**claude-mem**](https://github.com/thedotmack/claude-mem): it observes your sessions and makes what it saw searchable later. It pairs naturally with `paths.lessons` — periodically ask it to propose lessons entries from what it observed, then prune hard by hand. Observations are its job; conclusions are yours.
-
-**Caveat before you install both:** claude-mem and session-scribe each register a `SessionEnd` hook. Test the two together on a throwaway session and confirm both actually fire before relying on either — don't assume they coexist.
+session-flow stores work records and curated lessons; it does not bundle conversation-memory software. [claude-mem](https://github.com/thedotmack/claude-mem) is a separate project. Its installation, hooks and compatibility with other plugins are outside this release's verification.
 
 ## References
 
-- [Workflow Overview](references/workflow-overview.md) — Full chain diagram, artifact flow, skip patterns
-- [Adoption Note](references/adoption-note.md) — What happens on a machine that has never run it, step by step
-- [Work Item Contract](references/work-item-contract.md) — Record shape, identity, lifecycle, and what each command may change
-- [Sequence Grammar](references/sequence-grammar.md) — What `render` emits, token by token
-- [Runtime Integration](references/runtime-integration.md) — Protocol, error codes, measured limitations
-- [Customization Guide](references/customization-guide.md) — Override agents, paths, test runners, release tooling
+- [Workflow Overview](references/workflow-overview.md) - Full chain diagram, artifact flow, skip patterns
+- [Adoption Note](references/adoption-note.md) - What happens on a machine that has never run it, step by step
+- [Work Item Contract](references/work-item-contract.md) - Record shape, identity, lifecycle, and what each command may change
+- [Sequence Grammar](references/sequence-grammar.md) - What `render` emits, token by token
+- [Runtime Integration](references/runtime-integration.md) - Protocol, error codes, measured limitations
+- [Customization Guide](references/customization-guide.md) - Override agents, paths, test runners, release tooling
 
 ## Contributing
 
