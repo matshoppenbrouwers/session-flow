@@ -32,6 +32,7 @@ from pathlib import Path
 
 from session_flow import (
     RECORD_FORMAT_VERSION,
+    InapplicableEvidenceError,
     InvalidIdentityError,
     InvalidRequestError,
     MissingAuthorityError,
@@ -328,11 +329,18 @@ BINDING_FIELDS = ("name", "path", "remote")
 ACCEPTANCE_KEY = "acceptance"
 SCOPE_CHECKS_KEY = "scope_checks"
 EVIDENCE_KEY = "evidence"
+DELIVERY_KEY = "delivery"
+DELIVERY_REQUIREMENT_KEYS = ("repository", "required", "target")
+DELIVERY_RECEIPT_KEY = "delivered_at"
 RESERVED_METADATA = (ACCEPTANCE_KEY, SCOPE_CHECKS_KEY, "format", "namespace", "seq", "revision")
 PROVENANCE_SOURCES = ("auto", "provenance", "[auto]")
 
 LIFECYCLE_CAPTURED = "captured"
 LIFECYCLE_ACCEPTED = "accepted"
+LIFECYCLE_DONE = "done"
+LIFECYCLE_CANCELLED = "cancelled"
+CLOSED_LIFECYCLES = (LIFECYCLE_DONE, LIFECYCLE_CANCELLED)
+TASK_VIEW_PREFIX = "_"
 LIFECYCLE_STATES = ("captured", "accepted", "active", "blocked", "done", "deferred", "cancelled")
 LEGAL_TRANSITIONS = {
     "captured": ("accepted", "deferred", "cancelled"),
@@ -414,11 +422,24 @@ def canonical_reference(entry) -> dict:
     return {"path": path, "commit": commit.strip(), "role": entry.get("role")}
 
 
+def delivery_requirement(delivery):
+    """What delivery the accepted scope requires, without the receipt that records it.
+
+    Only the named keys are the requirement. Projecting them, rather than deleting
+    the receipt fields known today, keeps a receipt field added later outside the
+    fingerprint by construction.
+    """
+    if not isinstance(delivery, dict):
+        return delivery
+    return {key: delivery[key] for key in DELIVERY_REQUIREMENT_KEYS if key in delivery}
+
+
 def fingerprint_inputs(record: dict) -> dict:
     """The accepted meaning of a record: scope, bindings, delivery target, references.
 
     Progress, evidence, and ordering fields are absent by construction, so a
-    status change or a reprioritization can never invalidate acceptance.
+    status change, a reprioritization, or a recorded delivery receipt can never
+    invalidate acceptance.
     """
     metadata = record["metadata"]
     references = metadata.get("references") or []
@@ -430,7 +451,7 @@ def fingerprint_inputs(record: dict) -> dict:
             (canonical_binding(entry) for entry in metadata.get("repositories") or []),
             key=lambda binding: (binding["name"], binding["path"]),
         ),
-        "delivery": metadata.get("delivery"),
+        "delivery": delivery_requirement(metadata.get(DELIVERY_KEY)),
         "references": sorted(
             (canonical_reference(entry) for entry in references),
             key=lambda entry: (entry["path"], entry["commit"]),
@@ -522,6 +543,100 @@ def evidence_status(record: dict) -> list[dict]:
         }
         for entry in entries
     ]
+
+
+def record_name(identity: dict) -> str:
+    task = identity.get("task")
+    return f"{identity['seq']}/{task}" if task else identity["seq"]
+
+
+def stale_evidence(record: dict) -> list:
+    """Evidence entries gathered against a fingerprint the record no longer carries."""
+    return [entry for entry in evidence_status(record) if not entry["applies"]]
+
+
+def check_evidence_applies(record: dict, name: str) -> None:
+    stale = stale_evidence(record)
+    if not stale:
+        return
+    criteria = ", ".join(str(entry["criteria"]) for entry in stale)
+    raise InapplicableEvidenceError(
+        f"{name} carries {len(stale)} evidence entry(ies) gathered against another scope "
+        f"fingerprint ({criteria}), so they say nothing about the accepted outcome; re-run those "
+        "checks against the current fingerprint and append the results, or record a same-meaning "
+        "decision with `revise --same-meaning`, before completing it",
+        seq=record["identity"]["seq"],
+        fingerprint=scope_fingerprint(record),
+        evidence=stale,
+    )
+
+
+def check_delivery_recorded(record: dict, name: str) -> None:
+    delivery = record["metadata"].get(DELIVERY_KEY)
+    if not isinstance(delivery, dict) or delivery.get("required") is not True:
+        return
+    if delivery.get(DELIVERY_RECEIPT_KEY):
+        return
+    target = delivery.get("target") or "the delivery its accepted scope requires"
+    raise InapplicableEvidenceError(
+        f"{name} requires {target} and carries no delivery receipt, so the accepted outcome is "
+        f"not delivered however many tasks passed; deliver it and record "
+        f"`delivery.{DELIVERY_RECEIPT_KEY}` before completing it",
+        seq=record["identity"]["seq"],
+        delivery=delivery,
+    )
+
+
+def open_tasks(work_root: Path, identity: dict) -> list:
+    """The item's tasks that are neither `done` nor `cancelled`.
+
+    A record that is itself a task owns no tasks, and an item with no `tasks/`
+    directory is not a parent, so both answer with nothing outstanding. A leading
+    underscore marks a generated view rather than a record, as it does for the views.
+    """
+    if identity.get("task"):
+        return []
+    directory = Path(work_root) / item_directory(identity["seq"]) / TASKS_DIRECTORY
+    if not directory.is_dir():
+        return []
+    return sorted(
+        path.stem
+        for path in directory.glob("*.md")
+        if not path.name.startswith(TASK_VIEW_PREFIX)
+        and lifecycle_of(read_record(path)) not in CLOSED_LIFECYCLES
+    )
+
+
+def check_tasks_closed(work_root: Path, record: dict, name: str) -> None:
+    outstanding = open_tasks(work_root, record["identity"])
+    if not outstanding:
+        return
+    raise InapplicableEvidenceError(
+        f"{name} still has {len(outstanding)} task(s) that are neither done nor cancelled "
+        f"({', '.join(outstanding)}); finish or cancel each of them before completing the item "
+        "they belong to",
+        seq=record["identity"]["seq"],
+        open_tasks=outstanding,
+    )
+
+
+def check_completion(work_root: Path, record: dict) -> None:
+    """Refuse `done` while the record's own evidence, delivery, or tasks contradict it.
+
+    The stored record is what is judged: evidence, a delivery receipt and a task's
+    own closure are each recorded before the item that rests on them is completed.
+    """
+    name = record_name(record["identity"])
+    check_evidence_applies(record, name)
+    check_delivery_recorded(record, name)
+    check_tasks_closed(work_root, record, name)
+
+
+def check_completed_record(request: dict, current: dict, updated: dict) -> None:
+    """The gate for the record-level handlers, which write without the store's plan."""
+    if lifecycle_of(updated) != LIFECYCLE_DONE or lifecycle_of(current) == LIFECYCLE_DONE:
+        return
+    check_completion(Path(request["work_root"]), current)
 
 
 def lifecycle_of(record: dict) -> str:
@@ -783,6 +898,7 @@ def revise(request: dict) -> dict:
     """Edit a record. A declared same-meaning decision carries acceptance across."""
     path, current, payload = load_for_mutation(request, "revise")
     updated = apply_revision_edits(current, payload)
+    check_completed_record(request, current, updated)
     check = settle_scope(current, updated, scope_decision(payload))
     updated["metadata"]["revision"] = advance_revision(current, updated)
     text = render_record(updated["metadata"], updated["scope"], updated["body"])
@@ -825,6 +941,7 @@ def accept(request: dict) -> dict:
         provenance,
     )
     updated = as_record(metadata, current["scope"], current["body"])
+    check_completed_record(request, current, updated)
     metadata["revision"] = advance_revision(current, updated)
     text = render_record(metadata, current["scope"], current["body"])
     written = parse_record(text)

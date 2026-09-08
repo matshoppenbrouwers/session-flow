@@ -494,6 +494,44 @@ class FingerprintFieldGroupTest(unittest.TestCase):
         self.assertIn("work-root `commit`", str(raised.exception))
 
 
+class DeliveryReceiptTest(unittest.TestCase):
+    """The delivery requirement is fingerprinted; the receipt that records it is not."""
+
+    requirement = {"required": True, "repository": "session-flow", "target": "merged pull request"}
+
+    def fingerprint(self, **delivery) -> str:
+        return records.scope_fingerprint(
+            scope_record(BASE_SCOPE, delivery=dict(self.requirement, **delivery))
+        )
+
+    def test_recording_a_receipt_leaves_the_fingerprint_unchanged(self):
+        self.assertEqual(
+            self.fingerprint(),
+            self.fingerprint(delivered_at="2026-09-08T09:00:00Z", delivered_by="maintainer"),
+        )
+
+    def test_a_recorded_receipt_keeps_acceptance_applicable(self):
+        acceptance = {"fingerprint": self.fingerprint(), "actor": "maintainer"}
+        delivered = scope_record(
+            BASE_SCOPE,
+            delivery=dict(self.requirement, delivered_at="2026-09-08T09:00:00Z"),
+            acceptance=acceptance,
+        )
+        self.assertTrue(records.acceptance_applies(delivered))
+
+    def test_changing_the_requirement_changes_the_fingerprint(self):
+        changed = (("required", False), ("target", "released tag"), ("repository", "session-ops"))
+        for field, value in changed:
+            with self.subTest(field=field):
+                self.assertNotEqual(self.fingerprint(), self.fingerprint(**{field: value}))
+
+    def test_an_absent_delivery_fingerprints_as_no_requirement(self):
+        self.assertEqual(
+            records.scope_fingerprint(scope_record(BASE_SCOPE)),
+            records.scope_fingerprint(scope_record(BASE_SCOPE, delivery=None)),
+        )
+
+
 class AcceptanceFixtureTest(unittest.TestCase):
     """Applicability is derived from the stored fingerprint, not from a flag."""
 

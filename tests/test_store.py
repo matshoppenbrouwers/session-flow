@@ -319,7 +319,7 @@ class TransitionTest(StoreCase):
         document = payload("lifecycle-change.json")
         document["operation"] = "op-lifecycle-0002"
         document["changes"][0]["expect_revision"] = 2
-        document["changes"][0]["metadata"] = {"lifecycle": "done"}
+        document["changes"][0]["metadata"] = {"lifecycle": "blocked"}
         completed, answer = self.run_cli("transition", document)
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertEqual(3, self.record_metadata()["revision"])
@@ -543,6 +543,136 @@ class LifecycleGuardTest(StoreCase):
         )
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertEqual("active", revised["result"]["lifecycle"])
+
+
+class CompletionGateTest(StoreCase):
+    """`done` is refused while inapplicable evidence, an owed delivery, or an open task stands."""
+
+    STALE_FINGERPRINT = "sha256:" + "0" * 64
+    DELIVERY = {"required": True, "repository": "session-flow", "target": "merged pull request"}
+
+    def setUp(self):
+        super().setUp()
+        self.patch_record({"lifecycle": "active"})
+
+    def complete(self, task=None) -> dict:
+        document = payload("lifecycle-change.json")
+        document["changes"][0].update(
+            {"task": task, "expect_revision": 1, "metadata": {"lifecycle": "done"}}
+        )
+        return document
+
+    def close_task(self, task="A1") -> None:
+        self.patch_record({"lifecycle": "done"}, task=task)
+
+    def fingerprint(self, seq="SEQ-001", task=None) -> str:
+        return records.scope_fingerprint(
+            records.read_record(store.record_path(self.root, seq, task))
+        )
+
+    def test_a_parent_with_an_open_task_cannot_be_completed(self):
+        error = self.assert_fails_without_writing(
+            "transition", self.complete(), "inapplicable-evidence"
+        )
+        self.assertEqual(["A1"], error["detail"]["open_tasks"])
+        self.assertIn("neither done nor cancelled", error["message"])
+        self.assertEqual("active", self.record_metadata()["lifecycle"])
+
+    def test_a_required_delivery_without_a_receipt_cannot_be_completed(self):
+        self.close_task()
+        self.patch_record({"delivery": self.DELIVERY})
+        error = self.assert_fails_without_writing(
+            "transition", self.complete(), "inapplicable-evidence"
+        )
+        self.assertIn("merged pull request", error["message"])
+        self.assertIn("delivered_at", error["message"])
+
+    def test_evidence_gathered_against_another_fingerprint_cannot_complete_the_item(self):
+        self.close_task()
+        self.patch_record(
+            {
+                "evidence": [
+                    {
+                        "criteria": "the second writer is refused",
+                        "fingerprint": self.STALE_FINGERPRINT,
+                        "result": "pass",
+                    }
+                ]
+            }
+        )
+        error = self.assert_fails_without_writing(
+            "transition", self.complete(), "inapplicable-evidence"
+        )
+        self.assertIn("the second writer is refused", error["message"])
+        self.assertEqual(self.fingerprint(), error["detail"]["fingerprint"])
+
+    def test_an_item_satisfying_every_clause_is_completed(self):
+        self.close_task()
+        self.patch_record({"delivery": dict(self.DELIVERY, delivered_at="2026-09-08T09:00:00Z")})
+        self.patch_record(
+            {
+                "evidence": [
+                    {
+                        "criteria": "the second writer is refused",
+                        "fingerprint": self.fingerprint(),
+                        "result": "pass",
+                    }
+                ]
+            }
+        )
+        completed, _ = self.run_cli("transition", self.complete())
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("done", self.record_metadata()["lifecycle"])
+
+    def revise_to_done(self):
+        return self.run_cli(
+            "revise", {"expected_revision": 1, "metadata": {"lifecycle": "done"}}, "--seq", "SEQ-001"
+        )
+
+    def test_revise_reaches_the_same_gate_as_a_planned_transition(self):
+        """`revise` writes without the store's plan, and completion is judged there too."""
+        completed, answer = self.revise_to_done()
+        self.assertEqual(1, completed.returncode, completed.stdout)
+        self.assertEqual("inapplicable-evidence", answer["error"]["code"])
+        self.assertEqual(["A1"], answer["error"]["detail"]["open_tasks"])
+        self.assertEqual("active", self.record_metadata()["lifecycle"])
+
+    def test_revise_completes_an_item_that_satisfies_the_gate(self):
+        self.close_task()
+        completed, _ = self.revise_to_done()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("done", self.record_metadata()["lifecycle"])
+
+    def accept_to_done(self):
+        return self.run_cli(
+            "accept",
+            {
+                "expected_revision": 1,
+                "lifecycle": "done",
+                "actor": "maintainer",
+                "authority": {"source": "maintainer decision", "revision": "2026-09-08T09:00:00Z"},
+                "scope": ["complete"],
+                "decided_at": "2026-09-08T09:00:00Z",
+            },
+            "--seq",
+            "SEQ-001",
+        )
+
+    def test_accept_reaches_the_same_gate(self):
+        """`accept` takes its lifecycle from the payload, so it can target `done` too."""
+        completed, answer = self.accept_to_done()
+        self.assertEqual(1, completed.returncode, completed.stdout)
+        self.assertEqual("inapplicable-evidence", answer["error"]["code"])
+        self.assertEqual(["A1"], answer["error"]["detail"]["open_tasks"])
+        self.assertEqual("active", self.record_metadata()["lifecycle"])
+
+    def test_a_leaf_task_is_not_judged_as_a_parent(self):
+        self.seed_claim(task="A1")
+        self.patch_record({"lifecycle": "active"}, task="A1")
+        self.assertEqual([], records.open_tasks(self.root, {"seq": "SEQ-001", "task": "A1"}))
+        completed, _ = self.run_cli("transition", self.complete(task="A1"))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("done", self.record_metadata(task="A1")["lifecycle"])
 
 
 class RootValidationTest(StoreCase):

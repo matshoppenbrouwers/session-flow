@@ -547,11 +547,6 @@ def patch_metadata(metadata: dict, patch) -> dict:
     return merged
 
 
-def record_name(identity: dict) -> str:
-    task = identity.get("task")
-    return f"{identity['seq']}/{task}" if task else identity["seq"]
-
-
 def acting_identity(payload: dict) -> str:
     """Who a change acts as: the payload's `actor`, or the coordinator that sent it."""
     actor = payload.get("actor")
@@ -570,7 +565,7 @@ def change_authority(payload: dict, command: str) -> dict:
 def require_claim_holder(current: dict, held: str, target: str, authority: dict) -> None:
     """Only the actor holding the claim moves a record between lifecycle states."""
     identity = current["identity"]
-    name = record_name(identity)
+    name = records.record_name(identity)
     claim = current["metadata"].get(CLAIM_FIELD)
     if not isinstance(claim, dict):
         raise MissingAuthorityError(
@@ -593,8 +588,8 @@ def require_claim_holder(current: dict, held: str, target: str, authority: dict)
         )
 
 
-def check_lifecycle_authority(current: dict, patch, authority: dict) -> None:
-    """Refuse a lifecycle change the contract forbids, or one no claim covers.
+def check_lifecycle_authority(work_root: Path, current: dict, patch, authority: dict) -> None:
+    """Refuse a lifecycle change the contract forbids, one no claim covers, or an unearned `done`.
 
     Every existing-record mutation passes here, whichever command planned it, so the
     transition table in `records` governs `transition` as it already governs `revise`.
@@ -609,13 +604,15 @@ def check_lifecycle_authority(current: dict, patch, authority: dict) -> None:
         records.check_lifecycle_change(held, target, authority["correction"])
     except InvalidRequestError as illegal:
         raise InvalidIdentityError(
-            f"{record_name(current['identity'])}: {illegal}",
+            f"{records.record_name(current['identity'])}: {illegal}",
             seq=current["identity"]["seq"],
             **illegal.detail,
         ) from illegal
     if target == held or (held, target) in CLAIM_EXEMPT_TRANSITIONS:
         return
     require_claim_holder(current, held, target, authority)
+    if target == records.LIFECYCLE_DONE:
+        records.check_completion(work_root, current)
 
 
 def plan_existing_record(work_root: Path, namespace: dict, change: dict, authority: dict) -> dict:
@@ -633,7 +630,7 @@ def plan_existing_record(work_root: Path, namespace: dict, change: dict, authori
             held=held,
             expected=expected,
         )
-    check_lifecycle_authority(current, change.get("metadata"), authority)
+    check_lifecycle_authority(work_root, current, change.get("metadata"), authority)
     updated = {
         "metadata": patch_metadata(current["metadata"], change.get("metadata")),
         "scope": change.get("scope", current["scope"]),
