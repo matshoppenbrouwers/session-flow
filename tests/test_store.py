@@ -1574,6 +1574,38 @@ class BindNamespaceTest(StoreCase):
     def namespace_document(self) -> dict:
         return json.loads((self.root / "namespace.json").read_text(encoding="utf-8"))
 
+    @unittest.skipUnless(GIT_AVAILABLE, NEEDS_GIT)
+    def test_a_bound_root_stays_clean_after_a_locked_operation(self):
+        shutil.rmtree(self.root)
+        self.root.mkdir()
+        initialize_repository(self.root)
+        completed, answer = self.bind()
+        self.assertEqual(0, completed.returncode, answer)
+        self.assertTrue(answer["result"]["commit"]["committed"], answer)
+        self.assertEqual("", git(self.root, "status", "--porcelain").stdout)
+
+        completed, answer = self.run_cli("transition", payload("new-item.json"))
+        self.assertEqual(0, completed.returncode, answer)
+        self.assertTrue(answer["result"]["commit"]["committed"], answer)
+        self.assertEqual("", git(self.root, "status", "--porcelain").stdout)
+        self.assertEqual("", git(self.root, "ls-files", "--", ".state").stdout)
+        self.assertTrue(store.operations_directory(self.root).is_dir())
+        self.assertTrue(store.tombstones_path(self.root).is_file())
+        self.assertEqual([], store.record_changes(self.root))
+
+    @unittest.skipUnless(GIT_AVAILABLE, NEEDS_GIT)
+    def test_binding_preserves_existing_ignore_rules_and_is_idempotent(self):
+        initialize_repository(self.root)
+        ignore = self.root / ".gitignore"
+        ignore.write_text("local-notes", encoding="utf-8")
+        completed, answer = self.bind()
+        self.assertEqual(0, completed.returncode, answer)
+        self.assertEqual("local-notes\n/.state/\n", ignore.read_text(encoding="utf-8"))
+        completed, answer = self.bind()
+        self.assertEqual(0, completed.returncode, answer)
+        self.assertFalse(answer["result"]["changed"])
+        self.assertEqual("local-notes\n/.state/\n", ignore.read_text(encoding="utf-8"))
+
     def test_an_unbound_root_gets_a_namespace_written_by_the_runtime(self):
         (self.root / "namespace.json").unlink()
         completed, answer = self.bind()

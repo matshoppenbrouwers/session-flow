@@ -29,7 +29,7 @@ Run the suite from the repository root:
 python3 -B -m unittest discover -s tests -v
 ```
 
-It needs Python 3.9+ and nothing else — no third-party packages, no network. The 356 tests in
+It needs Python 3.9+ and nothing else: no third-party packages, no network. The tests in
 `tests/` cover the runtime: its records, store and generated views; the repair and continuation
 paths; the packaged standalone installation; end-to-end scenarios against a temporary work root;
 and the release metadata, meaning the four version strings and the two shipped descriptions.

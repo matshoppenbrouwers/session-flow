@@ -798,15 +798,17 @@ def commit_work_root(work_root: Path, message: str) -> dict:
             f"the work root {reason}, so this transition is not versioned and backup and "
             "restore are unavailable"
         )
-    staged = run_git(work_root, ["add", "-A", "--", "."])
+    # A glob prefix avoids Git rejecting an explicitly named ignored directory.
+    paths = [".", ":(exclude,glob)[.]state/**"]
+    staged = run_git(work_root, ["add", "-A", "--", *paths])
     if staged is None or staged.returncode != 0:
         return git_failure("git add failed: " + first_line(staged))
-    staged_diff = run_git(work_root, ["diff", "--cached", "--quiet", "--", "."])
+    staged_diff = run_git(work_root, ["diff", "--cached", "--quiet", "--", *paths])
     if staged_diff is None:
         return git_failure("git diff failed: " + first_line(staged_diff))
     if staged_diff.returncode == 0:
         return git_failure("the applied records match the committed ones, so there was nothing to commit")
-    committed = run_git(work_root, ["-c", "commit.gpgsign=false", "commit", "-m", message, "--", "."])
+    committed = run_git(work_root, ["-c", "commit.gpgsign=false", "commit", "-m", message, "--", *paths])
     if committed is None or committed.returncode != 0:
         return git_failure("git commit failed: " + first_line(committed))
     head = run_git(work_root, ["rev-parse", "HEAD"])
@@ -1740,6 +1742,20 @@ def bound_repositories(existing: list, binding) -> list:
     return existing + [binding]
 
 
+def ignore_local_state(work_root: Path) -> bool:
+    """Keep persistent local journals out of Git status as well as commits."""
+    if unversioned_reason(work_root, git_toplevel(work_root)) is not None:
+        return False
+    path = ensure_plain_path(work_root, work_root / ".gitignore")
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    rule = f"/{STATE_DIRECTORY}/"
+    if rule in existing.splitlines():
+        return False
+    separator = "\n" if existing and not existing.endswith("\n") else ""
+    write_atomic(path, existing + separator + rule + "\n")
+    return True
+
+
 def bind_namespace(request: dict) -> dict:
     """Create the work root's namespace.json, or bind one more repository into it.
 
@@ -1771,8 +1787,10 @@ def bind_namespace(request: dict) -> dict:
         repositories = validate_bindings(work_root, bound_repositories(document["repositories"], binding))
         changed = created or repositories != document["repositories"]
         document["repositories"] = repositories
+        ignored = ignore_local_state(work_root)
         if changed:
             write_json(namespace_path(work_root), document)
+        changed = ignored or changed
         return dict(
             document,
             created=created,

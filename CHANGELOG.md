@@ -151,6 +151,10 @@ of the field changes that.
 acceptance and edits that leave lifecycle unchanged need no claim. The continuation limit
 remains in the skills, as the section above says.
 
+Work-root commits exclude `.state`, including the lock held during the commit. Binding a
+versioned root adds `/.state/` to its `.gitignore`, preserving existing rules, so local journals
+also stay out of Git status after the lock is released.
+
 None of this compromises the record store — nothing here can corrupt a record, lose an identity, or
 produce an unrecoverable work root.
 
