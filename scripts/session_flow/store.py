@@ -50,6 +50,8 @@ CLAIM_FIELD = "claim"
 RESULT_FIELD = "result"
 DEPENDS_FIELD = "depends_on"
 ALLOWED_PATHS_FIELD = "allowed_paths"
+TAKEOVER_FIELD = "takeover_claim"
+TAKEOVER_RECORD_FIELD = "takeover"
 MAX_PREREQUISITE_DEPTH = 64
 GLOB_SUFFIX = "/**"
 CLAIM_EXEMPT_TRANSITIONS = ((records.LIFECYCLE_CAPTURED, records.LIFECYCLE_ACCEPTED),)
@@ -620,6 +622,14 @@ def check_lifecycle_authority(work_root: Path, current: dict, patch, authority: 
         records.check_completion(work_root, current)
 
 
+def record_correction(metadata: dict, correction) -> dict:
+    """Append the correction that accounts for a change, as `revise` records its own."""
+    if not correction:
+        return metadata
+    metadata["corrections"] = list(metadata.get("corrections") or []) + [correction]
+    return metadata
+
+
 def plan_existing_record(work_root: Path, namespace: dict, change: dict, authority: dict) -> dict:
     seq = records.parse_item_id(change.get("seq"))
     path = record_path(work_root, seq, change.get("task"))
@@ -637,7 +647,9 @@ def plan_existing_record(work_root: Path, namespace: dict, change: dict, authori
         )
     check_lifecycle_authority(work_root, current, change.get("metadata"), authority)
     updated = {
-        "metadata": patch_metadata(current["metadata"], change.get("metadata")),
+        "metadata": record_correction(
+            patch_metadata(current["metadata"], change.get("metadata")), authority["correction"]
+        ),
         "scope": change.get("scope", current["scope"]),
         "body": change.get("body", current["body"]),
     }
@@ -1116,6 +1128,18 @@ def check_write_scope(work_root: Path, path: Path, payload: dict, actor: str) ->
     )
 
 
+def takeover_authority(payload: dict) -> dict | None:
+    """The validated authority that reassigns a held claim, or None when none is offered.
+
+    A takeover is a decision like any other, so it carries the same provenance an
+    acceptance does rather than a shape of its own.
+    """
+    offered = payload.get(TAKEOVER_FIELD)
+    if offered is None:
+        return None
+    return records.require_authority(offered, f"a `{TAKEOVER_FIELD}`")
+
+
 def claim_change(work_root: Path, current: dict, payload: dict, target: dict, coordinator: str) -> dict:
     """Plan one bounded assignment, refusing it while another claim or a prerequisite stands.
 
@@ -1126,7 +1150,8 @@ def claim_change(work_root: Path, current: dict, payload: dict, target: dict, co
     """
     actor = claimed_actor(payload)
     held = current["metadata"].get(CLAIM_FIELD)
-    if isinstance(held, dict) and held.get("actor") != actor and not payload.get("takeover_claim"):
+    takeover = takeover_authority(payload)
+    if isinstance(held, dict) and held.get("actor") != actor and takeover is None:
         raise MissingAuthorityError(
             f"{records.record_name(target)} is claimed by {held.get('actor')}; record that claim's "
             "result, or supply `takeover_claim` with the authority that reassigns it",
@@ -1141,8 +1166,9 @@ def claim_change(work_root: Path, current: dict, payload: dict, target: dict, co
         "claimed_at": payload.get("claimed_at", now_stamp()),
         ALLOWED_PATHS_FIELD: payload.get(ALLOWED_PATHS_FIELD, []),
     }
-    if payload.get("takeover_claim"):
+    if takeover is not None:
         claim["reassigned_from"] = held.get("actor") if isinstance(held, dict) else None
+        claim[TAKEOVER_RECORD_FIELD] = takeover
     return dict(target, expect_revision=payload.get("expect_revision"), metadata={CLAIM_FIELD: claim})
 
 

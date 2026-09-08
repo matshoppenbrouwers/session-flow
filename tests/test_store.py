@@ -22,6 +22,12 @@ ENTRYPOINT = SCRIPTS_ROOT / "session-flow.py"
 FIXTURES = REPO_ROOT / "tests" / "fixtures" / "lifecycle" / "store"
 NAMESPACE = "6f1d4a02-3c58-4a1e-9b77-0c2f8d5e4411"
 FIXTURE_COORDINATOR = "session-next"
+TAKEOVER_AUTHORITY = {
+    "actor": "maintainer",
+    "authority": {"source": "user-request", "revision": "2026-09-07T11:00:00Z"},
+    "scope": ["reassign"],
+    "decided_at": "2026-09-07T11:30:00Z",
+}
 
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
@@ -525,12 +531,20 @@ class LifecycleGuardTest(StoreCase):
 
     def test_a_reopening_with_a_correction_is_applied(self):
         self.patch_record({"lifecycle": "done"})
-        document = self.change(
-            "active", correction={"reason": "the delivery never happened", "actor": "maintainer"}
-        )
-        completed, _ = self.run_cli("transition", document)
+        correction = {"reason": "the delivery never happened", "actor": "maintainer"}
+        completed, _ = self.run_cli("transition", self.change("active", correction=correction))
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertEqual("active", self.record_metadata()["lifecycle"])
+        metadata = self.record_metadata()
+        self.assertEqual("active", metadata["lifecycle"])
+        self.assertEqual([correction], metadata["corrections"])
+
+    def test_a_reopening_appends_to_the_corrections_already_recorded(self):
+        earlier = {"reason": "an earlier reopening", "actor": "maintainer"}
+        self.patch_record({"lifecycle": "done", "corrections": [earlier]})
+        correction = {"reason": "the evidence was stale", "actor": "maintainer"}
+        completed, _ = self.run_cli("transition", self.change("active", correction=correction))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual([earlier, correction], self.record_metadata()["corrections"])
 
     def test_accept_and_revise_keep_their_own_guard_and_gain_no_other(self):
         """Both mutate through `records`, so the store guard neither loosens nor doubles them."""
@@ -779,22 +793,55 @@ class ClaimAndResultTest(StoreCase):
         document.update({"operation": "op-claim-0002", "actor": "agent:other", "expect_revision": 2})
         self.assert_fails_without_writing("claim", document, "missing-authority")
 
-    def test_an_explicit_takeover_reassigns_the_claim(self):
-        self.claim_the_task()
+    def takeover(self, authority, operation="op-claim-0003") -> dict:
         document = payload("claim.json")
         document.update(
             {
-                "operation": "op-claim-0003",
+                "operation": operation,
                 "actor": "agent:other",
                 "expect_revision": 2,
-                "takeover_claim": {"authority": "user request", "revision": "2026-09-07T11:00:00Z"},
+                "takeover_claim": authority,
             }
         )
-        completed, _ = self.run_cli("claim", document)
+        return document
+
+    def test_an_explicit_takeover_reassigns_the_claim(self):
+        self.claim_the_task()
+        completed, _ = self.run_cli("claim", self.takeover(TAKEOVER_AUTHORITY))
         self.assertEqual(0, completed.returncode, completed.stderr)
         claim = self.record_metadata(task="A1")["claim"]
         self.assertEqual("agent:other", claim["actor"])
         self.assertEqual("agent:store-implementer", claim["reassigned_from"])
+        self.assertEqual("maintainer", claim["takeover"]["actor"])
+        self.assertEqual(TAKEOVER_AUTHORITY["authority"], claim["takeover"]["authority"])
+        self.assertEqual(["reassign"], claim["takeover"]["scope"])
+        self.assertEqual("2026-09-07T11:30:00Z", claim["takeover"]["at"])
+
+    def test_a_bare_takeover_flag_reassigns_nothing(self):
+        self.claim_the_task()
+        error = self.assert_fails_without_writing(
+            "claim", self.takeover(True), "missing-authority"
+        )
+        self.assertIn("`actor` and an `authority`", error["message"])
+        self.assertIn("`source`", error["message"])
+        self.assertEqual("agent:store-implementer", self.record_metadata(task="A1")["claim"]["actor"])
+
+    def test_a_takeover_naming_provenance_as_its_authority_is_refused(self):
+        self.claim_the_task()
+        document = self.takeover(
+            dict(TAKEOVER_AUTHORITY, authority={"source": "auto", "revision": 3})
+        )
+        error = self.assert_fails_without_writing("claim", document, "missing-authority")
+        self.assertIn("provenance, not authority", error["message"])
+
+    def test_a_first_claim_needs_no_takeover_authority(self):
+        self.drop_claim(task="A1")
+        completed, _ = self.claim_the_task()
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        claim = self.record_metadata(task="A1")["claim"]
+        self.assertEqual("agent:store-implementer", claim["actor"])
+        self.assertNotIn("takeover", claim)
+        self.assertNotIn("reassigned_from", claim)
 
     def test_a_result_without_a_claim_is_refused(self):
         document = payload("result.json")
