@@ -1,5 +1,182 @@
 # Changelog
 
+## 2.0.0 (2026-09-08)
+
+Work items, their state, and the sequence are now owned by a local runtime instead of by
+hand-edited Markdown. That breaks every existing installation: the plugin needs a Python
+interpreter, the configuration keys change, and `SEQUENCE.md` stops being a file you edit.
+`/session-repair` is the only supported way from an existing repository into the new layout.
+Run it before anything else.
+
+### Breaking
+
+- **Python 3.9+ is a hard prerequisite.** Every record read or written goes through
+  `scripts/session-flow.py`; there is no hand-editing path beside it and no legacy mode to fall
+  back to. Without an interpreter the plugin does not run — `doctor` fails with an install
+  instruction rather than a traceback. Machines without Python, chiefly native Windows outside
+  WSL, cannot run this release.
+- **`paths.work` is new.** `.session-flow.json` gains a work root, `_devdocs/work/` by default.
+  One work item is one directory under it, holding `intent.md` and, when the work warrants them,
+  `spec.md`, `plan.md`, and `tasks/`. `namespace.json` at the root carries the namespace identity
+  and its repository bindings, so several repositories can share one root.
+- **`paths.sequence` moves to `_devdocs/SEQUENCE.md`.** It used to live inside `_devdocs/todo/`,
+  which is now an archive; leaving the live sequence there would misdescribe both.
+- **`SEQUENCE.md` is generated output.** It is rendered from the work items and must not be
+  hand-edited. An edit changes no record and the next render drops it. `/session-repair` in
+  reconcile mode reports a hand-edited sequence as drift instead of silently overwriting it.
+- **The legacy execution path is removed, not deprecated.** There is no dual-format mutation
+  path, no mixed-version negotiation, and no rollback to the old layout. The plugin had no
+  active installed users to preserve one for.
+- **`_devdocs/todo/` is a pre-import archive.** Historical phase and task files keep their names
+  and stay where they are; import links them where they lie rather than moving, renaming, or
+  renumbering them. Nothing new is written there, and `/session-init` no longer creates the
+  directory.
+
+### Upgrading
+
+`/session-repair` is the only supported path from an existing repository into the work-root
+contract, and it is the sixteenth skill in the package. It runs five stages in order: survey
+read-only, refuse unsafe ground, plan, apply, verify.
+
+Planning is the default. The plan prints the per-item transformation — which SEQ becomes which
+directory, which files are linked, which IDs become tombstones, which annotations carry across —
+and writes nothing. Applying takes explicit confirmation. Repair refuses to write at all when the
+work root is not a Git repository, when the project tree or work root has uncommitted changes,
+when a prior operation sits unapplied in the journal, when another coordinator holds the lock, or
+when the survey found a shape it cannot classify. Each refusal names the condition and the
+command that clears it. There is no `--force`.
+
+Apply is one journalled operation under the root lock, ending in a single commit. Every SEQ ever
+seen is retired in `tombstones`, including identities surviving only in an archived file, so no
+ID is ever reused against a live scribe mirror. The ` ⇄ <url>` annotations and `[auto]` markers
+carry across verbatim. Nothing is deleted, nothing external is created, and nothing becomes done
+that was not already done. The run then re-derives the sequence from the stored records and
+compares it entry by entry against the original; any mismatch fails the run and leaves a commit
+to revert. Success is never declared from an exit code. A second run is a no-op, and an
+interrupted run resumes from the journal.
+
+The same skill's second entry condition is reconciliation: a current layout that has drifted — a
+hand-edited sequence, an item with no row or a row with no item, an unapplied operation, a stale
+claim, a missing tombstone. It repairs only what is unambiguous and escalates anything needing
+judgement with both versions shown. Migration happens once; drift recurs, which is why this is a
+skill and not a one-off script.
+
+### Added
+
+- **A local transition runtime.** `scripts/session-flow.py` and the `session_flow` package
+  provide `doctor`, `show`, `capture`, `revise`, `accept`, `select`, `claim`, `record-result`,
+  `transition`, `render`, `import`, `reconcile`, and `backup`/`restore`. Identity is immutable,
+  scope is bound by a normalized fingerprint with an explicit `--same-meaning` decision for
+  reflows, the root lock is an exclusive directory creation, IDs are reserved against tombstones,
+  and every mutation is a journalled prepared operation with idempotent retry and atomic replace
+  writes. Reconciliation finishes a known partial application and stops on unexplained divergence
+  rather than overwriting it. History is Git's: an applied transition ends in a commit, restore is
+  a checkout, backup is a push. `doctor` reports an integer protocol version, which is what the
+  companion plugins check rather than the release number.
+- **Bounded dispatch and truthful completion.** `/session-next` selects, claims, and works one
+  bounded unit; `/session-delegation` dispatches exactly the named task IDs plus their permitted
+  prerequisite closure and stops before dispatch on a missing or ambiguous ID, an unknown
+  prerequisite, a cycle, an overlapping write scope, a stale claim, or changed accepted scope.
+  `/session-verify` targets the accepted scope by fingerprint and work-root commit. A parent whose
+  tasks all pass but whose required delivery is unmerged is not reported as complete, and stale
+  evidence or an unknown outcome does not authorize completion. These are skill-level gates: the
+  runtime computes and reports the facts they turn on, and the skills refuse. See **Where
+  enforcement lives** below for what that does and does not guarantee.
+- **The work-root versioning question.** `/session-init` asks once whether the work root is
+  tracked in the repository or gets its own private repository, and acts on the answer, including
+  running the private-repository setup. The answer decides a capability and not only privacy: a
+  hosted ops job can read only committed files, so ignoring the work root keeps execution local.
+  Declining every option is allowed; `doctor` then reports the unversioned root as a limitation.
+- **A test suite.** `python3 -B -m unittest discover -s tests -v` covers the records, store,
+  views, dispatch scope, installation, repair, scenario, continuation, and release-metadata
+  checks. The project had
+  no test command before this release. It does not exercise host invocation.
+
+### Continuation
+
+Continuation over several units is off unless something outside the run authorizes it: an
+invocation naming the further units, or a `continuation` policy in `.session-flow.json` naming
+authority, capacity, scope, and stop conditions. A block missing a key, or naming a stop
+condition the skill does not define, authorizes nothing. Authority is re-resolved before every
+dispatch. A unit already claimed finishes and records its result even when the policy is
+withdrawn mid-run — revocation blocks the next dispatch, it does not erase an effect that already
+happened. Six named stops say why a run ended. A bounded request from ops is a candidate, not an
+assignment: with no standing policy covering that identity it starts nothing.
+
+That limit is prose-enforced, not code-enforced. The capacity and stop-condition checks live in
+`skills/session-next/SKILL.md` prose, and `tests/test_continuation.py` verifies that the text says
+the right thing and that a runner following it stops where the scenario expects. Nothing in the
+runtime blocks an agent that reads the instruction and keeps going anyway.
+
+### Where enforcement lives
+
+Continuation is not the only thing enforced this way, and a pre-release hand-check found the
+boundary to be wider than the design text implies. Read this before relying on any guarantee in
+the two sections above.
+
+**The runtime enforces record integrity.** Identity allocation against the tombstone index, the
+exclusive root lock, expected-revision checks, atomic writes, the prepared-operation journal and
+its idempotent replay, scope fingerprints, and the round-trip comparison in `import` are all real,
+tested, and hold against a caller that ignores every instruction.
+
+**The skills enforce work governance.** Legal lifecycle transitions, holding a claim before
+changing an item, dependency and write-scope checks before dispatch, and the completion gates on
+evidence and delivery are instructed in skill prose and asserted by tests against that prose. The
+runtime computes the facts they turn on and reports them; it does not refuse on them. Concretely,
+as of this release: `transition` applies no lifecycle guard and requires no claim, so a caller
+driving the entrypoint directly can move an item between any two states, including to `done` with
+no evidence and an undelivered requirement; `depends_on` is recorded and never read; `allowed_paths`
+is written into the claim and never read; and `takeover_claim` is a truthiness flag rather than the
+authority its own refusal message asks for.
+
+This is a real gap between the design text and the shipped code, not a design position being
+defended. It does not compromise the record store — nothing here can corrupt a record, lose an
+identity, or produce an unrecoverable work root. It does mean the work-governance guarantees hold
+for agents that follow the skills, and not against one that bypasses them. Follow-up tasks track
+moving these checks into the runtime.
+
+### Fixed
+
+- **A complete standalone install.** `install.sh` copies each skill's whole resource tree plus the
+  shared `references/` tree and `THIRD_PARTY_NOTICES.md`, and activates an entry file only once
+  its declared resources verify present. The nested `skills/security-liability-audit/references/`
+  and `skills/session-debug/references/` trees were being dropped.
+- **Bounded phase dispatch.** A phase anchor used to stand in for a whole task file, so a request
+  for one task could run its siblings. Selection now carries one explicit target scope, and a
+  completion marker states which tasks it covers.
+- **Scoped refinement commits.** `/session-post-implementation`'s two `git add -A` checkpoints
+  became an ownership snapshot taken before the first change and an explicit staged-path list.
+  Unrelated modified, staged, or untracked files cannot enter a flow commit; the skill stops and
+  names them.
+- **Resolved audit selection.** The step list resolves once at configuration time, so a selected
+  audit add-on runs under Standard and Quick scope instead of being skipped by a second gate.
+- **Evidence freshness at release.** `/session-release` compares the verification report's
+  recorded commit range against the release candidate revision and releases on older evidence only
+  through a recorded reuse-or-rerun decision.
+- **Installed packages are verified.** The core fixtures now run under the source, native-plugin,
+  and standalone layouts through both invocation routes, with spaced paths, upgrade and uninstall
+  survival of the work root, and a restore into an empty root. An interpreter that is missing or
+  too old reports as an interpreter problem with an install instruction, not as an incomplete
+  package.
+- **Stale guidance.** `references/workflow-overview.md` described save gates and sequential
+  research dispatch that the skills do not do, `references/customization-guide.md` counted three
+  bundled agents where the manifest registers six, and `CONTRIBUTING.md` still required a retired
+  Announce marker.
+
+### Notes
+
+- **No measured improvement in maintainer effort is claimed.** No baseline of the previous system
+  was captured, by decision, so no reduction can be demonstrated. What this release claims is that
+  the designed behaviour is present and correct. Several of its acceptance criteria are
+  hand-checked by the maintainer rather than asserted by a test, and are labelled that way in the
+  phase files.
+- Supported and measured on Linux/WSL and macOS. Native Windows is out of scope while Python is a
+  hard prerequisite. A network or cloud-synchronized work root, simultaneous editing from another
+  operating system, and mutation from more than one host are outside the coordination guarantee
+  and are unsupported rather than defended against.
+- session-scribe and session-ops carry their own halves of this work and release on their own
+  version numbers. Nothing from those repositories ships in this package.
+
 ## 1.7.1 (2026-09-05)
 
 Finishes what 1.7.0 started. The confidence rewrite reached the lines the plan named and left

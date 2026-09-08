@@ -23,6 +23,22 @@ Before submitting a skill:
 
 ## Testing Changes
 
+Run the suite from the repository root:
+
+```bash
+python3 -B -m unittest discover -s tests -v
+```
+
+It needs Python 3.9+ and nothing else — no third-party packages, no network. The 356 tests in
+`tests/` cover the runtime: its records, store and generated views; the repair and continuation
+paths; the packaged standalone installation; end-to-end scenarios against a temporary work root;
+and the release metadata, meaning the four version strings and the two shipped descriptions.
+
+**What it does not cover: host invocation.** Nothing in the suite starts Claude Code, loads a
+skill through a host, or checks that a skill's prose actually drives an agent the way it reads. A
+skill body is exercised only where a test asserts on its text. Run these by hand before submitting
+a change to a skill or an agent:
+
 1. Install to a clean `~/.claude/skills/` directory
 2. Grep for project-specific paths: `grep -r "pkb/\|_devdocs/\|tauri\|WSL" skills/ agents/`
 3. Verify each skill triggers correctly by invoking its slash command
