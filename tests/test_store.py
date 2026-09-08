@@ -21,6 +21,7 @@ SCRIPTS_ROOT = REPO_ROOT / "scripts"
 ENTRYPOINT = SCRIPTS_ROOT / "session-flow.py"
 FIXTURES = REPO_ROOT / "tests" / "fixtures" / "lifecycle" / "store"
 NAMESPACE = "6f1d4a02-3c58-4a1e-9b77-0c2f8d5e4411"
+FIXTURE_COORDINATOR = "session-next"
 
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
@@ -77,6 +78,32 @@ class StoreCase(unittest.TestCase):
         self.project = Path(directory)
         self.root = self.project / "_devdocs" / "work"
         shutil.copytree(FIXTURES / "root", self.root)
+        self.seed_claim()
+
+    def patch_record(self, patch: dict, seq="SEQ-001", task=None) -> dict:
+        """Edit a fixture record in place, leaving its revision where the payloads expect it."""
+        path = store.record_path(self.root, seq, task)
+        current = records.read_record(path)
+        metadata = store.patch_metadata(current["metadata"], patch)
+        records.write_record_file(
+            path, records.render_record(metadata, current["scope"], current["body"])
+        )
+        return metadata
+
+    def seed_claim(self, actor=FIXTURE_COORDINATOR, seq="SEQ-001", task=None) -> dict:
+        """Claim a fixture record: no command may change a lifecycle without a claim."""
+        claim = {
+            "actor": actor,
+            "coordinator": actor,
+            "host": "fixture",
+            "claimed_at": "2026-09-07T11:00:00Z",
+            "allowed_paths": [],
+        }
+        self.patch_record({store.CLAIM_FIELD: claim}, seq, task)
+        return claim
+
+    def drop_claim(self, seq="SEQ-001", task=None) -> None:
+        self.patch_record({store.CLAIM_FIELD: None}, seq, task)
 
     def request(self, command: str, document=None, seq=None, task=None) -> dict:
         return {
@@ -422,6 +449,102 @@ class TransitionTest(StoreCase):
         self.assertFalse(store.lock_directory(self.root).exists())
 
 
+class LifecycleGuardTest(StoreCase):
+    """Every existing-record mutation is judged against the transition table and the claim."""
+
+    def change(self, lifecycle: str, expect_revision=1, **fields) -> dict:
+        document = payload("lifecycle-change.json")
+        document.update(fields)
+        document["changes"][0].update(
+            {"expect_revision": expect_revision, "metadata": {"lifecycle": lifecycle}}
+        )
+        return document
+
+    def test_an_illegal_change_from_a_coordinator_holding_no_claim_is_refused(self):
+        """The phase 4A reproduction: `done` to `captured`, sent by a coordinator with no claim."""
+        self.patch_record({"lifecycle": "done", store.CLAIM_FIELD: None})
+        error = self.assert_fails_without_writing(
+            "transition", self.change("captured", coordinator="stranger"), "invalid-identity"
+        )
+        self.assertIn("done work cannot become captured", error["message"])
+        self.assertEqual("captured", error["detail"]["requested"])
+        self.assertEqual("done", self.record_metadata()["lifecycle"])
+
+    def test_an_illegal_change_is_refused_even_from_the_claim_holder(self):
+        self.patch_record({"lifecycle": "done"})
+        self.assert_fails_without_writing("transition", self.change("captured"), "invalid-identity")
+
+    def test_a_lifecycle_value_outside_the_vocabulary_is_refused(self):
+        self.assert_fails_without_writing("transition", self.change("nearly-done"), "invalid-request")
+
+    def test_an_unclaimed_record_cannot_change_its_lifecycle_at_all(self):
+        self.drop_claim()
+        error = self.assert_fails_without_writing(
+            "transition", self.change("active"), "missing-authority"
+        )
+        self.assertIn("carries no claim", error["message"])
+        self.assertIn("`claim` command", error["message"])
+
+    def test_a_lifecycle_change_from_an_actor_without_the_claim_is_refused(self):
+        error = self.assert_fails_without_writing(
+            "transition", self.change("active", actor="agent:stranger"), "missing-authority"
+        )
+        self.assertEqual(FIXTURE_COORDINATOR, error["detail"]["actor"])
+        self.assertIn("only the claiming actor", error["message"])
+
+    def test_the_claiming_actor_changes_the_lifecycle(self):
+        completed, _ = self.run_cli("transition", self.change("active", actor=FIXTURE_COORDINATOR))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("active", self.record_metadata()["lifecycle"])
+
+    def test_one_unclaimed_record_refuses_the_whole_operation(self):
+        error = self.assert_fails_without_writing(
+            "transition", payload("two-record-change.json"), "missing-authority"
+        )
+        self.assertIn("SEQ-001/A1", error["message"])
+
+    def test_accepting_captured_work_precedes_any_claim(self):
+        self.patch_record({"lifecycle": "captured", store.CLAIM_FIELD: None})
+        completed, _ = self.run_cli("transition", self.change("accepted"))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("accepted", self.record_metadata()["lifecycle"])
+
+    def test_a_claim_and_a_result_set_no_lifecycle_and_pass_the_guard(self):
+        completed, _ = self.run_cli("claim", payload("claim.json"))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        completed, _ = self.run_cli("record-result", payload("result.json"))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("accepted", self.record_metadata(task="A1")["lifecycle"])
+
+    def test_reopening_done_work_still_needs_a_correction(self):
+        self.patch_record({"lifecycle": "done"})
+        error = self.assert_fails_without_writing(
+            "transition", self.change("active"), "missing-authority"
+        )
+        self.assertIn("correction", error["message"])
+
+    def test_a_reopening_with_a_correction_is_applied(self):
+        self.patch_record({"lifecycle": "done"})
+        document = self.change(
+            "active", correction={"reason": "the delivery never happened", "actor": "maintainer"}
+        )
+        completed, _ = self.run_cli("transition", document)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("active", self.record_metadata()["lifecycle"])
+
+    def test_accept_and_revise_keep_their_own_guard_and_gain_no_other(self):
+        """Both mutate through `records`, so the store guard neither loosens nor doubles them."""
+        self.drop_claim()
+        completed, accepted = self.run_cli("accept", payload("acceptance.json"), "--seq", "SEQ-001")
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("accepted", accepted["result"]["lifecycle"])
+        completed, revised = self.run_cli(
+            "revise", {"expected_revision": 2, "metadata": {"lifecycle": "active"}}, "--seq", "SEQ-001"
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("active", revised["result"]["lifecycle"])
+
+
 class RootValidationTest(StoreCase):
     """Configuration and paths are validated before the canonical records change."""
 
@@ -600,6 +723,10 @@ class DirectCallTest(StoreCase):
 
 class RecoveryCase(StoreCase):
     """A work root left mid-operation by an interruption injected at one stage."""
+
+    def setUp(self):
+        super().setUp()
+        self.seed_claim(task="A1")
 
     def crash_during(self, stage: str, document: dict) -> None:
         with mock.patch.object(store, stage, side_effect=KeyboardInterrupt("the coordinator stopped")):

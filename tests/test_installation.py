@@ -70,11 +70,23 @@ ACCEPTANCE_PAYLOAD = {
     "scope": ["implement", "record"],
     "decided_at": "2026-09-07T12:30:00Z",
 }
+# A lifecycle change needs the claim that covers it, so the fixture run takes the
+# assignment before moving the item. `claimed_at` is literal because a defaulted
+# timestamp differs between the three layout runs and they must reproduce each other.
+CLAIM_PAYLOAD = {
+    "operation": "op-installed-claim",
+    "coordinator": "tests.test_installation",
+    "actor": "tests.test_installation",
+    "seq": CORE_ITEM,
+    "expect_revision": 2,
+    "claimed_at": "2026-09-07T13:00:00Z",
+    "allowed_paths": [],
+}
 TRANSITION_PAYLOAD = {
     "operation": "op-installed-layout",
     "coordinator": "tests.test_installation",
     "provenance": {"actor": "maintainer", "source": "fixture run"},
-    "changes": [{"seq": CORE_ITEM, "expect_revision": 2, "metadata": {"lifecycle": "active"}}],
+    "changes": [{"seq": CORE_ITEM, "expect_revision": 3, "metadata": {"lifecycle": "active"}}],
 }
 PENDING_OPERATION = {
     "format": 1,
@@ -390,6 +402,10 @@ def core_fixture_run(entrypoint: Path, project: Path, payloads: dict, environmen
             entrypoint, project, "accept", "--seq", CORE_ITEM, "--input", payloads["accept"],
             environment=environment,
         ),
+        "claim": invoke(
+            entrypoint, project, "claim", "--seq", CORE_ITEM, "--input", payloads["claim"],
+            environment=environment,
+        ),
         "transition": invoke(
             entrypoint, project, "transition", "--input", payloads["transition"], environment=environment
         ),
@@ -434,6 +450,7 @@ class InstalledLayoutTest(unittest.TestCase):
         cls.root = temporary_root(cls.addClassCleanup)
         cls.payloads = {
             "accept": write_payload(cls.root / "payloads", "accept.json", ACCEPTANCE_PAYLOAD),
+            "claim": write_payload(cls.root / "payloads", "claim.json", CLAIM_PAYLOAD),
             "transition": write_payload(cls.root / "payloads", "transition.json", TRANSITION_PAYLOAD),
         }
         plugin_entrypoint, cls.plugin_environment = plugin_layout(cls.root)

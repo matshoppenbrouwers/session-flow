@@ -47,6 +47,7 @@ DEFAULT_COORDINATOR = "session-flow"
 IMPORT_COMMAND = "import"
 CLAIM_FIELD = "claim"
 RESULT_FIELD = "result"
+CLAIM_EXEMPT_TRANSITIONS = ((records.LIFECYCLE_CAPTURED, records.LIFECYCLE_ACCEPTED),)
 RESULT_OUTCOMES = ("passed", "failed", "blocked", "unknown")
 APPLIED = "applied"
 PREPARED = "prepared"
@@ -546,7 +547,78 @@ def patch_metadata(metadata: dict, patch) -> dict:
     return merged
 
 
-def plan_existing_record(work_root: Path, namespace: dict, change: dict) -> dict:
+def record_name(identity: dict) -> str:
+    task = identity.get("task")
+    return f"{identity['seq']}/{task}" if task else identity["seq"]
+
+
+def acting_identity(payload: dict) -> str:
+    """Who a change acts as: the payload's `actor`, or the coordinator that sent it."""
+    actor = payload.get("actor")
+    return actor if isinstance(actor, str) and actor else coordinator_name(payload)
+
+
+def change_authority(payload: dict, command: str) -> dict:
+    """What every planned change is judged against, whichever command carries it."""
+    return {
+        "command": command,
+        "actor": acting_identity(payload),
+        "correction": payload.get("correction"),
+    }
+
+
+def require_claim_holder(current: dict, held: str, target: str, authority: dict) -> None:
+    """Only the actor holding the claim moves a record between lifecycle states."""
+    identity = current["identity"]
+    name = record_name(identity)
+    claim = current["metadata"].get(CLAIM_FIELD)
+    if not isinstance(claim, dict):
+        raise MissingAuthorityError(
+            f"{name} carries no claim, so {authority['command']} cannot move it from {held} to "
+            f"{target}; take the assignment with the `claim` command, naming the actor that does "
+            "the work, before changing its lifecycle",
+            seq=identity["seq"],
+            lifecycle=held,
+            requested=target,
+        )
+    if claim.get("actor") != authority["actor"]:
+        raise MissingAuthorityError(
+            f"{name} is claimed by {claim.get('actor')}, not by {authority['actor']}; only the "
+            f"claiming actor moves it from {held} to {target}, so act as that actor or reassign "
+            "the claim with `claim` and a `takeover_claim` authority",
+            seq=identity["seq"],
+            actor=claim.get("actor"),
+            lifecycle=held,
+            requested=target,
+        )
+
+
+def check_lifecycle_authority(current: dict, patch, authority: dict) -> None:
+    """Refuse a lifecycle change the contract forbids, or one no claim covers.
+
+    Every existing-record mutation passes here, whichever command planned it, so the
+    transition table in `records` governs `transition` as it already governs `revise`.
+    A patch that sets no `lifecycle` moves nothing, and `captured` to `accepted` is the
+    one state change that legitimately precedes a claim.
+    """
+    if not isinstance(patch, dict) or "lifecycle" not in patch:
+        return
+    held = records.lifecycle_of(current)
+    target = records.validate_lifecycle(patch["lifecycle"])
+    try:
+        records.check_lifecycle_change(held, target, authority["correction"])
+    except InvalidRequestError as illegal:
+        raise InvalidIdentityError(
+            f"{record_name(current['identity'])}: {illegal}",
+            seq=current["identity"]["seq"],
+            **illegal.detail,
+        ) from illegal
+    if target == held or (held, target) in CLAIM_EXEMPT_TRANSITIONS:
+        return
+    require_claim_holder(current, held, target, authority)
+
+
+def plan_existing_record(work_root: Path, namespace: dict, change: dict, authority: dict) -> dict:
     seq = records.parse_item_id(change.get("seq"))
     path = record_path(work_root, seq, change.get("task"))
     current = records.read_record(path)
@@ -561,6 +633,7 @@ def plan_existing_record(work_root: Path, namespace: dict, change: dict) -> dict
             held=held,
             expected=expected,
         )
+    check_lifecycle_authority(current, change.get("metadata"), authority)
     updated = {
         "metadata": patch_metadata(current["metadata"], change.get("metadata")),
         "scope": change.get("scope", current["scope"]),
@@ -612,20 +685,20 @@ def plan_new_record(work_root: Path, namespace: dict, change: dict, operation_id
     }
 
 
-def plan_change(work_root: Path, namespace: dict, change, operation_id: str) -> dict:
+def plan_change(work_root: Path, namespace: dict, change, operation_id: str, authority: dict) -> dict:
     if not isinstance(change, dict):
         raise InvalidRequestError("each entry of `changes` must be an object")
     if change.get("new"):
         return plan_new_record(work_root, namespace, change, operation_id)
-    return plan_existing_record(work_root, namespace, change)
+    return plan_existing_record(work_root, namespace, change, authority)
 
 
-def plan_changes(work_root: Path, namespace: dict, changes, operation_id: str) -> list:
+def plan_changes(work_root: Path, namespace: dict, changes, operation_id: str, authority: dict) -> list:
     if not isinstance(changes, list) or not changes:
         raise InvalidRequestError(
             "`changes` must be a non-empty list; an operation that changes nothing is not a transition"
         )
-    plan = [plan_change(work_root, namespace, change, operation_id) for change in changes]
+    plan = [plan_change(work_root, namespace, change, operation_id, authority) for change in changes]
     addressed = [str(entry["path"]) for entry in plan]
     if len(set(addressed)) != len(addressed):
         raise InvalidRequestError(
@@ -783,7 +856,9 @@ def run_operation(request, payload, command, operation_id, fingerprint, changes,
     if replayed is not None:
         return replayed
     block_on_pending(work_root, operation_id)
-    plan = plan_changes(work_root, namespace, changes, operation_id)
+    plan = plan_changes(
+        work_root, namespace, changes, operation_id, change_authority(payload, command)
+    )
     document = write_prepared_operation(
         work_root, command, operation_id, fingerprint, payload, ownership, plan
     )
