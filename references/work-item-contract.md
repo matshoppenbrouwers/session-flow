@@ -109,6 +109,47 @@ values and revisions; the agent owns the prose and invokes the helper.
 | `provenance` | object | `{"origin": "user"` or `"auto"`, `"actor": ..., "captured_at": ...}`. `[auto]` in a generated view maps to `origin: "auto"` — provenance, never authority. |
 | `source`, `capture_id` | string | The external item this record mirrors and the intake key that deduplicates it. |
 
+### Tasks, claims, prerequisites, and write scope
+
+| Field | Type | Rule |
+|-------|------|------|
+| `parent` | string | The `SEQ-NNN` this task belongs to. Task records only. |
+| `depends_on` | list | Prerequisite identities, each `SEQ-NNN` or `SEQ-NNN/TASK`. Enforced when the record is claimed. |
+| `allowed_paths` | list | The write scope the record declares. What the runtime compares is the copy the claim carries. |
+| `claim` | object | The live assignment: `actor`, `coordinator`, `host`, `claimed_at`, and the claim's own `allowed_paths`. One per record. |
+| `result` | object | The claimed work's outcome, written by `record-result`. Recording it ends the claim's hold on its paths. |
+
+**Prerequisites are checked at claim time, over the transitive closure.** `claim` walks
+`depends_on` from the claimed record through the prerequisites of its prerequisites, so an
+indirect entry blocks as a direct one does. Three refusals, each naming the identity at fault:
+
+- A prerequisite with no record at the resolved path is `invalid-identity`. The runtime never
+  guesses which identity was meant.
+- A closure that has no possible ordering is a cycle and is `invalid-identity`, reported rather
+  than recursed into. A record naming itself is the smallest case.
+- A prerequisite whose lifecycle is anything but `done` is `invalid-request`. Only `done`
+  satisfies a prerequisite; `cancelled` does not, because cancelled work produced no outcome to
+  depend on. Drop the entry instead.
+
+The walk is bounded at 64 records deep; a longer chain is refused as one to flatten. A `depends_on`
+that is not a list, and an entry that is not one of the two identity forms, are `invalid-identity`
+as well.
+
+**`allowed_paths` is enforced as disjointness between the live claims of different actors, and as
+nothing else.** The runtime never sees an agent's file writes, so an accepted claim is not a
+guarantee that the agent wrote only inside its paths. A claim is refused as `invalid-request` when
+one of its paths and a path held by another actor's live claim are equal, or either is a directory
+prefix of the other. Four consequences follow, each of them deliberate:
+
+- The same actor never conflicts with itself.
+- A claim declaring no paths conflicts with nothing, in either direction. An empty list is an
+  undeclared scope, not a claim over the whole tree.
+- A claim stops fencing its paths once its record reaches `done` or `cancelled`, or once a
+  `result` is recorded on it — whichever comes first.
+- Comparison is by normalized path: `./src/a`, `src/a/` and `src/a/**` are the same entry, `src/a/b.py`
+  is inside `src/a`, and `src/ab` is not. A `path:lines` entry compares as its own string, so it
+  does not overlap the plain file — narrow to line ranges only when nobody else claims the file.
+
 ## Lifecycle states and legal transitions
 
 Capture, acceptance, and action eligibility are three separate things. A new work item grants no
@@ -124,7 +165,9 @@ implementation permission, and neither does a linked breakdown file.
 | `deferred` | Retired without being done. The ID stays taken. |
 | `cancelled` | Retired and not to be resumed under this identity. |
 
-Every other transition is `invalid-identity` and fails before any write.
+Every other transition is refused and fails before any write: `invalid-identity` through
+`transition`, `claim`, and `record-result`, and `invalid-request` through `revise` and `accept`,
+which raise the transition table's own error rather than the store's.
 
 | From | To | Requires |
 |------|----|----------|
@@ -133,19 +176,35 @@ Every other transition is `invalid-identity` and fails before any write.
 | `accepted` | `active` | A claim naming the coordinator and the expected revision |
 | `accepted` | `blocked`, `deferred`, `cancelled` | A recorded reason |
 | `active` | `blocked` | A recorded blocker |
-| `active` | `done` | Evidence applicable to the accepted fingerprint |
+| `active` | `done` | Applicable evidence, a receipt for every required delivery, and no open task |
 | `active` | `deferred`, `cancelled` | A recorded reason; an existing claim is released |
 | `blocked` | `active` | The blocker resolved and a current claim |
 | `blocked` | `deferred`, `cancelled` | A recorded reason |
 | `done` | `active` | A correction record naming the premature closure. Reopening keeps the same identity |
 | `deferred` | `accepted` | Re-acceptance against the current fingerprint. The old acceptance is not carried forward |
+| `deferred` | `captured`, `cancelled` | A recorded reason |
+| `cancelled` | `captured` | A correction record naming the premature cancellation. The identity is kept |
 
-`cancelled` is terminal. An incident found after valid delivery becomes linked successor work under a
-new `SEQ`, not a reopening of the delivered one.
+`cancelled` reopens only as `captured`, and only with that correction. An incident found after valid
+delivery becomes linked successor work under a new `SEQ`, not a reopening of the delivered one.
+
+Only the actor holding the record's claim moves it between lifecycle states. An unclaimed record
+cannot change lifecycle at all, and a change from an actor that is not the holder is
+`missing-authority`. Two changes are exempt: `captured → accepted`, which legitimately precedes a
+claim, and any change that sets no `lifecycle`. That guard runs on `transition`, `claim`, and
+`record-result`; `revise` and `accept` enforce the transition table and the completion gates below
+but not claim ownership.
+
+**Reaching `done` is gated on the record itself**, and the gate runs before any write. It refuses
+when an evidence entry was gathered against a fingerprint the record no longer carries
+(`inapplicable-evidence` — re-run the check, or record a same-meaning decision), when
+`delivery.required` is true and no `delivery.delivered_at` is recorded, or when the item owns a
+task that is neither `done` nor `cancelled`. Each refusal names the clause and what satisfies it.
 
 Task records use the same state names. Tasks can reach `done` while the parent still needs
 integration or delivery: completing every task does not by itself move the parent to `done`, which
-needs applicable evidence for the accepted outcome.
+also needs applicable evidence and any required delivery. A record that is itself a task, and an
+item with no `tasks/` directory, owns no tasks and passes that clause.
 
 ## Acceptance and fingerprints
 
@@ -156,12 +215,18 @@ revision number.
 
 1. The scope region text, normalized.
 2. The repository bindings, as `name=path` pairs sorted by name.
-3. The required delivery target, or the empty string when none is required.
+3. The delivery requirement, as the `repository`, `required`, and `target` keys the record
+   carries, and nothing when it declares no `delivery`. The repository is part of what was
+   required, not a receipt for it, so it is fingerprinted with the other two.
 4. Each explicitly referenced behaviour or criteria document as `path@commit`, using its work-root
    commit, sorted by path. A mutable file name alone is not sufficient.
 
 **What is excluded**: `title`, `lifecycle`, `priority`, `order`, `revision`, progress and next-action
 fields, evidence, links, claims, and results. A status-only edit therefore retains acceptance.
+Delivery receipts are excluded by construction rather than by name: the three requirement keys are
+projected out of `delivery` and everything else in it is dropped, so recording `delivered_at` —
+or any receipt field added later — cannot invalidate acceptance. Changing `repository`,
+`required`, or `target` still does, because that changes what was required.
 
 **Normalization**, applied to the scope text before hashing:
 
@@ -301,8 +366,9 @@ lives in `intent.md` and in each task record, nowhere else. A task record adds t
 ```json
 {
   "allowed_paths": ["scripts/session_flow/store.py", "tests/test_store.py"],
-  "claim": {"coordinator": "local-1", "expected_revision": 2, "host": "wsl-dev",
-            "taken_at": "2026-09-07T11:00:00Z"},
+  "claim": {"actor": "agent:store-implementer",
+            "allowed_paths": ["scripts/session_flow/store.py", "tests/test_store.py"],
+            "claimed_at": "2026-09-07T11:00:00Z", "coordinator": "local-1", "host": "wsl-dev"},
   "depends_on": ["SEQ-043/A1"],
   "format": 1,
   "lifecycle": "active",
@@ -331,6 +397,13 @@ overwriting them.
 ````
 
 The task's `scope_fingerprint` covers its own scope region, so a parent scope edit and a task scope
-edit invalidate different things. `depends_on` names full task identities; unknown prerequisites,
-cycles, overlapping `allowed_paths`, a stale claim, or changed accepted parent scope stop dependent
-dispatch.
+edit invalidate different things. The claim repeats the record's `allowed_paths` because the claim's
+copy is the one the runtime compares against other live claims; the record-level field is the
+declaration a planner writes and is not itself read at claim time.
+
+An unknown prerequisite, a cycle, an unfinished prerequisite, and an `allowed_paths` overlap with
+another actor's live claim each refuse the `claim` command outright, as described under *Tasks,
+claims, prerequisites, and write scope*. A stale claim and changed accepted parent scope are not
+refused there. The runtime refuses a claim whose expected revision no longer matches the stored one
+(`stale-revision`), but it does not judge whether a live claim has gone stale or whether the parent's
+accepted scope still holds; a coordinating agent stops dependent dispatch on those.

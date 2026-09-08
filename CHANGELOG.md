@@ -79,9 +79,12 @@ skill and not a one-off script.
   prerequisite, a cycle, an overlapping write scope, a stale claim, or changed accepted scope.
   `/session-verify` targets the accepted scope by fingerprint and work-root commit. A parent whose
   tasks all pass but whose required delivery is unmerged is not reported as complete, and stale
-  evidence or an unknown outcome does not authorize completion. These are skill-level gates: the
-  runtime computes and reports the facts they turn on, and the skills refuse. See **Where
-  enforcement lives** below for what that does and does not guarantee.
+  evidence or an unknown outcome does not authorize completion. Most of those refusals are the
+  runtime's rather than the skills': `claim` refuses an unknown, cyclic, or unfinished prerequisite
+  and a write scope overlapping another actor's live claim, and `done` is refused while evidence is
+  inapplicable, a required delivery has no receipt, or a task is still open. A claim on an identity
+  with no record is refused too. An ambiguous ID, a stale claim, and changed accepted scope stay
+  skill-level judgements. See **Where enforcement lives** below for the boundary.
 - **The work-root versioning question.** `/session-init` asks once whether the work root is
   tracked in the repository or gets its own private repository, and acts on the answer, including
   running the private-repository setup. The answer decides a capability and not only privacy: a
@@ -110,30 +113,46 @@ runtime blocks an agent that reads the instruction and keeps going anyway.
 
 ### Where enforcement lives
 
-Continuation is not the only thing enforced this way, and a pre-release hand-check found the
-boundary to be wider than the design text implies. Read this before relying on any guarantee in
-the two sections above.
+Continuation is not the only thing enforced in prose, and a pre-release hand-check found the
+boundary wider than the design text implied. Most of it has since been moved into the runtime. Read
+this before relying on any guarantee in the two sections above.
 
 **The runtime enforces record integrity.** Identity allocation against the tombstone index, the
 exclusive root lock, expected-revision checks, atomic writes, the prepared-operation journal and
 its idempotent replay, scope fingerprints, and the round-trip comparison in `import` are all real,
 tested, and hold against a caller that ignores every instruction.
 
-**The skills enforce work governance.** Legal lifecycle transitions, holding a claim before
-changing an item, dependency and write-scope checks before dispatch, and the completion gates on
-evidence and delivery are instructed in skill prose and asserted by tests against that prose. The
-runtime computes the facts they turn on and reports them; it does not refuse on them. Concretely,
-as of this release: `transition` applies no lifecycle guard and requires no claim, so a caller
-driving the entrypoint directly can move an item between any two states, including to `done` with
-no evidence and an undelivered requirement; `depends_on` is recorded and never read; `allowed_paths`
-is written into the claim and never read; and `takeover_claim` is a truthiness flag rather than the
-authority its own refusal message asks for.
+**The runtime also enforces work governance, on the records it mutates.** These refusals happen
+before any write, and hold against a caller driving `scripts/session-flow.py` directly:
 
-This is a real gap between the design text and the shipped code, not a design position being
-defended. It does not compromise the record store — nothing here can corrupt a record, lose an
-identity, or produce an unrecoverable work root. It does mean the work-governance guarantees hold
-for agents that follow the skills, and not against one that bypasses them. Follow-up tasks track
-moving these checks into the runtime.
+- A lifecycle change outside the legal transition table is refused, on every planned change and not
+  only on `revise` and `accept`. Reopening still needs its recorded correction.
+- A lifecycle change from an actor that does not hold the record's claim is refused, and an
+  unclaimed record cannot change lifecycle at all. `captured → accepted`, which precedes any claim,
+  is the one exemption.
+- `done` is refused while an evidence entry belongs to a fingerprint the record no longer carries,
+  while a required delivery has no receipt, or while the item owns a task that is neither `done` nor
+  `cancelled`. Each refusal names the clause and what would satisfy it.
+- `claim` is refused when the record's `depends_on` names an identity with no record, closes on
+  itself in a cycle, or names work that is not `done` — over the whole transitive closure, not the
+  direct entries, bounded at 64 records deep. Only `done` satisfies a prerequisite; `cancelled` does
+  not.
+- `claim` is refused when its `allowed_paths` overlap those of a live claim held by another actor.
+- A delivery receipt is outside the scope fingerprint by construction, so recording a delivery
+  cannot invalidate the acceptance that required it.
+
+**One boundary does not close.** `allowed_paths` guarantees that the live claims of two different
+actors do not overlap. It does not guarantee that an agent writes only where it said it would: the
+runtime never sees an agent's file writes, so an accepted claim bounds the assignment and not the
+behaviour. Confining a process to a path is the harness's job, not this runtime's, and no wording
+of the field changes that.
+
+Two smaller things also stay outside the runtime. `revise` and `accept` enforce the transition
+table and the completion gates but not claim ownership, so a lifecycle change made through them
+needs no claim. And the continuation limit is prose, as the section above says.
+
+None of this compromises the record store — nothing here can corrupt a record, lose an identity, or
+produce an unrecoverable work root.
 
 ### Fixed
 
