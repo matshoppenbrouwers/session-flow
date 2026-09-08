@@ -157,9 +157,22 @@ class SequenceImport(unittest.TestCase):
         self.assertEqual(len(result["unclassified"]), 1)
         self.assertIn("Tidy the changelog", result["unclassified"][0]["text"])
 
-    def test_import_without_a_namespace_is_refused(self):
+    def test_survey_without_a_namespace_returns_unbound_previews(self):
         request = request_for(self.project_root, "sequence-mixed.md")
         request["namespace"] = None
+        before = tree(self.project_root)
+        result = views.import_sequence(request)
+        self.assertIsNone(result["namespace"])
+        self.assertEqual(len(result["items"]), len(self.result["items"]))
+        for item in result["items"]:
+            self.assertNotIn("namespace", item["metadata"])
+            self.assertIsNone(item["text"])
+        self.assertEqual(before, tree(self.project_root))
+
+    def test_apply_still_requires_an_explicit_namespace(self):
+        request = request_for(self.project_root, "sequence-mixed.md")
+        request["namespace"] = None
+        request["input"].update(apply=True, operation="unbound")
         with self.assertRaises(InvalidIdentityError):
             views.import_sequence(request)
 

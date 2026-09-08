@@ -60,24 +60,43 @@ A repository that already has `todo/SEQUENCE.md`, per-task files and phase files
 `/session-init` again. Run `/session-repair`, which surveys, refuses unsafe ground, and stops at a
 plan. Nothing is written until you confirm.
 
+The survey also works when the work root or namespace does not exist. It reports unbound item
+previews and includes namespace and Git setup in the plan. An absent or empty work root is eligible;
+records or runtime state without their namespace require restoration of the original namespace.
+
 The plan lists, per entry, which SEQ becomes which directory, which files are linked, which
 identities become tombstones, and which annotations carry across. Identities that survive only in a
 historical file appear in that list too, marked `historical`: they are retired, never reallocated.
 Read the plan against the sequence you know before you confirm anything.
 
-Repair refuses before the first write when the work root is not a Git repository, when the project
+Repair refuses before the first write when an existing record store has no Git history, when the project
 tree or the work root has uncommitted changes, when a prior operation sits unapplied in the journal,
 when another coordinator holds the lock, or when the survey met a line it cannot classify. Each
 refusal names the condition and the command that clears it. There is no `--force`, so commit or
 stash your work and run it again.
 
+An eligible empty work root can acquire Git history during approved setup. Repair reuses enclosing
+history when it covers that path. For an ignored work root it creates a separate local repository
+on `main`, preserving ignore rules and creating no remote. Git must be installed and the repository
+must have a configured commit identity; repair does not invent one.
+
 ## 5. What the apply leaves behind
 
-One confirmed apply is one operation and one commit, `session-flow: import <operation>`. Under the
+First-time migration calls `bind-namespace` after approval to create the namespace and repository
+binding, with a separate setup commit. A setup failure stops before import and reports what remains
+to recover. A retry after successful setup preserves its namespace and proceeds to import. Existing
+initialized roots need no setup commit.
+
+The import itself is one operation and one commit, `session-flow: import <operation>`. Under the
 work root you get `seq-NNN/intent.md` for every entry, `.state/tombstones` holding every identity the
 survey saw, and `.state/operations/<id>.json` recording the applied operation. Then the round-trip
 check re-derives the sequence from the imported items and compares it with the original entry by
 entry; a mismatch fails the run and leaves you a commit to revert.
+
+Repair compares the survey fingerprint before setup and again before import. Apply also checks the
+approved fingerprint, so a changed source or discovered identity requires a new review. Verification
+reports the compared entry count and both commit IDs when setup was necessary. Local Git history
+without a remote does not provide remote backup.
 
 Nothing is deleted or moved. `_devdocs/todo/` becomes the pre-import archive: the historical task and
 phase files stay exactly where they are, keep their existing names, and are linked from the new

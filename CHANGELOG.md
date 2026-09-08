@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `/session-repair` can survey a legacy backlog without a work root or namespace. Approved migration
+  now includes Git and namespace setup before the existing import transaction, with separate commits.
+  Ignored work roots retain their ignore rules and use local Git history without creating a remote.
+- Import rejects a conflicting namespace, a source that is also the generated output, and changes
+  to a supplied approved survey fingerprint. Missing namespaces beside existing state require recovery.
+- Added migration coverage starting without a namespace; the previous legacy fixture already had one.
+
 ## 2.0.0 (2026-09-08)
 
 Work items, their state, and the sequence are now owned by a local runtime instead of by

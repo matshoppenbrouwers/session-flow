@@ -71,6 +71,11 @@ Update the adapted package's source and refresh its installation through your Co
 2. Run `/session-init` in Claude Code to create the work root with its namespace and the rest of the documentation structure. If the repository already carries a `todo/SEQUENCE.md` and task files from an earlier version, run `/session-repair` instead - it is the only supported way into the work-root layout
 3. Use `/session-add-task` to capture a small job, or `/session-research-design` to develop a feature. Approve the outcome and scope before execution. For an accepted item needing multiple tasks, use `/session-task-planning`, approve its breakdown, then `/session-next` or `/session-delegation` with explicit task identities
 
+Repair can survey a legacy backlog before its work root or namespace exists. Its plan includes any
+required setup; after approval it creates the namespace and commits setup before importing. An ignored
+work root gets a separate local Git repository with no remote, preserving the project's ignore rules.
+Existing namespaces are reused. No setup or migration writes happen during the survey.
+
 ## Skills
 
 | Skill | Trigger | Produces |

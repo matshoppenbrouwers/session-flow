@@ -1694,6 +1694,11 @@ def apply_import(request: dict, payload: dict, plan: dict) -> dict:
     coordinator = coordinator_name(payload)
     with root_lock(work_root, coordinator, requested_takeover(payload), True) as ownership:
         namespace = read_namespace(work_root)
+        if namespace["namespace"] != request.get("namespace"):
+            raise InvalidIdentityError(
+                "the work root namespace changed before import; rerun doctor and survey",
+                namespace=namespace["namespace"],
+            )
         validate_bindings(work_root, namespace["repositories"])
         document = prior_operation(work_root, operation_id, fingerprint)
         if document is not None and document.get("state") == APPLIED:
@@ -1813,7 +1818,8 @@ def namespace_report(work_root: Path) -> dict:
             "namespace_error": failure.as_error(),
             "limitations": [
                 f"the work root at {work_root} has no readable {NAMESPACE_FILE}: every mutation "
-                "fails until /session-init binds the namespace and repositories"
+                "needs a valid namespace; use /session-repair for an empty legacy work root, "
+                "/session-init for a new project, or restore the original namespace beside existing records"
             ],
         }
 
@@ -1881,17 +1887,42 @@ def versioning_report(work_root: Path) -> dict:
     return report
 
 
+def namespace_bootstrap(work_root: Path) -> dict:
+    """Only an absent or empty store can receive a new identity during repair."""
+    if work_root.is_symlink():
+        return {"eligible": False, "reason": "the work root is a symbolic link"}
+    if not work_root.exists():
+        return {"eligible": True, "reason": "the work root is absent"}
+    if not work_root.is_dir():
+        return {"eligible": False, "reason": "the work root is not a directory"}
+    if namespace_path(work_root).exists():
+        return {"eligible": False, "reason": "a namespace already exists"}
+    unexpected = sorted(path.name for path in work_root.iterdir() if path.name != ".git")
+    return {
+        "eligible": not unexpected,
+        "reason": "the work root has unexplained contents" if unexpected else "the work root is empty",
+        "unexpected": unexpected,
+    }
+
+
 def work_root_report(request: dict) -> dict:
     """doctor's storage section. It mutates nothing and reports rather than raising."""
     work_root = Path(request["work_root"])
+    bootstrap = namespace_bootstrap(work_root)
     if not work_root.is_dir():
         return {
+            "bootstrap": bootstrap,
+            "namespace": None,
+            "locked": False,
+            "pending_operations": [],
+            "reserved": [],
             "versioned": False,
             "limitations": [
-                f"there is no work root at {work_root}: run /session-init before recording work"
+                f"no work directory at {work_root}: use /session-repair for a legacy backlog, "
+                "or /session-init for a new project; a non-directory path must be corrected first"
             ],
         }
-    report = {"locked": lock_directory(work_root).is_dir()}
+    report = {"locked": lock_directory(work_root).is_dir(), "bootstrap": bootstrap}
     limitations = []
     for section in (namespace_report(work_root), journal_report(work_root), versioning_report(work_root)):
         limitations.extend(section.pop("limitations", []))

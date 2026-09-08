@@ -34,6 +34,7 @@ from session_flow.records import (
     TASKS_DIRECTORY,
     acceptance_status,
     check_namespace,
+    digest,
     ensure_within,
     escape_markers,
     item_directory,
@@ -197,6 +198,29 @@ def require_namespace(request: dict) -> str:
     return parse_namespace(namespace)
 
 
+def survey_namespace(request: dict) -> str | None:
+    work_root = Path(request["work_root"])
+    supplied = request.get("namespace")
+    if supplied is not None:
+        supplied = parse_namespace(supplied)
+    if store.namespace_path(work_root).exists():
+        namespace = store.read_namespace(work_root)["namespace"]
+        if supplied is not None and supplied != namespace:
+            raise InvalidIdentityError(
+                "--namespace differs from the work root's namespace; use the UUID from doctor",
+                expected=namespace, supplied=supplied,
+            )
+        return namespace
+    bootstrap = store.namespace_bootstrap(work_root)
+    if not bootstrap["eligible"]:
+        raise InvalidIdentityError(
+            "the namespace is missing from an existing work store; restore its namespace.json "
+            "before importing instead of allocating another UUID",
+            work_root=str(work_root), bootstrap=bootstrap,
+        )
+    return supplied
+
+
 def read_markdown(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
@@ -262,19 +286,37 @@ def unresolved_links(entries: list[dict], project_root) -> list[dict]:
 
 def plan_import(request: dict) -> dict:
     """Transform a pre-import sequence into work items. Writes nothing."""
-    namespace = require_namespace(request)
+    namespace = survey_namespace(request)
     source = import_source(request)
-    parsed = parse_sequence(read_source(source))
+    if source.resolve() == Path(request["sequence_path"]).resolve():
+        raise InvalidIdentityError(
+            "the legacy source is also the generated sequence; configure a separate "
+            "paths.sequence before importing so the archive cannot be overwritten",
+            source=str(source),
+        )
+    source_text = read_source(source)
+    parsed = parse_sequence(source_text)
     reject_duplicate_ids(parsed["entries"])
     root = request["project_root"]
     items = [imported_item(entry, namespace, source, root) for entry in parsed["entries"]]
-    return {
+    plan = {
         "source": str(source),
+        "work_root": request["work_root"],
+        "sequence_path": request["sequence_path"],
+        "historical": [str(path) for path in historical_roots(request)],
+        "namespace": namespace,
         "items": items,
         "tombstones": tombstone_entries(request, items),
         "unclassified": parsed["unclassified"],
         "unresolved_links": unresolved_links(parsed["entries"], root),
     }
+    plan["survey_fingerprint"] = digest({
+        "source_text": source_text,
+        **{key: plan[key] for key in (
+            "source", "work_root", "sequence_path", "historical", "tombstones", "unresolved_links"
+        )},
+    })
+    return plan
 
 
 def refuse_unclassified(plan: dict) -> None:
@@ -378,9 +420,18 @@ def verify_round_trip(request: dict, source: str, commit) -> dict:
 
 def import_sequence(request: dict) -> dict:
     """Plan the import by default; apply and verify it only on explicit confirmation."""
+    payload = request.get("input") or {}
+    if payload.get("apply"):
+        require_namespace(request)
     plan = plan_import(request)
-    if not (request.get("input") or {}).get("apply"):
+    if not payload.get("apply"):
         return dict(plan, applied=False)
+    expected = payload.get("expected_survey_fingerprint")
+    if expected is not None and expected != plan["survey_fingerprint"]:
+        raise InvalidIdentityError(
+            "the survey changed after approval; review a new repair plan before applying",
+            expected=expected, found=plan["survey_fingerprint"],
+        )
     refuse_unclassified(plan)
     refuse_dangling_links(plan)
     operation = store.apply_import(request, request["input"], plan)
@@ -395,7 +446,7 @@ def import_sequence(request: dict) -> dict:
     }
 
 
-def imported_item(entry: dict, namespace: str, source: Path, project_root: str) -> dict:
+def imported_item(entry: dict, namespace: str | None, source: Path, project_root: str) -> dict:
     """Build one item: its record path, its metadata, and the record text to write.
 
     Captured title and comment text is stored with its structural markers escaped,
@@ -407,7 +458,6 @@ def imported_item(entry: dict, namespace: str, source: Path, project_root: str) 
         origin = str(source)
     metadata = {
         "format": RECORD_FORMAT_VERSION,
-        "namespace": namespace,
         "seq": entry["seq"],
         "revision": 1,
         "title": escape_markers(entry["title"]),
@@ -421,11 +471,13 @@ def imported_item(entry: dict, namespace: str, source: Path, project_root: str) 
             metadata[field] = entry[field]
     if entry["notes"]:
         metadata["notes"] = [escape_markers(note) for note in entry["notes"]]
+    if namespace is not None:
+        metadata["namespace"] = namespace
     body = IMPORT_BODY.format(entry=render_entry(view_fields(metadata, entry["seq"])))
     return {
         "path": f"{item_directory(entry['seq'])}/{INTENT_FILE}",
         "metadata": metadata,
-        "text": render_record(metadata, entry["title"], body),
+        "text": render_record(metadata, entry["title"], body) if namespace is not None else None,
     }
 
 

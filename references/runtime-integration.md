@@ -136,6 +136,33 @@ hand.
 | `backup` | Verify the configured work-root remote and push. |
 | `restore` | Check the work root out from that remote. |
 
+### Import surveys before namespace creation
+
+`import` without `apply: true` is read-only and accepts an omitted `--namespace`. It uses the stored
+namespace when one exists, rejecting an explicitly conflicting UUID. With an absent or empty work
+root, it returns unbound previews: `items[].metadata` omits `namespace`, and `items[].text` is null.
+These previews cannot be written as records. Missing namespaces alongside existing work state and
+malformed namespaces are refused; the original namespace must be restored.
+
+The survey includes `source`, `work_root`, `sequence_path`, `historical` (the directories actually
+scanned), `namespace` (nullable), and `survey_fingerprint`, alongside the existing item and tombstone
+lists. The fingerprint covers source text, resolved paths, discovered tombstones, and unresolved
+links. It excludes namespace creation, so it remains stable across approved setup. It does not
+attest to the contents of linked documents beyond identities discovered in the historical scan.
+`source` must differ from the generated sequence path.
+
+Applying still requires `--namespace` matching the stored UUID. Repair passes the approved
+fingerprint as `expected_survey_fingerprint` in its apply payload; a mismatch is `invalid-identity`
+before import writes. Existing callers may omit this optional field. The protocol and record format
+versions are unchanged.
+
+`doctor` reports `storage.bootstrap.eligible` and a reason. A missing work directory or an empty
+directory containing only Git metadata is eligible for namespace setup. Existing namespaces are
+preserved; malformed namespaces and unexplained contents require recovery. For eligible legacy
+repositories, `/session-repair` plans Git setup and calls `bind-namespace` after approval. Setup
+and import have separate commits. This is skill orchestration using existing commands, not a new
+runtime command or automatic setup inside `import`.
+
 `backup` and `restore` are thin wrappers over Git and define no archive format. The work root is an
 ordinary Git repository: it owns history, and each applied transition ends in a commit there.
 

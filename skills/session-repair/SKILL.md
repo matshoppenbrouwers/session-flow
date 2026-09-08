@@ -35,22 +35,22 @@ Resolve the entrypoint by the one rule for this host — `${CLAUDE_PLUGIN_ROOT}`
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" doctor
 ```
 
-Write down `storage.work_root`, `storage.sequence_path`, `storage.namespace`, `storage.versioned`, `storage.locked`, `storage.pending_operations`, and `storage.reserved`. Stage 2 refuses on four of these. A named error or a missing runtime means report what is missing and where it was expected, and stop: there is no hand-editing path.
+Write down `storage.work_root`, `storage.sequence_path`, `storage.namespace`, `storage.bootstrap`, `storage.versioned`, `storage.locked`, `storage.pending_operations`, and `storage.reserved`. A missing namespace with `storage.bootstrap.eligible: true` is a migration setup requirement; continue the read-only survey. A malformed namespace, or a missing namespace alongside existing records or runtime state, requires restoration of the original namespace. Never allocate a replacement identity for those records. A missing runtime or an unrelated named error means report it and stop.
 
 ## Stage 1: Survey, Read-Only
 
-The survey is `import` in its default mode, which writes nothing. Name the pre-import sequence and the directories to scan for retired identities when they are not the configured `paths.todo` and `paths.tasks`:
+The survey is `import` in its default mode, which writes nothing. Resolve the source as `SEQUENCE.md` under configured `paths.todo`, falling back to `_devdocs/todo/SEQUENCE.md`. Omit `historical` to use configured `paths.todo` and `paths.tasks`; when neither is configured, explicitly name the existing legacy directories. Do not replace configured historical paths with hardcoded examples. Pass the resolved source in the payload:
 
 ```json
-{"source": "_devdocs/todo/SEQUENCE.md", "historical": ["_devdocs/todo", "_devdocs/tasks"]}
+{"source": "_devdocs/todo/SEQUENCE.md"}
 ```
 
 ```bash
-python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" --namespace "$NAMESPACE" \
+python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" \
   import --input "$PAYLOAD"
 ```
 
-`$NAMESPACE` is `storage.namespace` from Stage 0; `import` refuses without it. Read the response and report, in the session:
+The survey uses an existing namespace when present. Without one, item metadata has no namespace and `items[].text` is null; these are previews, never records to write. Save `result.survey_fingerprint` with the approved plan. A source that equals the generated output path is refused: correct `paths.sequence` before retrying. Read the response and report, in the session:
 
 - every SEQ the survey saw — `result.items` for the live rows, `result.tombstones` for the full set, where `state: "historical"` marks an identity surviving only in a pre-import file;
 - every ` ⇄ <url>` annotation and every `[auto]` marker, per item, as they were found;
@@ -66,9 +66,9 @@ Stop before any write when any condition below holds. Name the exact condition a
 
 | Condition | Detected by | Clear it with |
 |---|---|---|
-| The work root is not a Git repository, so there is no undo | `storage.versioned` is `false` | `git -C "$WORK_ROOT" init -b main`, then commit the current records |
+| An existing record store has no Git history | `storage.versioned` is `false` and `storage.bootstrap.eligible` is not `true` | `git -C "$WORK_ROOT" init -b main`, then commit the current records |
 | The project tree has uncommitted changes | `git -C "$PROJECT_ROOT" status --porcelain`, excluding the work root and the generated sequence | Commit or stash them: `git -C "$PROJECT_ROOT" status` |
-| The work root has uncommitted changes | `git -C "$WORK_ROOT" status --porcelain`, excluding `.state/` | Commit or stash them: `git -C "$WORK_ROOT" status` |
+| An existing versioned work root has uncommitted changes | `git -C "$WORK_ROOT" status --porcelain`, excluding `.state/`; skip this command while the root is absent | Commit or stash them: `git -C "$WORK_ROOT" status` |
 | A prior repair operation sits unapplied in the journal | `storage.pending_operations` is non-empty | `python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" reconcile` |
 | Another coordinator holds the lock | `storage.locked` is `true`, or a `root-busy` error | Wait for that coordinator, or once `error.detail.liveness` reports its process gone, run `reconcile` and take the lock over explicitly with `takeover` in the payload |
 | The survey found a shape it cannot classify | `result.unclassified` is non-empty | Rewrite those lines to the grammar in `references/sequence-grammar.md` |
@@ -76,6 +76,10 @@ Stop before any write when any condition below holds. Name the exact condition a
 | Two rows claim one identity | `invalid-identity` naming both line numbers | Resolve the duplicate in the source before importing |
 
 The runtime refuses the same ground again at apply time. That is a backstop, not the check: refusing here is what keeps Stage 3 read-only.
+
+For an absent or empty work root, Git setup belongs in the plan. Inspect the nearest existing ancestor to locate enclosing Git history, and use `git check-ignore` from that repository to check the planned work-root path without creating it. Reuse enclosing history when it covers that path. Otherwise plan `git init -b main` inside the work root, preserving all existing ignore rules and creating no remote. Verify Git is available and a commit identity is configured before setup; for a new nested repository, check the identity it will actually inherit, not only the outer repository's local configuration. Never invent a Git identity. Unrelated project changes still refuse setup.
+
+An empty directory containing only Git metadata is eligible. Other unexplained contents, including journals or reservations without a namespace, require recovery. A valid existing namespace is always preserved; committed setup from an interrupted run can proceed directly to import. Uncommitted partial setup must be reviewed and committed or stashed explicitly before retrying, never silently included in a new setup commit.
 
 ## Stage 3: Plan, the Default
 
@@ -86,15 +90,22 @@ Print the per-item transformation from the Stage 1 response, one line per item:
 - which annotations and markers carry across, verbatim;
 - which IDs become tombstones, split into `imported` and `historical`.
 
-Then state the totals: items to write, identities to retire, and files to be moved — always zero. Write nothing in this stage and ask for explicit confirmation. If the user does not confirm, stop here and say the plan was not applied.
+Then state the totals: items to write, identities to retire, and files to be moved - always zero. Include any directory/Git setup, the repository that will hold history, and namespace creation with the current repository binding. Derive the binding name from the project directory name and its path relative to the work root; preserve existing bindings and escalate name conflicts. First-time setup produces a setup commit before the import commit. Write nothing in this stage and ask for explicit confirmation covering both setup and import. If the user does not confirm, stop here and say the plan was not applied.
 
 ## Stage 4: Apply
 
-One `import` operation, under the root lock, through the same prepared-operation journal as every other mutation, ending in a single commit. Reuse the Stage 1 payload and add the operation identity and the confirmation:
+Re-run doctor, the survey, and Stage 2 checks before writing. The fingerprint and planned paths must match the approved plan; otherwise stop for review. For approved setup only:
+
+1. Create the work directory if absent, then perform the planned local Git initialization if needed. Check every command's result; stop on failure.
+2. Call `bind-namespace` through the resolved runtime with `{"repository": {"name": "<project directory name>", "path": "<project path relative to work root>"}, "coordinator": "session-repair"}` in a JSON input file. This creates the UUID, binding and local-state ignore rule and commits setup. Never hand-write `namespace.json`.
+3. Require `result.commit.committed: true` for changed setup, record its commit ID, then require doctor to report the returned namespace and a versioned root. Check the project and work root are clean. A failed commit stops before import; report any partial setup for explicit recovery. A retry after successful setup reuses the namespace and commit.
+4. Re-run the survey using the bound namespace and compare its fingerprint with the approved one. Namespace creation does not change the fingerprint. Changed source content or discovered identities requires a new plan, even if setup already committed.
+
+Do not call render during setup. Now run one `import` operation under the root lock, through the existing prepared-operation journal, ending in the import commit. Reuse the Stage 1 payload and add the operation identity, the approved fingerprint and the confirmation:
 
 ```json
 {"operation": "repair-<short unique id>", "coordinator": "session-repair", "apply": true,
- "source": "_devdocs/todo/SEQUENCE.md", "historical": ["_devdocs/todo", "_devdocs/tasks"]}
+ "source": "_devdocs/todo/SEQUENCE.md", "expected_survey_fingerprint": "<approved fingerprint>"}
 ```
 
 ```bash
@@ -145,7 +156,7 @@ Report drift; do not silently correct it. For each escalation show both versions
 1. The entry condition the survey decided, and why.
 2. What the survey found: identities, annotations, markers, links, and anything unclassifiable.
 3. Whether Stage 2 refused, which condition, and the command that clears it.
-4. What was applied, the commit it ended in, and the verification result with its entry count.
+4. What was applied, the setup commit when needed, the import commit, and the verification result with its entry count. Report a local root without a remote as having local history only.
 5. What was escalated and still stands unrepaired.
 
 Chain context: see `references/workflow-overview.md`.

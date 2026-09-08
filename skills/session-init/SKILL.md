@@ -48,6 +48,8 @@ documentation/
 
 Also check for an existing `.session-flow.json` in the project root. If it exists, read it and report the current configuration -- do not re-initialize. Check the same way for a `namespace.json` under the configured `paths.work`: a work root that already carries a namespace is initialized, so report its namespace and stop.
 
+If legacy sequence/task files exist but the configured work root or namespace is missing, route to `/session-repair`. Repair includes namespace and Git setup in its approved migration plan; the user does not need to run init first. Missing namespaces alongside existing records require restoration, never re-initialization.
+
 ### Step 2: Ask User Preference
 
 **If no existing structure found:**
