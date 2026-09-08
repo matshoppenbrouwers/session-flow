@@ -836,6 +836,153 @@ class ClaimAndResultTest(StoreCase):
         self.assert_fails_without_writing("claim", document, "invalid-identity")
 
 
+class PrerequisiteGateTest(StoreCase):
+    """A claim waits on the records its `depends_on` names, and says which one stops it."""
+
+    def test_a_prerequisite_that_is_not_done_refuses_the_claim(self):
+        self.patch_record({store.DEPENDS_FIELD: ["SEQ-001"]}, task="A1")
+        error = self.assert_fails_without_writing("claim", payload("claim.json"), "invalid-request")
+        self.assertIn("SEQ-001/A1 depends on", error["message"])
+        self.assertEqual(["SEQ-001"], error["detail"]["unmet"])
+        self.assertNotIn("claim", self.record_metadata(task="A1"))
+
+    def test_a_finished_prerequisite_lets_the_claim_through(self):
+        self.patch_record({"lifecycle": "done"})
+        self.patch_record({store.DEPENDS_FIELD: ["SEQ-001"]}, task="A1")
+        completed, _ = self.run_cli("claim", payload("claim.json"))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("agent:store-implementer", self.record_metadata(task="A1")["claim"]["actor"])
+
+    def test_an_unknown_prerequisite_is_refused_as_an_unknown_one(self):
+        """A dangling identity needs a different repair from an unfinished one, so it is named so."""
+        self.patch_record({store.DEPENDS_FIELD: ["SEQ-042/Z1"]}, task="A1")
+        error = self.assert_fails_without_writing("claim", payload("claim.json"), "invalid-identity")
+        self.assertIn("no record exists", error["message"])
+        self.assertEqual("SEQ-042/Z1", error["detail"]["prerequisite"])
+
+    def test_an_entry_that_is_not_an_identity_is_refused(self):
+        self.patch_record({store.DEPENDS_FIELD: ["the views task"]}, task="A1")
+        self.assert_fails_without_writing("claim", payload("claim.json"), "invalid-identity")
+
+    def test_a_cycle_is_refused_rather_than_walked_until_the_stack_ends(self):
+        self.patch_record({store.DEPENDS_FIELD: ["SEQ-001/A1"]})
+        self.patch_record({store.DEPENDS_FIELD: ["SEQ-001"]}, task="A1")
+        error = self.assert_fails_without_writing("claim", payload("claim.json"), "invalid-identity")
+        self.assertIn("close on themselves", error["message"])
+        self.assertEqual(["SEQ-001", "SEQ-001/A1"], error["detail"]["cycle"])
+
+    def test_a_record_depending_on_itself_closes_on_itself(self):
+        self.assertEqual(["SEQ-001/A1"], store.cyclic_prerequisites({"SEQ-001/A1": ["SEQ-001/A1"]}))
+        self.assertEqual([], store.cyclic_prerequisites({"SEQ-001/A1": ["SEQ-001"], "SEQ-001": []}))
+
+
+class WriteScopeTest(StoreCase):
+    """`allowed_paths` is enforced between concurrent claims of different actors."""
+
+    def hold_scope(self, paths: list, actor="agent:other", seq="SEQ-001", task=None) -> None:
+        """Give a record a live claim of another actor over `paths`."""
+        self.patch_record(
+            {
+                store.CLAIM_FIELD: {
+                    "actor": actor,
+                    "coordinator": actor,
+                    "host": "fixture",
+                    "claimed_at": "2026-09-07T11:00:00Z",
+                    store.ALLOWED_PATHS_FIELD: paths,
+                }
+            },
+            seq,
+            task,
+        )
+
+    def claim_paths(self, paths: list) -> dict:
+        return dict(payload("claim.json"), allowed_paths=paths)
+
+    def assert_claimed(self, document: dict) -> None:
+        completed, _ = self.run_cli("claim", document)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("agent:store-implementer", self.record_metadata(task="A1")["claim"]["actor"])
+
+    def test_two_actors_cannot_hold_overlapping_paths(self):
+        self.hold_scope(["scripts/session_flow"])
+        error = self.assert_fails_without_writing("claim", payload("claim.json"), "invalid-request")
+        self.assertIn("SEQ-001 is claimed by agent:other", error["message"])
+        self.assertEqual("agent:other", error["detail"]["holder"])
+        self.assertEqual(["scripts/session_flow/store.py"], error["detail"]["overlapping"])
+
+    def test_a_disjoint_concurrent_claim_still_succeeds(self):
+        self.hold_scope(["references/work-item-contract.md"])
+        self.assert_claimed(payload("claim.json"))
+
+    def test_the_same_actor_may_hold_its_own_overlapping_paths(self):
+        self.hold_scope(["scripts/session_flow/store.py"], actor="agent:store-implementer")
+        self.assert_claimed(payload("claim.json"))
+
+    def test_a_sibling_directory_is_not_inside_the_claimed_one(self):
+        self.hold_scope(["src/a"])
+        self.assert_claimed(self.claim_paths(["src/ab"]))
+
+    def test_a_file_inside_a_claimed_directory_overlaps_it(self):
+        self.hold_scope(["src/a"])
+        self.assert_fails_without_writing("claim", self.claim_paths(["src/a/b.py"]), "invalid-request")
+
+    def test_a_claim_declaring_no_scope_overlaps_nothing(self):
+        """An empty list is an undeclared scope, not a claim over the whole tree."""
+        self.hold_scope([])
+        self.assert_claimed(payload("claim.json"))
+
+    def test_a_declared_scope_meets_an_undeclared_one_without_overlapping(self):
+        self.hold_scope(["scripts/session_flow/store.py"])
+        self.assert_claimed(self.claim_paths([]))
+
+    def test_a_closed_record_holds_no_live_claim(self):
+        self.hold_scope(["scripts/session_flow/store.py"])
+        self.patch_record({"lifecycle": "cancelled"})
+        self.assert_claimed(payload("claim.json"))
+
+    def test_a_reported_claim_no_longer_bounds_its_paths(self):
+        self.hold_scope(["scripts/session_flow/store.py"])
+        self.patch_record({store.RESULT_FIELD: {"outcome": "passed"}})
+        self.assert_claimed(payload("claim.json"))
+
+    def test_a_write_scope_that_is_not_a_list_of_paths_is_refused(self):
+        self.assert_fails_without_writing("claim", self.claim_paths("src/a"), "invalid-request")
+
+    def test_a_path_compares_by_directory_after_normalization(self):
+        self.assertEqual(store.normalized_scope("src/a/"), store.normalized_scope("./src/a"))
+        self.assertEqual(store.normalized_scope("src/a"), store.normalized_scope("src/a/**"))
+        self.assertFalse(store.scopes_overlap("src/ab", "src/a"))
+        self.assertTrue(store.scopes_overlap("src/a/b.py", "src/a"))
+
+
+class TaskDiagnosticTest(StoreCase):
+    """A refusal on a task names the task, not only the item that holds it."""
+
+    def test_a_claim_held_by_another_actor_names_the_task(self):
+        self.run_cli("claim", payload("claim.json"))
+        document = dict(payload("claim.json"), operation="op-claim-0009", actor="agent:other")
+        document["expect_revision"] = 2
+        error = self.assert_fails_without_writing("claim", document, "missing-authority")
+        self.assertIn("SEQ-001/A1 is claimed by", error["message"])
+
+    def test_a_result_without_a_claim_names_the_task(self):
+        document = dict(payload("result.json"), expect_revision=1)
+        error = self.assert_fails_without_writing("record-result", document, "missing-authority")
+        self.assertIn("SEQ-001/A1 carries no claim", error["message"])
+
+    def test_a_result_from_another_actor_names_the_task(self):
+        self.run_cli("claim", payload("claim.json"))
+        document = dict(payload("result.json"), actor="agent:other")
+        error = self.assert_fails_without_writing("record-result", document, "missing-authority")
+        self.assertIn("SEQ-001/A1 is claimed by", error["message"])
+
+    def test_an_item_level_refusal_still_names_the_item_alone(self):
+        document = dict(payload("result.json"), task=None, expect_revision=1)
+        self.drop_claim()
+        error = self.assert_fails_without_writing("record-result", document, "missing-authority")
+        self.assertIn("SEQ-001 carries no claim", error["message"])
+
+
 class DirectCallTest(StoreCase):
     """The handlers keep the documented request/response signature."""
 

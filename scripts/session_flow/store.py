@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import re
 import socket
 import subprocess
@@ -47,6 +48,10 @@ DEFAULT_COORDINATOR = "session-flow"
 IMPORT_COMMAND = "import"
 CLAIM_FIELD = "claim"
 RESULT_FIELD = "result"
+DEPENDS_FIELD = "depends_on"
+ALLOWED_PATHS_FIELD = "allowed_paths"
+MAX_PREREQUISITE_DEPTH = 64
+GLOB_SUFFIX = "/**"
 CLAIM_EXEMPT_TRANSITIONS = ((records.LIFECYCLE_CAPTURED, records.LIFECYCLE_ACCEPTED),)
 RESULT_OUTCOMES = ("passed", "failed", "blocked", "unknown")
 APPLIED = "applied"
@@ -904,21 +909,237 @@ def claimed_actor(payload: dict) -> str:
     return actor
 
 
-def claim_change(current: dict, payload: dict, target: dict, coordinator: str) -> dict:
+def parse_prerequisite(value, holder: str) -> tuple:
+    """Split one `depends_on` entry into its item and optional task identity."""
+    if not isinstance(value, str):
+        raise InvalidIdentityError(
+            f"{holder} declares the prerequisite {value!r}, which is not an identity; write each "
+            f"`{DEPENDS_FIELD}` entry as SEQ-NNN or SEQ-NNN/TASK",
+            seq=holder,
+            prerequisite=value,
+        )
+    seq, _, task = value.partition("/")
+    return records.parse_item_id(seq), records.parse_task_id(task) if task else None
+
+
+def declared_prerequisites(record: dict, holder: str) -> list:
+    """The `depends_on` entries a record names, normalized to full identities."""
+    declared = record["metadata"].get(DEPENDS_FIELD)
+    if declared is None:
+        return []
+    if not isinstance(declared, list):
+        raise InvalidIdentityError(
+            f"{holder} carries a `{DEPENDS_FIELD}` that is not a list; name the prerequisite "
+            "identities it waits on, or remove the field",
+            seq=holder,
+        )
+    return [
+        records.record_name({"seq": seq, "task": task})
+        for seq, task in (parse_prerequisite(entry, holder) for entry in declared)
+    ]
+
+
+def prerequisite_record(work_root: Path, name: str, holder: str) -> dict:
+    """The record one prerequisite names, or a refusal that it names nothing at all."""
+    seq, task = parse_prerequisite(name, holder)
+    path = record_path(work_root, seq, task)
+    if not Path(path).is_file():
+        raise InvalidIdentityError(
+            f"{holder} depends on {name}, and no record exists at {path}; capture that work item "
+            f"or correct the `{DEPENDS_FIELD}` entry, because the runtime never guesses which "
+            "identity was meant",
+            seq=seq,
+            prerequisite=name,
+        )
+    return records.read_record(path)
+
+
+def prerequisite_closure(work_root: Path, holder: str, record: dict) -> tuple:
+    """Every prerequisite reachable from a record: its edges, and the records it reaches.
+
+    The visited set bounds the walk over a well-formed graph and the depth bounds it
+    over a malformed one, so a cycle is reported rather than recursed into.
+    """
+    edges = {holder: declared_prerequisites(record, holder)}
+    reached = {}
+    pending = [(name, 1) for name in edges[holder]]
+    while pending:
+        name, depth = pending.pop()
+        if depth > MAX_PREREQUISITE_DEPTH:
+            raise InvalidIdentityError(
+                f"the prerequisites of {holder} run deeper than {MAX_PREREQUISITE_DEPTH} records "
+                f"at {name}; flatten the `{DEPENDS_FIELD}` chain before claiming it",
+                seq=holder,
+                prerequisite=name,
+            )
+        if name in edges:
+            continue
+        reached[name] = prerequisite_record(work_root, name, holder)
+        edges[name] = declared_prerequisites(reached[name], name)
+        pending.extend((further, depth + 1) for further in edges[name])
+    return edges, reached
+
+
+def cyclic_prerequisites(edges: dict) -> list:
+    """The identities no ordering satisfies: what is left once every settled one is removed."""
+    remaining = {name: set(entries) for name, entries in edges.items()}
+    while remaining:
+        settled = {name for name, entries in remaining.items() if not entries}
+        if not settled:
+            return sorted(remaining)
+        remaining = {
+            name: entries - settled for name, entries in remaining.items() if name not in settled
+        }
+    return []
+
+
+def check_prerequisites(work_root: Path, holder: str, record: dict) -> None:
+    """Refuse a claim whose declared prerequisites are unknown, cyclic, or unfinished."""
+    edges, reached = prerequisite_closure(work_root, holder, record)
+    cyclic = cyclic_prerequisites(edges)
+    if cyclic:
+        raise InvalidIdentityError(
+            f"the prerequisites of {holder} close on themselves ({', '.join(cyclic)}); break the "
+            f"cycle by removing one `{DEPENDS_FIELD}` entry, because no order satisfies all of them",
+            seq=holder,
+            cycle=cyclic,
+        )
+    unfinished = sorted(
+        name
+        for name, prerequisite in reached.items()
+        if records.lifecycle_of(prerequisite) != records.LIFECYCLE_DONE
+    )
+    if unfinished:
+        raise InvalidRequestError(
+            f"{holder} depends on {len(unfinished)} record(s) that are not done "
+            f"({', '.join(unfinished)}); complete them before claiming this work, or drop the "
+            f"`{DEPENDS_FIELD}` entries that no longer hold",
+            seq=holder,
+            unmet=unfinished,
+        )
+
+
+def normalized_scope(value) -> str:
+    """One `allowed_paths` entry as a comparable path, so `./src/a`, `src/a/` and `src/a/**` agree."""
+    text = str(value).strip()
+    if text.endswith(GLOB_SUFFIX):
+        text = text[: -len(GLOB_SUFFIX)]
+    return posixpath.normpath(text.replace("\\", "/") or ".")
+
+
+def scopes_overlap(one: str, other: str) -> bool:
+    """One path covers the other when they are equal or one is a directory prefix of it."""
+    return one == other or one.startswith(other + "/") or other.startswith(one + "/")
+
+
+def claim_scopes(claim: dict) -> list:
+    entries = claim.get(ALLOWED_PATHS_FIELD)
+    return [normalized_scope(entry) for entry in entries] if isinstance(entries, list) else []
+
+
+def shared_scopes(scopes: list, held: list) -> list:
+    return sorted({one for one in scopes for other in held if scopes_overlap(one, other)})
+
+
+def live_claim(record: dict):
+    """The claim still bounding a record's work, or None once it is closed or reported."""
+    claim = record["metadata"].get(CLAIM_FIELD)
+    if not isinstance(claim, dict):
+        return None
+    if record["metadata"].get(RESULT_FIELD) is not None:
+        return None
+    if records.lifecycle_of(record) in records.CLOSED_LIFECYCLES:
+        return None
+    return claim
+
+
+def stored_record_paths(work_root: Path) -> list:
+    """Every record file under the work root. A leading underscore marks a generated view."""
+    paths = []
+    for directory in sorted(Path(work_root).iterdir()):
+        if not (directory.is_dir() and ITEM_DIRECTORY_RE.match(directory.name)):
+            continue
+        paths.append(directory / records.INTENT_FILE)
+        paths.extend(
+            sorted(
+                path
+                for path in (directory / records.TASKS_DIRECTORY).glob("*.md")
+                if not path.name.startswith(records.TASK_VIEW_PREFIX)
+            )
+        )
+    return [path for path in paths if path.is_file()]
+
+
+def conflicting_claim(work_root: Path, held_by: Path, actor: str, scopes: list):
+    """The first live claim of another actor whose write scope this one would overlap.
+
+    A work root holds tens of items, so every record is read rather than kept in an
+    index that would then have to stay coherent with them.
+    """
+    for path in stored_record_paths(work_root):
+        if path.resolve() == Path(held_by).resolve():
+            continue
+        record = records.read_record(path)
+        claim = live_claim(record)
+        if claim is None or claim.get("actor") == actor:
+            continue
+        shared = shared_scopes(scopes, claim_scopes(claim))
+        if shared:
+            return records.record_name(record["identity"]), claim, shared
+    return None
+
+
+def requested_scopes(payload: dict) -> list:
+    """The write scope a claim declares, normalized for comparison."""
+    entries = payload.get(ALLOWED_PATHS_FIELD, [])
+    if not isinstance(entries, list) or any(not isinstance(entry, str) for entry in entries):
+        raise InvalidRequestError(
+            f"`{ALLOWED_PATHS_FIELD}` must be a list of paths this claim may write; omit it to "
+            "declare no write scope of its own",
+            allowed_paths=entries,
+        )
+    return [normalized_scope(entry) for entry in entries]
+
+
+def check_write_scope(work_root: Path, path: Path, payload: dict, actor: str) -> None:
+    """Refuse a claim whose write scope overlaps one another actor already holds."""
+    conflict = conflicting_claim(work_root, path, actor, requested_scopes(payload))
+    if conflict is None:
+        return
+    name, claim, shared = conflict
+    raise InvalidRequestError(
+        f"{name} is claimed by {claim.get('actor')} over {', '.join(shared)}, which this claim "
+        "would write too; wait for that claim's result, or narrow one of the two "
+        f"`{ALLOWED_PATHS_FIELD}` so the two scopes are disjoint",
+        holder=claim.get("actor"),
+        overlapping=shared,
+    )
+
+
+def claim_change(work_root: Path, current: dict, payload: dict, target: dict, coordinator: str) -> dict:
+    """Plan one bounded assignment, refusing it while another claim or a prerequisite stands.
+
+    `allowed_paths` bounds this claim against the other live claims and nothing more.
+    The runtime never sees an agent's file writes, so it enforces disjointness between
+    concurrent claims, not that the claiming agent writes only where it said it would:
+    a claim whose paths are accepted here is not a guarantee of containment.
+    """
     actor = claimed_actor(payload)
     held = current["metadata"].get(CLAIM_FIELD)
     if isinstance(held, dict) and held.get("actor") != actor and not payload.get("takeover_claim"):
         raise MissingAuthorityError(
-            f"{target['seq']} is claimed by {held.get('actor')}; record that claim's result, or "
-            "supply `takeover_claim` with the authority that reassigns it",
+            f"{records.record_name(target)} is claimed by {held.get('actor')}; record that claim's "
+            "result, or supply `takeover_claim` with the authority that reassigns it",
             actor=held.get("actor"),
         )
+    check_prerequisites(work_root, records.record_name(target), current)
+    check_write_scope(work_root, record_path(work_root, target["seq"], target["task"]), payload, actor)
     claim = {
         "actor": actor,
         "coordinator": coordinator,
         "host": current_host(),
         "claimed_at": payload.get("claimed_at", now_stamp()),
-        "allowed_paths": payload.get("allowed_paths", []),
+        ALLOWED_PATHS_FIELD: payload.get(ALLOWED_PATHS_FIELD, []),
     }
     if payload.get("takeover_claim"):
         claim["reassigned_from"] = held.get("actor") if isinstance(held, dict) else None
@@ -926,12 +1147,22 @@ def claim_change(current: dict, payload: dict, target: dict, coordinator: str) -
 
 
 def claim(request: dict) -> dict:
-    """Record a bounded assignment. It starts nothing and schedules nothing."""
+    """Record a bounded assignment. It starts nothing and schedules nothing.
+
+    The operation identity is judged first: an assignment this operation already made
+    is returned rather than validated again, and reusing its identity for another one
+    is refused before any prerequisite or write scope is read.
+    """
     payload = require_payload(request)
     work_root = resolved_work_root(request)
+    replayed = replayed_result(
+        work_root, parse_operation_id(payload.get("operation")), records.digest(payload)
+    )
+    if replayed is not None:
+        return replayed
     target = record_target(request, payload)
     current = records.read_record(record_path(work_root, target["seq"], target["task"]))
-    change = claim_change(current, payload, target, coordinator_name(payload))
+    change = claim_change(work_root, current, payload, target, coordinator_name(payload))
     return apply_operation(request, payload, "claim", [change])
 
 
@@ -954,15 +1185,16 @@ def record_result(request: dict) -> dict:
     target = record_target(request, payload)
     current = records.read_record(record_path(work_root, target["seq"], target["task"]))
     held = current["metadata"].get(CLAIM_FIELD)
+    name = records.record_name(target)
     if not isinstance(held, dict):
         raise MissingAuthorityError(
-            f"{target['seq']} carries no claim; claim the assignment before recording its result",
+            f"{name} carries no claim; claim the assignment before recording its result",
             seq=target["seq"],
         )
     actor = claimed_actor(payload)
     if held.get("actor") != actor:
         raise MissingAuthorityError(
-            f"{target['seq']} is claimed by {held.get('actor')}, not by {actor}; only the claiming "
+            f"{name} is claimed by {held.get('actor')}, not by {actor}; only the claiming "
             "actor records its result",
             actor=held.get("actor"),
         )
