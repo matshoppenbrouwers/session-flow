@@ -351,6 +351,7 @@ LEGAL_TRANSITIONS = {
     "deferred": ("captured", "accepted", "cancelled"),
     "cancelled": ("captured",),
 }
+CLAIM_EXEMPT_TRANSITIONS = ((LIFECYCLE_CAPTURED, LIFECYCLE_ACCEPTED),)
 REOPENING_TRANSITIONS = (("done", "active"), ("cancelled", "captured"))
 
 PRIORITY_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
@@ -632,6 +633,45 @@ def check_completion(work_root: Path, record: dict) -> None:
     check_tasks_closed(work_root, record, name)
 
 
+def require_claim_holder(current: dict, target: str, authority: dict) -> None:
+    """Only the actor holding the claim moves a record between lifecycle states."""
+    held = lifecycle_of(current)
+    if target == held or (held, target) in CLAIM_EXEMPT_TRANSITIONS:
+        return
+    identity = current["identity"]
+    name = record_name(identity)
+    claim = current["metadata"].get("claim")
+    if not isinstance(claim, dict):
+        raise MissingAuthorityError(
+            f"{name} carries no claim, so {authority['command']} cannot move it from {held} to "
+            f"{target}; take the assignment with the `claim` command, naming the actor that does "
+            "the work, before changing its lifecycle",
+            seq=identity["seq"],
+            lifecycle=held,
+            requested=target,
+        )
+    if claim.get("actor") != authority["actor"]:
+        raise MissingAuthorityError(
+            f"{name} is claimed by {claim.get('actor')}, not by {authority['actor']}; only the "
+            f"claiming actor moves it from {held} to {target}, so act as that actor or reassign "
+            "the claim with `claim` and a `takeover_claim` authority",
+            seq=identity["seq"],
+            actor=claim.get("actor"),
+            lifecycle=held,
+            requested=target,
+        )
+
+
+def check_record_claim(request: dict, current: dict, updated: dict) -> None:
+    payload = request["input"]
+    actor = payload.get("actor")
+    if not isinstance(actor, str) or not actor:
+        actor = payload.get("coordinator", "session-flow")
+    require_claim_holder(
+        current, lifecycle_of(updated), {"command": request["command"], "actor": actor}
+    )
+
+
 def check_completed_record(request: dict, current: dict, updated: dict) -> None:
     """The gate for the record-level handlers, which write without the store's plan."""
     if lifecycle_of(updated) != LIFECYCLE_DONE or lifecycle_of(current) == LIFECYCLE_DONE:
@@ -898,6 +938,7 @@ def revise(request: dict) -> dict:
     """Edit a record. A declared same-meaning decision carries acceptance across."""
     path, current, payload = load_for_mutation(request, "revise")
     updated = apply_revision_edits(current, payload)
+    check_record_claim(request, current, updated)
     check_completed_record(request, current, updated)
     check = settle_scope(current, updated, scope_decision(payload))
     updated["metadata"]["revision"] = advance_revision(current, updated)
@@ -941,6 +982,7 @@ def accept(request: dict) -> dict:
         provenance,
     )
     updated = as_record(metadata, current["scope"], current["body"])
+    check_record_claim(request, current, updated)
     check_completed_record(request, current, updated)
     metadata["revision"] = advance_revision(current, updated)
     text = render_record(metadata, current["scope"], current["body"])

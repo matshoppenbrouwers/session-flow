@@ -191,9 +191,9 @@ delivery becomes linked successor work under a new `SEQ`, not a reopening of the
 Only the actor holding the record's claim moves it between lifecycle states. An unclaimed record
 cannot change lifecycle at all, and a change from an actor that is not the holder is
 `missing-authority`. Two changes are exempt: `captured → accepted`, which legitimately precedes a
-claim, and any change that sets no `lifecycle`. That guard runs on `transition`, `claim`, and
-`record-result`; `revise` and `accept` enforce the transition table and the completion gates below
-but not claim ownership.
+claim, and any edit that leaves lifecycle unchanged. The same claim guard runs on `transition`,
+`claim`, `record-result`, `revise`, and `accept`. The acting identity is the payload
+`actor`, falling back to `coordinator` and then `session-flow` when no actor is supplied.
 
 **Reaching `done` is gated on the record itself**, and the gate runs before any write. It refuses
 when an evidence entry was gathered against a fingerprint the record no longer carries

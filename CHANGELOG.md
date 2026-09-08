@@ -147,9 +147,9 @@ runtime never sees an agent's file writes, so an accepted claim bounds the assig
 behaviour. Confining a process to a path is the harness's job, not this runtime's, and no wording
 of the field changes that.
 
-Two smaller things also stay outside the runtime. `revise` and `accept` enforce the transition
-table and the completion gates but not claim ownership, so a lifecycle change made through them
-needs no claim. And the continuation limit is prose, as the section above says.
+`revise` and `accept` use the same claim-ownership guard as planned transitions. Initial
+acceptance and edits that leave lifecycle unchanged need no claim. The continuation limit
+remains in the skills, as the section above says.
 
 None of this compromises the record store — nothing here can corrupt a record, lose an identity, or
 produce an unrecoverable work root.

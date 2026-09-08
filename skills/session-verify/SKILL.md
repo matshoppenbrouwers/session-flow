@@ -232,13 +232,14 @@ When every row passes, transition the item:
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" revise --seq SEQ-042 --input "$PAYLOAD"
 ```
 
-with `{"metadata": {"lifecycle": "done"}, "expected_revision": <current>}`. `revise` refuses an illegal
-transition and, for a reopening, refuses without a correction. Use `transition` instead when one
-operation must change several records together.
+with `{"metadata": {"lifecycle": "done"}, "expected_revision": <current>, "actor": "<claim holder>"}`.
+The acting identity must hold the claim; take or reassign the claim before changing lifecycle.
+`revise` also refuses an illegal transition and, for a reopening, refuses without a correction.
+Use `transition` instead when one operation must change several records together.
 
 ### Reopening and successor work
 
-- **Premature closure**: reopen under the **same identity**. Send `{"expected_revision": <current>,
+- **Premature closure**: reopen under the **same identity**. Send `{"expected_revision": <current>, "actor": "<claim holder>",
   "metadata": {"lifecycle": "active"}, "correction": {"reason": "<why the closure was premature>",
   "actor": "<who decided>"}}`. The correction appends to the record's `corrections`; nothing already
   recorded is rewritten.

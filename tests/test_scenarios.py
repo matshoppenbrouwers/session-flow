@@ -516,7 +516,11 @@ class ReopeningTest(ScenarioCase):
     scenario = "unmerged-delivery"
 
     def reopen(self, correction=None) -> dict:
-        payload = {"expected_revision": 2, "metadata": {"lifecycle": "active"}}
+        payload = {
+            "expected_revision": 2,
+            "actor": "agent:installer",
+            "metadata": {"lifecycle": "active"},
+        }
         if correction is not None:
             payload["correction"] = correction
         return payload

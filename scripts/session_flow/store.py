@@ -54,7 +54,6 @@ TAKEOVER_FIELD = "takeover_claim"
 TAKEOVER_RECORD_FIELD = "takeover"
 MAX_PREREQUISITE_DEPTH = 64
 GLOB_SUFFIX = "/**"
-CLAIM_EXEMPT_TRANSITIONS = ((records.LIFECYCLE_CAPTURED, records.LIFECYCLE_ACCEPTED),)
 RESULT_OUTCOMES = ("passed", "failed", "blocked", "unknown")
 APPLIED = "applied"
 PREPARED = "prepared"
@@ -569,36 +568,10 @@ def change_authority(payload: dict, command: str) -> dict:
     }
 
 
-def require_claim_holder(current: dict, held: str, target: str, authority: dict) -> None:
-    """Only the actor holding the claim moves a record between lifecycle states."""
-    identity = current["identity"]
-    name = records.record_name(identity)
-    claim = current["metadata"].get(CLAIM_FIELD)
-    if not isinstance(claim, dict):
-        raise MissingAuthorityError(
-            f"{name} carries no claim, so {authority['command']} cannot move it from {held} to "
-            f"{target}; take the assignment with the `claim` command, naming the actor that does "
-            "the work, before changing its lifecycle",
-            seq=identity["seq"],
-            lifecycle=held,
-            requested=target,
-        )
-    if claim.get("actor") != authority["actor"]:
-        raise MissingAuthorityError(
-            f"{name} is claimed by {claim.get('actor')}, not by {authority['actor']}; only the "
-            f"claiming actor moves it from {held} to {target}, so act as that actor or reassign "
-            "the claim with `claim` and a `takeover_claim` authority",
-            seq=identity["seq"],
-            actor=claim.get("actor"),
-            lifecycle=held,
-            requested=target,
-        )
-
-
 def check_lifecycle_authority(work_root: Path, current: dict, patch, authority: dict) -> None:
     """Refuse a lifecycle change the contract forbids, one no claim covers, or an unearned `done`.
 
-    Every existing-record mutation passes here, whichever command planned it, so the
+    Every planned existing-record mutation passes here, so the
     transition table in `records` governs `transition` as it already governs `revise`.
     A patch that sets no `lifecycle` moves nothing, and `captured` to `accepted` is the
     one state change that legitimately precedes a claim.
@@ -615,10 +588,8 @@ def check_lifecycle_authority(work_root: Path, current: dict, patch, authority: 
             seq=current["identity"]["seq"],
             **illegal.detail,
         ) from illegal
-    if target == held or (held, target) in CLAIM_EXEMPT_TRANSITIONS:
-        return
-    require_claim_holder(current, held, target, authority)
-    if target == records.LIFECYCLE_DONE:
+    records.require_claim_holder(current, target, authority)
+    if target != held and target == records.LIFECYCLE_DONE:
         records.check_completion(work_root, current)
 
 

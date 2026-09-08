@@ -546,17 +546,84 @@ class LifecycleGuardTest(StoreCase):
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertEqual([earlier, correction], self.record_metadata()["corrections"])
 
-    def test_accept_and_revise_keep_their_own_guard_and_gain_no_other(self):
-        """Both mutate through `records`, so the store guard neither loosens nor doubles them."""
+    def record_change(self, command, lifecycle="active", **fields):
+        document = payload("acceptance.json") if command == "accept" else {"expected_revision": 1}
+        document["actor"] = FIXTURE_COORDINATOR
+        document.update(fields)
+        if command == "accept":
+            document["lifecycle"] = lifecycle
+        else:
+            document["metadata"] = {"lifecycle": lifecycle}
+        return document
+
+    def assert_record_refused(self, command, document):
+        before = snapshot(self.root)
+        completed, answer = self.run_cli(command, document, "--seq", "SEQ-001")
+        self.assertEqual(1, completed.returncode, completed.stdout)
+        self.assertEqual("missing-authority", answer["error"]["code"])
+        self.assertEqual(before, snapshot(self.root))
+        return answer["error"]
+
+    def test_accept_and_revise_refuse_unclaimed_lifecycle_changes(self):
+        """Claim ownership is enforced on every path, including direct record writes."""
         self.drop_claim()
-        completed, accepted = self.run_cli("accept", payload("acceptance.json"), "--seq", "SEQ-001")
-        self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertEqual("accepted", accepted["result"]["lifecycle"])
-        completed, revised = self.run_cli(
-            "revise", {"expected_revision": 2, "metadata": {"lifecycle": "active"}}, "--seq", "SEQ-001"
+        for command in ("revise", "accept"):
+            with self.subTest(command=command):
+                error = self.assert_record_refused(command, self.record_change(command))
+                self.assertIn("carries no claim", error["message"])
+
+    def test_accept_and_revise_refuse_a_non_holding_actor(self):
+        for command in ("revise", "accept"):
+            with self.subTest(command=command):
+                error = self.assert_record_refused(
+                    command, self.record_change(command, actor="agent:stranger")
+                )
+                self.assertEqual(FIXTURE_COORDINATOR, error["detail"]["actor"])
+
+    def test_accept_and_revise_allow_the_claim_holder(self):
+        for command in ("revise", "accept"):
+            with self.subTest(command=command):
+                self.patch_record({"lifecycle": "accepted", "revision": 1})
+                completed, answer = self.run_cli(
+                    command, self.record_change(command), "--seq", "SEQ-001"
+                )
+                self.assertEqual(0, completed.returncode, answer)
+                self.assertEqual("active", self.record_metadata()["lifecycle"])
+
+    def test_initial_acceptance_is_exempt_on_each_record_path(self):
+        for command in ("revise", "accept"):
+            with self.subTest(command=command):
+                self.patch_record({"lifecycle": "captured", "revision": 1, store.CLAIM_FIELD: None})
+                completed, answer = self.run_cli(
+                    command, self.record_change(command, "accepted"), "--seq", "SEQ-001"
+                )
+                self.assertEqual(0, completed.returncode, answer)
+                self.assertEqual("accepted", self.record_metadata()["lifecycle"])
+
+    def test_unchanged_lifecycle_needs_no_claim_on_each_record_path(self):
+        self.drop_claim()
+        for command in ("revise", "accept"):
+            with self.subTest(command=command):
+                self.patch_record({"revision": 1})
+                completed, answer = self.run_cli(
+                    command, self.record_change(command, "accepted"), "--seq", "SEQ-001"
+                )
+                self.assertEqual(0, completed.returncode, answer)
+
+    def test_a_revision_without_lifecycle_needs_no_claim(self):
+        self.drop_claim()
+        completed, answer = self.run_cli(
+            "revise", {"expected_revision": 1, "body": "Progress recorded."}, "--seq", "SEQ-001"
         )
-        self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertEqual("active", revised["result"]["lifecycle"])
+        self.assertEqual(0, completed.returncode, answer)
+        self.assertEqual("accepted", self.record_metadata()["lifecycle"])
+
+    def test_revise_uses_the_coordinator_when_no_actor_is_supplied(self):
+        document = self.record_change("revise", coordinator=FIXTURE_COORDINATOR)
+        del document["actor"]
+        completed, answer = self.run_cli("revise", document, "--seq", "SEQ-001")
+        self.assertEqual(0, completed.returncode, answer)
+
 
 
 class CompletionGateTest(StoreCase):
@@ -640,7 +707,7 @@ class CompletionGateTest(StoreCase):
 
     def revise_to_done(self):
         return self.run_cli(
-            "revise", {"expected_revision": 1, "metadata": {"lifecycle": "done"}}, "--seq", "SEQ-001"
+            "revise", {"expected_revision": 1, "actor": FIXTURE_COORDINATOR, "metadata": {"lifecycle": "done"}}, "--seq", "SEQ-001"
         )
 
     def test_revise_reaches_the_same_gate_as_a_planned_transition(self):
@@ -663,7 +730,7 @@ class CompletionGateTest(StoreCase):
             {
                 "expected_revision": 1,
                 "lifecycle": "done",
-                "actor": "maintainer",
+                "actor": FIXTURE_COORDINATOR,
                 "authority": {"source": "maintainer decision", "revision": "2026-09-08T09:00:00Z"},
                 "scope": ["complete"],
                 "decided_at": "2026-09-08T09:00:00Z",

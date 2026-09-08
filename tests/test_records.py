@@ -677,6 +677,12 @@ class AcceptanceApplicabilityTest(MutationTest):
         self.assertEqual(5, self.stored()["identity"]["revision"])
 
     def test_a_status_only_edit_retains_acceptance(self):
+        current = self.stored()
+        current["metadata"]["claim"] = {"actor": "session-flow"}
+        records.write_record_file(
+            self.work / "seq-002/intent.md",
+            records.render_record(current["metadata"], current["scope"], current["body"]),
+        )
         _, response = self.revise(metadata={"lifecycle": "active", "priority": "P0", "order": 1})
         result = response["result"]
         self.assertTrue(result["acceptance"]["applies"])
