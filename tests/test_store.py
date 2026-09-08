@@ -1022,6 +1022,29 @@ class VersioningReportTest(StoreCase):
             storage["limitations"],
         )
 
+    def enclosing_repository_with_a_remote(self) -> Path:
+        self.ignore_the_work_root()
+        initialize_repository(self.project)
+        remote = self.project / "enclosing.git"
+        git(self.project, "init", "--bare", "-b", "main", str(remote))
+        git(self.project, "remote", "add", "origin", str(remote))
+        return remote
+
+    def test_backup_refuses_a_root_the_enclosing_repository_ignores(self):
+        """Otherwise backup resolves the enclosing repository's remote and pushes that instead."""
+        remote = self.enclosing_repository_with_a_remote()
+        completed, answer = self.run_cli("backup")
+        self.assertEqual(1, completed.returncode, completed.stdout)
+        self.assertEqual("invalid-identity", answer["error"]["code"])
+        self.assertIn("ignored by the enclosing repository", answer["error"]["message"])
+        self.assertEqual("0", git(remote, "rev-list", "--all", "--count").stdout.strip())
+
+    def test_a_transition_on_an_ignored_nested_root_names_the_unversioned_reason(self):
+        self.enclosing_repository_with_a_remote()
+        commit = store.commit_work_root(self.root, "session-flow: transition")
+        self.assertFalse(commit["committed"])
+        self.assertIn("ignored by the enclosing repository", commit["reason"])
+
 
 class BindNamespaceTest(StoreCase):
     """`bind-namespace` creates the work root's namespace.json and binds repositories into it."""

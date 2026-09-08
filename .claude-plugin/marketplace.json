@@ -11,7 +11,7 @@
     {
       "name": "session-flow",
       "source": "./",
-      "description": "Complete development lifecycle chain: init, research-design, task-planning, delegation, post-implementation, verification, release, plus security & liability audit. Features dependency-aware parallelization, collaborative brainstorming, and evidence-based verification.",
+      "description": "Complete 16-skill development lifecycle chain: init, research-design, task-planning, delegation, post-implementation, verification, work-root repair, release, plus security & liability audit. Features dependency-aware parallelization, collaborative brainstorming, and evidence-based verification.",
       "version": "1.7.1"
     }
   ]

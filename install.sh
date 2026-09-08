@@ -211,22 +211,40 @@ DESCRIPTOR
     echo "  Installed: $dest"
 }
 
+python_install_instruction() {
+    echo "$1Install Python $PYTHON_MINIMUM or newer (Debian/Ubuntu: 'sudo apt install python3';"
+    echo "$1macOS: 'brew install python3') and expose it as python3. Machines without Python"
+    echo "$1cannot run session-flow."
+}
+
 verify_runtime() {
     local entrypoint="$TARGET/$RUNTIME_ENTRYPOINT"
+    local report
 
     if ! command -v python3 >/dev/null 2>&1; then
         echo "  Warning: python3 is not on PATH, so the staged runtime was not verified."
-        echo "    session-flow needs Python $PYTHON_MINIMUM or newer; a machine without Python cannot run the plugin."
-        echo "    After installing it, check with: python3 $entrypoint doctor"
+        python_install_instruction "    "
+        echo "    Then check with: python3 $entrypoint doctor"
         return 0
     fi
 
-    if ! python3 -B "$entrypoint" doctor --project-root "$TARGET" >/dev/null; then
-        echo "Error: the staged support package did not answer 'doctor'."
-        echo "  Entry files were not activated. Re-run install.sh from a complete session-flow checkout."
+    if report="$(python3 -B "$entrypoint" doctor --project-root "$TARGET" 2>&1)"; then
+        echo "  Verified: python3 $entrypoint doctor"
+        return 0
+    fi
+
+    # The runtime guard answers on the protocol, so its own diagnosis is more useful
+    # than a report that the package is incomplete.
+    if [[ "$report" == *unsupported-runtime* ]]; then
+        echo "Error: python3 is older than $PYTHON_MINIMUM, so the staged runtime refused to run."
+        python_install_instruction "  "
+        echo "  Entry files were not activated. Install a newer Python and re-run install.sh."
         exit 1
     fi
-    echo "  Verified: python3 $entrypoint doctor"
+
+    echo "Error: the staged support package did not answer 'doctor'."
+    echo "  Entry files were not activated. Re-run install.sh from a complete session-flow checkout."
+    exit 1
 }
 
 require_present() {

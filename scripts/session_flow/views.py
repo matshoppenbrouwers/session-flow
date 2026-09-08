@@ -1,11 +1,14 @@
 """One-way sequence import, generated views, and selection eligibility.
 
 Three responsibilities, in one direction each. `import_sequence` reads a
-pre-import `SEQUENCE.md` and returns the work items it describes; it writes
-nothing, because the applying operation belongs to the journalled transition.
-`render` writes the generated sequence and task views, which are replaceable
-output and never an authority. `select` returns one candidate and the reasons
-every considered item was or was not eligible; it starts nothing.
+pre-import `SEQUENCE.md`: it plans by default and writes nothing, and applies
+only on explicit confirmation, through `store.apply_import` so the transformation
+lands as one journalled operation ending in one commit. It then re-derives the
+sequence from the stored records and compares it with the source entry by entry,
+because success is never declared from an exit code. `render` writes the
+generated sequence and task views, which are replaceable output and never an
+authority. `select` returns one candidate and the reasons every considered item
+was or was not eligible; it starts nothing.
 
 Parent task counts and indexes are derived here on every read, never stored in a
 record.
@@ -18,7 +21,8 @@ import re
 import tempfile
 from pathlib import Path
 
-from session_flow import InvalidIdentityError
+from session_flow import InvalidIdentityError, InvalidRequestError
+from session_flow import store
 from session_flow.records import (
     DEFAULT_ORDER,
     DEFAULT_PRIORITY,
@@ -59,6 +63,21 @@ STATE_MARKERS.update({"done": "[x]", "deferred": "[DEFERRED]", "cancelled": "[DE
 ELIGIBLE_STATES = ("accepted", "active")
 ITEM_DIRECTORY_RE = re.compile(r"^seq-[0-9]{3,6}$")
 TASK_VIEW_FILE = "_index.md"
+IDENTITY_RE = re.compile(r"\bSEQ-[0-9]{3,6}\b")
+HISTORICAL_PATH_KEYS = ("todo", "tasks")
+TOMBSTONE_IMPORTED = "imported"
+TOMBSTONE_HISTORICAL = "historical"
+COMPARED_FIELDS = (
+    "seq",
+    "lifecycle",
+    "priority",
+    "auto",
+    "title",
+    "annotations",
+    "links",
+    "needs_breakdown",
+    "notes",
+)
 
 SEQUENCE_HEADER = (
     "# Task Sequence\n\n"
@@ -168,15 +187,82 @@ def read_source(path: Path) -> str:
         ) from error
 
 
-def import_sequence(request: dict) -> dict:
-    """Transform a pre-import sequence into work items. Writes nothing."""
+def require_namespace(request: dict) -> str:
     namespace = request.get("namespace")
     if namespace is None:
         raise InvalidIdentityError(
             "import needs --namespace <uuid>; copy the `namespace` value from the work root's "
             "namespace.json so imported records carry their owning namespace"
         )
-    namespace = parse_namespace(namespace)
+    return parse_namespace(namespace)
+
+
+def read_markdown(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise InvalidIdentityError(
+            f"cannot read the pre-import file {path} ({error.strerror}); every historical file must "
+            "be readable before its identities are retired, so fix its permissions and re-run",
+            path=str(path),
+        ) from error
+
+
+def historical_roots(request: dict) -> list[Path]:
+    """The pre-import directories scanned for identities no live entry carries."""
+    project_root = Path(request["project_root"])
+    named = (request.get("input") or {}).get("historical")
+    if named is None:
+        configured = request.get("config") or {}
+        paths = configured.get("paths") if isinstance(configured.get("paths"), dict) else {}
+        candidates = [
+            project_root / paths[key] for key in HISTORICAL_PATH_KEYS if isinstance(paths.get(key), str)
+        ]
+    elif isinstance(named, list) and all(isinstance(entry, str) for entry in named):
+        candidates = [ensure_within(project_root, project_root / entry) for entry in named]
+    else:
+        raise InvalidRequestError(
+            "`historical` must be a list of project-relative directories to scan for retired "
+            "identities; omit it to scan the configured todo and tasks paths"
+        )
+    return [path for path in candidates if path.is_dir()]
+
+
+def historical_ids(request: dict, known: set) -> list[str]:
+    """Identities surviving only in a pre-import file. They are retired, never reallocated."""
+    work_root = Path(request["work_root"])
+    found: set = set()
+    for root in historical_roots(request):
+        for path in sorted(root.rglob("*.md")):
+            if work_root == path or work_root in path.parents:
+                continue
+            found.update(IDENTITY_RE.findall(read_markdown(path)))
+    return sorted(found - known)
+
+
+def tombstone_entries(request: dict, items: list[dict]) -> list[dict]:
+    """Every identity the survey saw, each with the reason it can never be allocated again."""
+    imported = sorted(item["metadata"]["seq"] for item in items)
+    return [{"seq": seq, "state": TOMBSTONE_IMPORTED} for seq in imported] + [
+        {"seq": seq, "state": TOMBSTONE_HISTORICAL}
+        for seq in historical_ids(request, set(imported))
+    ]
+
+
+def unresolved_links(entries: list[dict], project_root) -> list[dict]:
+    """Entries whose breakdown link names a file that is not where the entry says it lies."""
+    dangling = []
+    for entry in entries:
+        target = (entry.get("links") or {}).get("breakdown")
+        if target is None or (Path(project_root) / target).is_file():
+            continue
+        dangling.append({"seq": entry["seq"], "link": target})
+    return dangling
+
+
+def plan_import(request: dict) -> dict:
+    """Transform a pre-import sequence into work items. Writes nothing."""
+    namespace = require_namespace(request)
     source = import_source(request)
     parsed = parse_sequence(read_source(source))
     reject_duplicate_ids(parsed["entries"])
@@ -185,8 +271,127 @@ def import_sequence(request: dict) -> dict:
     return {
         "source": str(source),
         "items": items,
-        "tombstones": sorted(item["metadata"]["seq"] for item in items),
+        "tombstones": tombstone_entries(request, items),
         "unclassified": parsed["unclassified"],
+        "unresolved_links": unresolved_links(parsed["entries"], root),
+    }
+
+
+def refuse_unclassified(plan: dict) -> None:
+    unclassified = plan["unclassified"]
+    if not unclassified:
+        return
+    first = unclassified[0]
+    raise InvalidIdentityError(
+        f"the survey cannot classify {len(unclassified)} line(s) of {plan['source']}, the first at "
+        f"line {first['line']}: {first['text']!r}; importing would drop them, so rewrite them to "
+        "the grammar in references/sequence-grammar.md and re-run",
+        source=plan["source"],
+        unclassified=unclassified,
+    )
+
+
+def refuse_dangling_links(plan: dict) -> None:
+    dangling = plan["unresolved_links"]
+    if not dangling:
+        return
+    first = dangling[0]
+    raise InvalidIdentityError(
+        f"{len(dangling)} entry link(s) name a file that is not there, the first {first['seq']} "
+        f"→ {first['link']}; import links historical files where they lie, so restore or correct "
+        "each target and re-run",
+        unresolved_links=dangling,
+    )
+
+
+def derived_entries(request: dict) -> list[dict]:
+    """Re-derive the sequence from the stored records, through the generated view."""
+    return parse_sequence(render_sequence(load_items(request)))["entries"]
+
+
+def first_difference(original: dict, derived: dict) -> str | None:
+    for field in COMPARED_FIELDS:
+        if original.get(field) != derived.get(field):
+            return field
+    return None
+
+
+def round_trip_failure(original: list[dict], derived: list[dict]) -> dict | None:
+    """The first way the re-derived sequence differs from the original, or None."""
+    wanted = [entry["seq"] for entry in original]
+    kept = [entry for entry in derived if entry["seq"] in set(wanted)]
+    if [entry["seq"] for entry in kept] != wanted:
+        return {
+            "reason": "the stored records do not re-derive the same identities in the same order",
+            "expected": wanted,
+            "found": [entry["seq"] for entry in kept],
+        }
+    for source_entry, derived_entry in zip(original, kept):
+        field = first_difference(source_entry, derived_entry)
+        if field is not None:
+            return {
+                "reason": f"{source_entry['seq']} did not survive the import with its {field} intact",
+                "seq": source_entry["seq"],
+                "field": field,
+                "expected": source_entry.get(field),
+                "found": derived_entry.get(field),
+            }
+    return None
+
+
+def link_failure(entries: list[dict], project_root) -> dict | None:
+    dangling = unresolved_links(entries, project_root)
+    if not dangling:
+        return None
+    return {
+        "reason": f"{len(dangling)} imported link(s) resolve to no file",
+        "unresolved_links": dangling,
+    }
+
+
+def commit_reference(commit) -> str:
+    """The commit to revert, or why this run left none."""
+    if not isinstance(commit, dict):
+        return "no commit, because this run wrote nothing"
+    if commit.get("commit"):
+        return str(commit["commit"])
+    return "no commit: " + str(commit.get("reason", "the work root was not committed"))
+
+
+def verify_round_trip(request: dict, source: str, commit) -> dict:
+    """Compare the re-derived sequence with the source entry by entry, or fail the run."""
+    original = parse_sequence(read_source(Path(source)))["entries"]
+    derived = derived_entries(request)
+    failure = round_trip_failure(original, derived) or link_failure(
+        derived, request["project_root"]
+    )
+    if failure is None:
+        return {"verified": True, "entries": len(original), "source": str(source)}
+    raise InvalidIdentityError(
+        f"the round-trip comparison failed: {failure['reason']}; the import is already committed "
+        f"as {commit_reference(commit)}, so revert that commit instead of reading the exit code "
+        "as success",
+        commit=commit_reference(commit),
+        mismatch=failure,
+    )
+
+
+def import_sequence(request: dict) -> dict:
+    """Plan the import by default; apply and verify it only on explicit confirmation."""
+    plan = plan_import(request)
+    if not (request.get("input") or {}).get("apply"):
+        return dict(plan, applied=False)
+    refuse_unclassified(plan)
+    refuse_dangling_links(plan)
+    operation = store.apply_import(request, request["input"], plan)
+    return {
+        "source": plan["source"],
+        "applied": True,
+        "imported": [item["metadata"]["seq"] for item in plan["items"]],
+        "tombstones": plan["tombstones"],
+        "unclassified": plan["unclassified"],
+        "operation": operation,
+        "verification": verify_round_trip(request, plan["source"], operation.get("commit")),
     }
 
 

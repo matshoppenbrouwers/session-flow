@@ -1,0 +1,9 @@
+{
+  "root": "_devdocs",
+  "paths": {
+    "todo": "_devdocs/todo",
+    "tasks": "_devdocs/todo/tasks",
+    "work": "_devdocs/work",
+    "sequence": "_devdocs/SEQUENCE.md"
+  }
+}

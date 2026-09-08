@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "entries": [
+    {
+      "seq": "SEQ-501",
+      "state": "imported",
+      "operation": "repair-0001",
+      "at": "2026-09-07T11:05:00Z"
+    },
+    {
+      "seq": "SEQ-502",
+      "state": "imported",
+      "operation": "repair-0001",
+      "at": "2026-09-07T11:05:00Z"
+    }
+  ]
+}

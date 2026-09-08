@@ -44,6 +44,7 @@ TEMPORARY_PREFIX = ".session-flow-"
 ITEM_DIRECTORY_RE = re.compile(r"^seq-([0-9]{3,6})$")
 OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 DEFAULT_COORDINATOR = "session-flow"
+IMPORT_COMMAND = "import"
 CLAIM_FIELD = "claim"
 RESULT_FIELD = "result"
 RESULT_OUTCOMES = ("passed", "failed", "blocked", "unknown")
@@ -733,11 +734,11 @@ def git_failure(reason: str) -> dict:
 
 def commit_work_root(work_root: Path, message: str) -> dict:
     """Commit the work root's own paths. History belongs to Git, not to this runtime."""
-    toplevel = run_git(work_root, ["rev-parse", "--show-toplevel"])
-    if toplevel is None or toplevel.returncode != 0:
+    reason = unversioned_reason(work_root, git_toplevel(work_root))
+    if reason is not None:
         return git_failure(
-            "the work root is not a Git repository, so this transition is not versioned and "
-            "backup and restore are unavailable"
+            f"the work root {reason}, so this transition is not versioned and backup and "
+            "restore are unavailable"
         )
     staged = run_git(work_root, ["add", "-A", "--", "."])
     if staged is None or staged.returncode != 0:
@@ -761,6 +762,19 @@ def first_line(completed) -> str:
     return text[0] if text else "no diagnostic"
 
 
+def commit_operation(request, work_root: Path, namespace: dict, command: str, document, plan) -> dict:
+    """Replace the records, mark the operation applied, refresh the views, commit the root."""
+    operation_id = document["operation"]
+    apply_planned_changes(plan)
+    result = operation_result(operation_id, namespace, plan)
+    mark_operation_applied(work_root, document, result)
+    result["views"] = regenerate_views(request)
+    result["commit"] = commit_work_root(work_root, f"session-flow: {command} {operation_id}")
+    document["views"], document["commit"] = result["views"], result["commit"]
+    write_json(operation_path(work_root, operation_id), document)
+    return result
+
+
 def run_operation(request, payload, command, operation_id, fingerprint, changes, ownership):
     work_root = resolved_work_root(request)
     namespace = read_namespace(work_root)
@@ -773,14 +787,7 @@ def run_operation(request, payload, command, operation_id, fingerprint, changes,
     document = write_prepared_operation(
         work_root, command, operation_id, fingerprint, payload, ownership, plan
     )
-    apply_planned_changes(plan)
-    result = operation_result(operation_id, namespace, plan)
-    mark_operation_applied(work_root, document, result)
-    result["views"] = regenerate_views(request)
-    result["commit"] = commit_work_root(work_root, f"session-flow: {command} {operation_id}")
-    document["views"], document["commit"] = result["views"], result["commit"]
-    write_json(operation_path(work_root, operation_id), document)
-    return result
+    return commit_operation(request, work_root, namespace, command, document, plan)
 
 
 def requested_takeover(payload: dict):
@@ -1027,11 +1034,28 @@ def git_value(work_root: Path, arguments: list):
     return completed.stdout.strip()
 
 
+def unversioned_reason(work_root: Path, toplevel) -> str | None:
+    """Why the work root has no history of its own, or None when something versions it.
+
+    `git rev-parse --show-toplevel` answers for the nearest enclosing repository, so a
+    gitignored root nested in a tracked one would otherwise read as versioned and send
+    every Git operation to a repository that holds none of the records.
+    """
+    if toplevel is None:
+        return "is not a Git repository"
+    if os.path.realpath(toplevel) == os.path.realpath(str(work_root)):
+        return None
+    if not ignored_by_enclosing(work_root):
+        return None
+    return f"is ignored by the enclosing repository at {toplevel}, which tracks nothing in it"
+
+
 def require_versioned_root(work_root: Path, command: str) -> str:
     toplevel = git_toplevel(work_root)
-    if toplevel is None:
+    reason = unversioned_reason(work_root, toplevel)
+    if reason is not None:
         raise InvalidIdentityError(
-            f"the work root at {work_root} is not a Git repository, so {command} is unavailable; "
+            f"the work root at {work_root} {reason}, so {command} is unavailable; "
             f"run `git -C {work_root} init -b main` and commit the records, or restore the root "
             "from the repository that already holds them",
             work_root=str(work_root),
@@ -1191,6 +1215,199 @@ def restore(request: dict) -> dict:
     }
 
 
+def imported_record_change(work_root: Path, item: dict) -> dict | None:
+    """Plan one imported record, or None when that exact record is already stored."""
+    seq = records.parse_item_id(item["metadata"]["seq"])
+    path = record_path(work_root, seq)
+    after = records.digest(item["text"])
+    held = current_digest(path)
+    if held == after:
+        return None
+    if held is not None:
+        raise InvalidIdentityError(
+            f"{path} already holds a different record for {seq}; import never overwrites a stored "
+            "record, so reconcile the two by hand before importing again",
+            seq=seq,
+            path=str(path),
+        )
+    return {
+        "seq": seq,
+        "task": None,
+        "path": path,
+        "revision": item["metadata"].get("revision", 1),
+        "before": None,
+        "after": after,
+        "content": item["text"],
+    }
+
+
+def tombstone_change(work_root: Path, entries: list, operation_id: str) -> dict | None:
+    """Plan the allocation-index write that retires every identity the survey saw."""
+    document = read_tombstones(work_root)
+    known = {value for entry in document["entries"] for value in entry_ids(entry)}
+    added = [entry for entry in entries if entry["seq"] not in known]
+    if not added:
+        return None
+    stamp = now_stamp()
+    document["entries"].extend(
+        {"seq": entry["seq"], "state": entry["state"], "operation": operation_id, "at": stamp}
+        for entry in added
+    )
+    text = json.dumps(document, indent=2, sort_keys=True) + "\n"
+    path = tombstones_path(work_root)
+    return {
+        "seq": None,
+        "task": None,
+        "path": path,
+        "revision": None,
+        "before": current_digest(path),
+        "after": records.digest(text),
+        "content": text,
+    }
+
+
+def plan_import_changes(work_root: Path, plan: dict, operation_id: str) -> list:
+    """The allocation index first, then every record the import still has to write."""
+    changes = [tombstone_change(work_root, plan["tombstones"], operation_id)]
+    changes += [imported_record_change(work_root, item) for item in plan["items"]]
+    return [change for change in changes if change is not None]
+
+
+def refuse_unversioned_root(work_root: Path) -> None:
+    reason = unversioned_reason(work_root, git_toplevel(work_root))
+    if reason is None:
+        return
+    raise InvalidIdentityError(
+        f"the work root at {work_root} {reason}, so an import could not be reverted; run "
+        f"`git -C {work_root} init -b main`, commit the current records, and re-run",
+        work_root=str(work_root),
+    )
+
+
+def uncommitted_under(root: Path, ignored: list) -> list:
+    """Uncommitted paths of `root`'s repository, dropping everything under an ignored path.
+
+    Porcelain status names each path from the repository top, not from `root`.
+    """
+    toplevel = git_toplevel(root)
+    if toplevel is None:
+        return []
+    excluded = [Path(path).resolve() for path in ignored]
+    outstanding = []
+    for entry in uncommitted_paths(root):
+        candidate = (Path(toplevel) / entry).resolve()
+        if any(candidate == path or path in candidate.parents for path in excluded):
+            continue
+        outstanding.append(entry)
+    return outstanding
+
+
+def record_changes(work_root: Path) -> list:
+    """Uncommitted records, ignoring the `.state` journal and lock that recovery owns."""
+    return uncommitted_under(work_root, [state_directory(work_root)])
+
+
+def project_changes(request: dict, work_root: Path) -> list:
+    """Uncommitted project paths, excluding the work root and the generated sequence."""
+    return uncommitted_under(
+        Path(request["project_root"]), [work_root, Path(request["sequence_path"])]
+    )
+
+
+def refuse_uncommitted(root: Path, outstanding: list, description: str) -> None:
+    if not outstanding:
+        return
+    raise InvalidIdentityError(
+        f"the {description} at {root} has {len(outstanding)} uncommitted change(s), including "
+        f"{', '.join(outstanding[:3])}; an import must stay revertable on its own, so commit or "
+        f"stash them (`git -C {root} status`) and re-run",
+        path=str(root),
+        uncommitted=outstanding,
+    )
+
+
+def refuse_unsafe_ground(request: dict, work_root: Path) -> None:
+    """Stop before the first write when the ground cannot carry an undo. There is no force."""
+    refuse_unversioned_root(work_root)
+    refuse_uncommitted(work_root, record_changes(work_root), "work root")
+    refuse_uncommitted(
+        Path(request["project_root"]), project_changes(request, work_root), "project tree"
+    )
+
+
+def prior_operation(work_root: Path, operation_id: str, fingerprint: str):
+    """The journal entry for this operation identity, refusing a reuse with another payload."""
+    document = load_operation(work_root, operation_id)
+    if document is None:
+        return None
+    if document.get("payload_fingerprint") != fingerprint:
+        raise InvalidIdentityError(
+            f"operation {operation_id} already exists with a different payload; issue a new "
+            "operation identity instead of reusing this one",
+            operation=operation_id,
+            state=document.get("state"),
+        )
+    return document
+
+
+def resume_operation(request: dict, work_root: Path, namespace: dict, document: dict) -> dict:
+    """Finish an interrupted operation from its journal instead of planning it again."""
+    operation_id = document["operation"]
+    resumed = reconcile_operation(work_root, namespace, document)
+    if resumed["state"] == BLOCKED:
+        raise RootBusyError(
+            f"operation {operation_id} cannot be resumed: a file matches neither the recorded "
+            "before nor the recorded after content, so compare the named paths with the journal "
+            "by hand before running reconcile",
+            operation=operation_id,
+            changes=resumed["changes"],
+        )
+    result = dict(resumed["result"], resumed=True, changed=True)
+    result["views"] = regenerate_views(request)
+    result["commit"] = commit_work_root(work_root, f"session-flow: {IMPORT_COMMAND} {operation_id}")
+    return result
+
+
+def unchanged_import(operation_id: str, namespace: dict) -> dict:
+    return {
+        "operation": operation_id,
+        "state": APPLIED,
+        "replayed": False,
+        "changed": False,
+        "namespace": namespace["namespace"],
+        "reserved": [],
+        "records": [],
+        "reason": "every identity is already recorded and already retired in the allocation "
+        "index, so this run wrote nothing",
+    }
+
+
+def apply_import(request: dict, payload: dict, plan: dict) -> dict:
+    """Apply one import as a single journalled operation under the root lock."""
+    work_root = resolved_work_root(request)
+    operation_id = parse_operation_id(payload.get("operation"))
+    fingerprint = records.digest(payload)
+    refuse_unsafe_ground(request, work_root)
+    coordinator = coordinator_name(payload)
+    with root_lock(work_root, coordinator, requested_takeover(payload), True) as ownership:
+        namespace = read_namespace(work_root)
+        validate_bindings(work_root, namespace["repositories"])
+        document = prior_operation(work_root, operation_id, fingerprint)
+        if document is not None and document.get("state") == APPLIED:
+            return dict(document.get("result") or {}, replayed=True, changed=False)
+        if document is not None:
+            return resume_operation(request, work_root, namespace, document)
+        block_on_pending(work_root, operation_id)
+        changes = plan_import_changes(work_root, plan, operation_id)
+        if not changes:
+            return unchanged_import(operation_id, namespace)
+        prepared = write_prepared_operation(
+            work_root, IMPORT_COMMAND, operation_id, fingerprint, payload, ownership, changes
+        )
+        applied = commit_operation(request, work_root, namespace, IMPORT_COMMAND, prepared, changes)
+        return dict(applied, changed=True)
+
+
 def parse_binding(payload: dict):
     """Return the repository binding to record, or None when the payload names none."""
     binding = payload.get("repository")
@@ -1320,14 +1537,10 @@ def ignored_by_enclosing(work_root: Path) -> bool:
 
 
 def versioning_report(work_root: Path) -> dict:
-    """Report what actually versions the work root: its own repository, an enclosing one, or nothing.
-
-    `git rev-parse --show-toplevel` answers for the nearest enclosing repository, so a
-    gitignored root nested in a tracked repository would otherwise read as versioned.
-    """
+    """Report what actually versions the work root: its own repository, an enclosing one, or nothing."""
     toplevel = git_toplevel(work_root)
     own = toplevel is not None and os.path.realpath(toplevel) == os.path.realpath(str(work_root))
-    if toplevel is None or (not own and ignored_by_enclosing(work_root)):
+    if unversioned_reason(work_root, toplevel) is not None:
         report = {"versioned": False, "limitations": [unversioned_limitation(work_root, toplevel)]}
         if toplevel is not None:
             report["enclosing_repository"] = toplevel
