@@ -1,6 +1,6 @@
 {
   "name": "session-flow",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Session workflow orchestration for Claude Code. A 16-skill chain covering the full development lifecycle: project init, issue gatekeeping/triage, research-design, task-planning, agent-delegation, post-implementation, evidence-based verification, architecture updates, security & liability audit, work-root repair and reconciliation, and release. Work items are recorded in a versioned work root under a project namespace, and the one-line sequence (backlog) is generated from them, with add-task/groom/next driving the day-to-day flow. Requires Python 3.9+ on the host: the runtime that owns the work root is Python, and the plugin will not run without it. Features dependency-aware parallelization, collaborative brainstorming, falsification-based verification, and user gates at every critical decision.",
   "author": {
     "name": "hoponthestack",

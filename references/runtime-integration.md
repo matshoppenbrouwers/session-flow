@@ -25,7 +25,7 @@ its `SKILL.md`. Its paths are relative to that directory, so a moved installatio
 ```json
 {
   "package": "session-flow",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "protocol": 1,
   "python_minimum": "3.9",
   "entrypoint": "../../scripts/session-flow.py",
