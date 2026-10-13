@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.2 (2026-10-13)
+
+### Changed
+
+- `render` leaves done items out of `SEQUENCE.md`, so the backlog lists only unfinished and
+  retired work instead of growing with every closed item. Done items keep their records, task
+  views and identities; read their lifecycle with `show`. Import still reads `[x]` in a pre-import
+  sequence, and its round-trip check still compares every entry.
+- `/session-repair` reconcile counts a done item still listed as drift, and no longer counts a done
+  item without a row.
+
 ## 2.0.1 (2026-09-08)
 
 ### Fixed
