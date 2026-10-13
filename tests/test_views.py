@@ -189,10 +189,18 @@ class RoundTrip(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(item["text"], encoding="utf-8")
 
-    def test_the_regenerated_view_matches_the_source_entry_for_entry(self):
+    def test_the_regenerated_view_matches_the_unfinished_source_entries(self):
         views.render(self.request)
         generated = Path(self.request["sequence_path"]).read_text(encoding="utf-8")
-        self.assertEqual(sequence_lines(generated), sequence_lines(self.source.read_text(encoding="utf-8")))
+        source = sequence_lines(self.source.read_text(encoding="utf-8"))
+        unfinished = [line for line in source if not line.startswith("- [x]")]
+        self.assertEqual(sequence_lines(generated), unfinished)
+
+    def test_a_done_item_leaves_the_view_but_keeps_its_record(self):
+        views.render(self.request)
+        self.assertNotIn("SEQ-101", Path(self.request["sequence_path"]).read_text(encoding="utf-8"))
+        self.assertTrue((Path(self.request["work_root"]) / "seq-101" / "intent.md").is_file())
+        self.assertIn("SEQ-101", [entry["seq"] for entry in views.derived_entries(self.request)])
 
     def test_a_hand_edited_view_is_replaced_by_the_records(self):
         sequence_path = Path(self.request["sequence_path"])
@@ -200,7 +208,7 @@ class RoundTrip(unittest.TestCase):
         views.render(self.request)
         regenerated = sequence_path.read_text(encoding="utf-8")
         self.assertNotIn("SEQ-999", regenerated)
-        self.assertIn("- [x] SEQ-101 P1: Retire the legacy uploader", regenerated)
+        self.assertIn("- [DEFERRED] SEQ-102 P3: Rewrite the colour picker", regenerated)
 
     def test_a_dropped_record_drops_its_entry(self):
         (Path(self.request["work_root"]) / "seq-105" / "intent.md").unlink()
@@ -415,9 +423,9 @@ class ImportApplied(LegacyImport):
 
     def test_every_annotation_and_marker_survives_verbatim(self):
         generated = (self.project / "_devdocs" / "SEQUENCE.md").read_text(encoding="utf-8")
-        self.assertEqual(
-            sequence_lines(generated), sequence_lines(self.source.read_text(encoding="utf-8"))
-        )
+        source = sequence_lines(self.source.read_text(encoding="utf-8"))
+        unfinished = [line for line in source if not line.startswith("- [x]")]
+        self.assertEqual(sequence_lines(generated), unfinished)
 
     def test_the_round_trip_comparison_is_what_reports_success(self):
         self.assertEqual(self.result["verification"], {

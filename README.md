@@ -188,13 +188,12 @@ A small job can use only `intent.md`. Larger jobs keep their specification, plan
 
 `/session-verify` separately writes its reports, logs and probes under `_verification/` at the project root (`verification/` if the project prefers).
 
-The **sequence** at `_devdocs/SEQUENCE.md` is the backlog you read: one line per work item in stored display order. Selection for execution separately considers readiness and priority.
+The **sequence** at `_devdocs/SEQUENCE.md` is the backlog you read: one line per unfinished work item in stored display order. Done items keep their records but leave the sequence. Selection for execution separately considers readiness and priority.
 
 ```
 - [ ] SEQ-007 P2: Add rate limiting to the API → work/seq-007/tasks/_index.md
 - [ ] SEQ-008 P3: Investigate caching layer (needs breakdown)
 - [ ] SEQ-009 P3 [auto]: Retry failed webhook deliveries → work/seq-009/tasks/_index.md
-- [x] SEQ-006 P1: Fix login redirect loop → work/seq-006/tasks/_index.md
 - [DEFERRED] SEQ-005 P3: Rewrite the importer
 ```
 

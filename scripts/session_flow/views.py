@@ -6,8 +6,8 @@ only on explicit confirmation, through `store.apply_import` so the transformatio
 lands as one journalled operation ending in one commit. It then re-derives the
 sequence from the stored records and compares it with the source entry by entry,
 because success is never declared from an exit code. `render` writes the
-generated sequence and task views, which are replaceable output and never an
-authority. `select` returns one candidate and the reasons every considered item
+generated sequence of unfinished items and the task views, which are replaceable
+output and never an authority. `select` returns one candidate and the reasons every considered item
 was or was not eligible; it starts nothing.
 
 Parent task counts and indexes are derived here on every read, never stored in a
@@ -28,6 +28,7 @@ from session_flow.records import (
     DEFAULT_PRIORITY,
     INTENT_FILE,
     LIFECYCLE_CAPTURED,
+    LIFECYCLE_DONE,
     LIFECYCLE_STATES,
     PRIORITY_RANK,
     RECORD_FORMAT_VERSION,
@@ -602,9 +603,14 @@ def write_generated(path: Path, text: str) -> str:
 
 
 def render(request: dict) -> dict:
-    """Write the sequence view and one task view per item that has task records."""
+    """Write the sequence view of unfinished items and one task view per item with tasks.
+
+    Done items leave the sequence but keep their records, so the import round trip,
+    which re-derives every entry through `render_sequence`, still sees them.
+    """
     items = load_items(request)
-    written = [write_generated(Path(request["sequence_path"]), render_sequence(items))]
+    listed = [item for item in items if item["lifecycle"] != LIFECYCLE_DONE]
+    written = [write_generated(Path(request["sequence_path"]), render_sequence(listed))]
     for item in items:
         if not item["tasks"]:
             continue

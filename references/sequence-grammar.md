@@ -12,7 +12,7 @@ no second one to fall back to.
 
 ## The marker table
 
-The sequence is a flat, priority-ordered list of one-line entries, one per work item:
+The sequence is a flat, priority-ordered list of one-line entries, one per unfinished work item:
 
 ```
 - [ ] SEQ-007 P2: Add rate limiting to the API → work/seq-007/tasks/_index.md
@@ -21,7 +21,6 @@ The sequence is a flat, priority-ordered list of one-line entries, one per work 
 | Token | Emitted for |
 |-------|-------------|
 | `[ ]` | Lifecycle `captured`, `accepted`, `active`, or `blocked` |
-| `[x]` | Lifecycle `done` |
 | `[DEFERRED]` (in the checkbox slot) | Lifecycle `deferred` or `cancelled` — the identity stays taken |
 | `SEQ-NNN` | The record's immutable `seq` |
 | `P1`/`P2`/`P3` | Its `priority`; entries sort by `order`, then identity |
@@ -31,6 +30,12 @@ The sequence is a flat, priority-ordered list of one-line entries, one per work 
 | `(needs breakdown)` (trailing) | `needs_breakdown`, when no breakdown link exists |
 
 Comment lines beneath an entry are the record's `notes`, re-emitted in order.
+
+**Done items are not listed.** An item whose lifecycle is `done` keeps its record and its
+identity, but `render` leaves it out of the sequence, so the backlog shows only work that is
+still open or retired. A reader that tracked completion through an `[x]` marker should read the
+record's lifecycle with `show` instead. `[x]` remains valid in a pre-import sequence, where
+import reads it as `done`.
 
 **The open marker is lossy, deliberately.** `captured`, `accepted`, `active`, and `blocked` all
 render `[ ]`, so an open checkbox tells you an item is not finished and nothing more. It is not

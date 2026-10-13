@@ -33,7 +33,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 
 ## The Generated Sequence
 
-`render` writes one line per work item into `paths.sequence`, from the record's own fields:
+`render` writes one line per unfinished work item into `paths.sequence`, from the record's own fields:
 
 ```
 - [ ] SEQ-007 P2: Add rate limiting to the API ⇄ https://github.com/owner/repo/issues/42 (needs breakdown)
@@ -41,7 +41,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 
 | Token | Rendered from |
 |-------|---------------|
-| `[ ]` open · `[x]` done · `[DEFERRED]` retired | `lifecycle` |
+| `[ ]` open · `[DEFERRED]` retired; a `done` item is not listed | `lifecycle` |
 | `SEQ-NNN` | `seq`, allocated at capture |
 | `P1`/`P2`/`P3` | `priority` |
 | `[auto]` after the priority | `provenance.auto` |
