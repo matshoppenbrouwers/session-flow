@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.3 (2026-10-15)
+
+### Fixed
+
+- `render` omits deferred and cancelled items from `SEQUENCE.md`, along with their comment
+  lines, so the backlog lists only open work. Their records, task views and identities remain
+  intact. Import still accepts legacy `[DEFERRED]` rows and verifies every imported entry.
+
 ## 2.0.2 (2026-10-13)
 
 ### Changed

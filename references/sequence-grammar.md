@@ -12,7 +12,7 @@ no second one to fall back to.
 
 ## The marker table
 
-The sequence is a flat, priority-ordered list of one-line entries, one per unfinished work item:
+The sequence is a flat list of one-line entries in stored display order, one per open work item:
 
 ```
 - [ ] SEQ-007 P2: Add rate limiting to the API → work/seq-007/tasks/_index.md
@@ -21,7 +21,6 @@ The sequence is a flat, priority-ordered list of one-line entries, one per unfin
 | Token | Emitted for |
 |-------|-------------|
 | `[ ]` | Lifecycle `captured`, `accepted`, `active`, or `blocked` |
-| `[DEFERRED]` (in the checkbox slot) | Lifecycle `deferred` or `cancelled` — the identity stays taken |
 | `SEQ-NNN` | The record's immutable `seq` |
 | `P1`/`P2`/`P3` | Its `priority`; entries sort by `order`, then identity |
 | `[auto]` (after the priority) | `provenance.auto` — a skill enqueued it, not the user |
@@ -31,11 +30,12 @@ The sequence is a flat, priority-ordered list of one-line entries, one per unfin
 
 Comment lines beneath an entry are the record's `notes`, re-emitted in order.
 
-**Done items are not listed.** An item whose lifecycle is `done` keeps its record and its
-identity, but `render` leaves it out of the sequence, so the backlog shows only work that is
-still open or retired. A reader that tracked completion through an `[x]` marker should read the
-record's lifecycle with `show` instead. `[x]` remains valid in a pre-import sequence, where
-import reads it as `done`.
+**Only open items are listed.** Items whose lifecycle is `done`, `deferred`, or `cancelled` keep
+their records, task views and identities, but `render` leaves them out of the sequence along with
+their comment lines. Read their lifecycle with `show` instead. Import still reads `[x]` as `done`
+and `[DEFERRED]` as `deferred` in a pre-import sequence; its round-trip check compares every entry,
+including those omitted from the generated view. Reopening an item makes it visible again in its
+stored display order.
 
 **The open marker is lossy, deliberately.** `captured`, `accepted`, `active`, and `blocked` all
 render `[ ]`, so an open checkbox tells you an item is not finished and nothing more. It is not
@@ -94,7 +94,8 @@ grooms marked items normally but reports them separately; `/session-status` coun
 
 ## `[DEFERRED]` and identities that are never reused
 
-`[DEFERRED]` retires an item without doing it, and its identity stays taken. Nothing is ever reused,
+`[DEFERRED]` in a pre-import sequence retires an item without doing it. Deferred and cancelled items
+are omitted from generated sequences, but their identities stay taken. Nothing is ever reused,
 including the identity of a reservation whose operation crashed.
 
 Allocation does not read this file. The runtime reserves the next `SEQ` under the work-root lock,

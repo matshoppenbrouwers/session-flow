@@ -188,18 +188,17 @@ A small job can use only `intent.md`. Larger jobs keep their specification, plan
 
 `/session-verify` separately writes its reports, logs and probes under `_verification/` at the project root (`verification/` if the project prefers).
 
-The **sequence** at `_devdocs/SEQUENCE.md` is the backlog you read: one line per unfinished work item in stored display order. Done items keep their records but leave the sequence. Selection for execution separately considers readiness and priority.
+The **sequence** at `_devdocs/SEQUENCE.md` is the backlog you read: one line per open work item in stored display order. Done, deferred and cancelled items keep their records and task views but leave the sequence. Selection for execution separately considers readiness and priority.
 
 ```
 - [ ] SEQ-007 P2: Add rate limiting to the API → work/seq-007/tasks/_index.md
 - [ ] SEQ-008 P3: Investigate caching layer (needs breakdown)
 - [ ] SEQ-009 P3 [auto]: Retry failed webhook deliveries → work/seq-009/tasks/_index.md
-- [DEFERRED] SEQ-005 P3: Rewrite the importer
 ```
 
 **The sequence is generated output, not a file you edit.** Change its underlying work item through the plugin. Editing the sequence does not update stored records, and a later render replaces those edits. `/session-repair` reports a hand-edited sequence as drift before applying repairs. The line grammar is in [references/sequence-grammar.md](references/sequence-grammar.md).
 
-`[DEFERRED]` represents a deferred or cancelled item; its identity stays taken. No `SEQ-NNN` is ever reused: the runtime reserves new identities under the work-root lock, against both stored items and the tombstone index.
+Import still reads `[DEFERRED]` in a pre-import sequence. Generated sequences omit deferred and cancelled items; read their lifecycle with `show`. No `SEQ-NNN` is ever reused: the runtime reserves new identities under the work-root lock, against both stored items and the tombstone index.
 
 `[auto]` marks an entry captured on your behalf by `/session-gatekeeper`. You can ask the plugin to retire it. Capture alone does not authorize implementation. `/session-groom` reports these items separately, `/session-next` prefers a ready manual entry of the same priority, and `/session-status` counts them.
 

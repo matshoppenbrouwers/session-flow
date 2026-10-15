@@ -12,7 +12,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 ## Two Entry Conditions, One Code Path
 
 - **Migrate** — a legacy layout: `_devdocs/todo/SEQUENCE.md`, per-task and phase files, old `paths` keys. Happens once.
-- **Reconcile** — a current layout that has drifted: a hand-edited generated sequence, an unfinished item with no sequence row or a row with no item, an unapplied journal operation, a stale claim, a missing tombstone. Drift recurs, which is why this is a durable skill and not a one-off script.
+- **Reconcile** - a current layout that has drifted: a hand-edited generated sequence, an open item with no sequence row or a row with no item, an unapplied journal operation, a stale claim, a missing tombstone. Drift recurs, which is why this is a durable skill and not a one-off script.
 
 The survey decides which, not the user's wording: a work root holding `namespace.json` and `seq-NNN/` directories is reconcile, anything else is migrate. Both run the same five stages.
 
@@ -139,7 +139,7 @@ Stage 1 additionally compares the generated sequence at `storage.sequence_path` 
 
 | Drift | Repair |
 |---|---|
-| A derived view disagrees with the records (a hand-edited sequence, an unfinished item with no row, a done item still listed) | `render` |
+| A derived view disagrees with the records (a hand-edited sequence, an open item with no row, a done, deferred or cancelled item still listed) | `render` |
 | A journal entry is half-applied | `reconcile`, which finishes known partial applications and stops on unexplained divergence |
 | An identity is missing from `tombstones` | Re-run the same `import` over the same source: only the allocation-index write is planned, and any stored record that differs refuses instead |
 

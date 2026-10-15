@@ -6,7 +6,7 @@ only on explicit confirmation, through `store.apply_import` so the transformatio
 lands as one journalled operation ending in one commit. It then re-derives the
 sequence from the stored records and compares it with the source entry by entry,
 because success is never declared from an exit code. `render` writes the
-generated sequence of unfinished items and the task views, which are replaceable
+generated sequence of open items and the task views, which are replaceable
 output and never an authority. `select` returns one candidate and the reasons every considered item
 was or was not eligible; it starts nothing.
 
@@ -28,7 +28,6 @@ from session_flow.records import (
     DEFAULT_PRIORITY,
     INTENT_FILE,
     LIFECYCLE_CAPTURED,
-    LIFECYCLE_DONE,
     LIFECYCLE_STATES,
     PRIORITY_RANK,
     RECORD_FORMAT_VERSION,
@@ -63,6 +62,7 @@ MARKER_STATES = {" ": "captured", "x": "done", "X": "done", "DEFERRED": "deferre
 STATE_MARKERS = dict.fromkeys(LIFECYCLE_STATES, "[ ]")
 STATE_MARKERS.update({"done": "[x]", "deferred": "[DEFERRED]", "cancelled": "[DEFERRED]"})
 ELIGIBLE_STATES = ("accepted", "active")
+OPEN_STATES = ("captured", "accepted", "active", "blocked")
 ITEM_DIRECTORY_RE = re.compile(r"^seq-[0-9]{3,6}$")
 TASK_VIEW_FILE = "_index.md"
 IDENTITY_RE = re.compile(r"\bSEQ-[0-9]{3,6}\b")
@@ -603,13 +603,13 @@ def write_generated(path: Path, text: str) -> str:
 
 
 def render(request: dict) -> dict:
-    """Write the sequence view of unfinished items and one task view per item with tasks.
+    """Write the sequence view of open items and one task view per item with tasks.
 
-    Done items leave the sequence but keep their records, so the import round trip,
-    which re-derives every entry through `render_sequence`, still sees them.
+    Done, deferred and cancelled items leave the sequence but keep their records.
+    The import round trip still sees them by re-deriving every entry through `render_sequence`.
     """
     items = load_items(request)
-    listed = [item for item in items if item["lifecycle"] != LIFECYCLE_DONE]
+    listed = [item for item in items if item["lifecycle"] in OPEN_STATES]
     written = [write_generated(Path(request["sequence_path"]), render_sequence(listed))]
     for item in items:
         if not item["tasks"]:

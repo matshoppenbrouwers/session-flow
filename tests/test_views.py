@@ -189,12 +189,12 @@ class RoundTrip(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(item["text"], encoding="utf-8")
 
-    def test_the_regenerated_view_matches_the_unfinished_source_entries(self):
+    def test_the_regenerated_view_matches_the_open_source_entries(self):
         views.render(self.request)
         generated = Path(self.request["sequence_path"]).read_text(encoding="utf-8")
         source = sequence_lines(self.source.read_text(encoding="utf-8"))
-        unfinished = [line for line in source if not line.startswith("- [x]")]
-        self.assertEqual(sequence_lines(generated), unfinished)
+        open_entries = [line for line in source if not line.startswith(("- [x]", "- [DEFERRED]"))]
+        self.assertEqual(sequence_lines(generated), open_entries)
 
     def test_a_done_item_leaves_the_view_but_keeps_its_record(self):
         views.render(self.request)
@@ -208,13 +208,74 @@ class RoundTrip(unittest.TestCase):
         views.render(self.request)
         regenerated = sequence_path.read_text(encoding="utf-8")
         self.assertNotIn("SEQ-999", regenerated)
-        self.assertIn("- [DEFERRED] SEQ-102 P3: Rewrite the colour picker", regenerated)
+        self.assertNotIn("SEQ-102", regenerated)
+        self.assertIn("- [ ] SEQ-103 P1: Fix the retry backoff", regenerated)
 
     def test_a_dropped_record_drops_its_entry(self):
         (Path(self.request["work_root"]) / "seq-105" / "intent.md").unlink()
         (Path(self.request["work_root"]) / "seq-105").rmdir()
         views.render(self.request)
         self.assertNotIn("SEQ-105", Path(self.request["sequence_path"]).read_text(encoding="utf-8"))
+
+
+class GeneratedSequence(unittest.TestCase):
+    def setUp(self):
+        self.project_root = Path(tempfile.mkdtemp(prefix="session-flow-open-sequence-"))
+        self.addCleanup(shutil.rmtree, self.project_root, True)
+        self.request = request_for(self.project_root)
+        self.work = Path(self.request["work_root"])
+        self.states = ("captured", "accepted", "active", "blocked", "done", "deferred", "cancelled")
+        for index, state in enumerate(self.states, start=1):
+            seq = f"SEQ-{300 + index}"
+            metadata = {
+                "format": 1, "namespace": NAMESPACE, "seq": seq, "revision": 1,
+                "title": state, "lifecycle": state, "order": 2 if state == "deferred" else index,
+                "priority": "P3",
+                "notes": [f"<!-- note for {seq} -->"],
+            }
+            directory = self.work / seq.lower()
+            (directory / "tasks").mkdir(parents=True)
+            (directory / "intent.md").write_text(
+                records.render_record(metadata, f"Scope for {state}", ""), encoding="utf-8"
+            )
+            task = dict(metadata, task="A1")
+            (directory / "tasks" / "A1.md").write_text(
+                records.render_record(task, f"Task for {state}", ""), encoding="utf-8"
+            )
+
+    def test_only_open_items_and_their_notes_are_listed_without_changing_records_or_ids(self):
+        before = tree(self.work)
+        result = views.render(self.request)
+        generated = Path(self.request["sequence_path"]).read_text(encoding="utf-8")
+        self.assertEqual(
+            [entry["seq"] for entry in views.parse_sequence(generated)["entries"]],
+            ["SEQ-301", "SEQ-302", "SEQ-303", "SEQ-304"],
+        )
+        self.assertEqual(result["items"], 7)
+        for path, content in before.items():
+            self.assertEqual((self.work / path).read_bytes(), content, path)
+        for index, state in enumerate(self.states, start=1):
+            seq = f"SEQ-{300 + index}"
+            with self.subTest(lifecycle=state):
+                self.assertEqual(f"note for {seq}" in generated, index <= 4)
+                task_view = self.work / seq.lower() / "tasks" / "_index.md"
+                self.assertIn(f"{seq}/A1 | {state} |", task_view.read_text(encoding="utf-8"))
+        self.assertEqual(store.next_item_id(self.work), "SEQ-308")
+
+    def test_reopened_deferred_item_returns_to_its_original_display_position(self):
+        views.render(self.request)
+        path = self.work / "seq-306" / "intent.md"
+        record = records.read_record(path)
+        metadata = dict(record["metadata"], lifecycle="captured", revision=2)
+        path.write_text(
+            records.render_record(metadata, record["scope"], record["body"]), encoding="utf-8"
+        )
+        views.render(self.request)
+        generated = Path(self.request["sequence_path"]).read_text(encoding="utf-8")
+        self.assertEqual(
+            [entry["seq"] for entry in views.parse_sequence(generated)["entries"]],
+            ["SEQ-301", "SEQ-302", "SEQ-306", "SEQ-303", "SEQ-304"],
+        )
 
 
 class GeneratedTaskViews(unittest.TestCase):
@@ -424,8 +485,8 @@ class ImportApplied(LegacyImport):
     def test_every_annotation_and_marker_survives_verbatim(self):
         generated = (self.project / "_devdocs" / "SEQUENCE.md").read_text(encoding="utf-8")
         source = sequence_lines(self.source.read_text(encoding="utf-8"))
-        unfinished = [line for line in source if not line.startswith("- [x]")]
-        self.assertEqual(sequence_lines(generated), unfinished)
+        open_entries = [line for line in source if not line.startswith(("- [x]", "- [DEFERRED]"))]
+        self.assertEqual(sequence_lines(generated), open_entries)
 
     def test_the_round_trip_comparison_is_what_reports_success(self):
         self.assertEqual(self.result["verification"], {

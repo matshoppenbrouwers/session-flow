@@ -292,8 +292,10 @@ class IntegrityRules(LegacyRepair):
 
     def test_every_annotation_and_marker_survives_verbatim(self):
         source = self.source_text()
-        unfinished = [line for line in entry_lines(source) if not line.startswith("- [x]")]
-        self.assertEqual(entry_lines(self.sequence.read_text(encoding="utf-8")), unfinished)
+        open_entries = [
+            line for line in entry_lines(source) if not line.startswith(("- [x]", "- [DEFERRED]"))
+        ]
+        self.assertEqual(entry_lines(self.sequence.read_text(encoding="utf-8")), open_entries)
         stored = [
             url
             for seq in IMPORTED
