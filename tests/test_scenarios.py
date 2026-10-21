@@ -430,7 +430,7 @@ class StaleEvidenceTest(ScenarioCase):
 
     def revise(self, scope: str) -> dict:
         return self.result(
-            "revise", "--seq", "SEQ-601", payload={"expected_revision": 3, "scope": scope}
+            "revise", "--seq", "SEQ-601", payload={"expect_revision": 3, "scope": scope}
         )
 
     def test_reflowing_the_scope_keeps_acceptance_and_evidence_applicable(self):
@@ -517,7 +517,7 @@ class ReopeningTest(ScenarioCase):
 
     def reopen(self, correction=None) -> dict:
         payload = {
-            "expected_revision": 2,
+            "expect_revision": 2,
             "actor": "agent:installer",
             "metadata": {"lifecycle": "active"},
         }
@@ -552,9 +552,9 @@ class CompletionGateContractTest(unittest.TestCase):
                 gate = document["completion_gate"]
                 self.assertEqual(gate["code"], instructed_stop(self.text, GATE_HEADER, gate["match"]))
 
-    def test_the_five_completion_gates_are_present(self):
+    def test_the_seven_completion_gates_are_present(self):
         rows = table_rows(self.text, GATE_HEADER)
-        self.assertEqual(5, len(rows), [row[0] for row in rows])
+        self.assertEqual(7, len(rows), [row[0] for row in rows])
 
     def test_every_instructed_error_is_a_runtime_code(self):
         for cells in table_rows(self.text, GATE_HEADER):

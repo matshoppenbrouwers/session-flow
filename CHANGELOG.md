@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### Breaking changes
+
+- A decision `scope` in `accept` payloads, and in the `same_meaning`, `preparation` and
+  `takeover_claim` decisions, must be a list of strings. A plain string is refused, and the error
+  shows the list form.
+- `capture`, `accept`, `revise`, `transition`, `claim` and `record-result` refuse unknown top-level
+  payload keys, and the error lists the valid keys for that command.
+- The completion gate now also requires at least one evidence entry that applies to the current
+  fingerprint, refuses a latest `fail` entry for any criterion, and requires acceptance that still
+  applies. An applicable entry's `result` must be `pass`, `fail`, `waived` or `unverified`; a
+  missing or other value is refused. Waived and unverified entries still count as recorded evidence.
+
+### Changes
+
+- `expect_revision` is the one revision key. The records layer still accepts `expected_revision` as
+  a deprecated alias for one release, and refuses a payload that carries both with different
+  values. `claim` and `record-result` accept only `expect_revision`.
+- The latest evidence entry per criterion decides. Older entries stay in the record as history and
+  no longer block completion. `metadata.evidence` replaces the whole list on `revise`, so send the
+  existing entries followed by the new one.
+- Claiming a record clears its old result in the same change, so the new claim reserves its paths
+  again. The old result stays in the operation journal.
+- Task planning no longer offers line-range boundaries such as `file:100-200`, because the runtime
+  compares whole paths.
+- `/session-post-implementation` allows one review plus at most two fix-and-re-review rounds per
+  work unit, and records open findings as blockers at the cap instead of shipping them.
+- `/session-next` records acceptance for a direct user instruction to implement a captured item.
+- `/session-delegation` states that a dependent unblocks only when its prerequisite is `done`, and
+  gives the close-out order.
+
 ## 2.0.3 (2026-10-15)
 
 ### Fixed

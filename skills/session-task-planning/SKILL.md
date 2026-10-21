@@ -16,7 +16,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 3. **Criteria must be observable.** "Code is cleaner" is not a criterion. `pytest tests/foo.py::test_bar passes` is.
 4. **Action verbs only.** "Create", "Add", "Move", "Extract" — not "Consider", "Look into", "Think about".
 5. **Every parallelism claim is tested against the file-modification graph.** Two tasks whose `allowed_paths` overlap cannot run in parallel — and dispatch will stop them, so a wrong claim here costs a run.
-6. **Exact paths, not "relevant files".** `src/auth/login.py:45-120` — not "auth files".
+6. **Exact paths, not "relevant files".** `src/auth/login.py` — not "auth files".
 7. **Breaking work down grants no permission to do it.** Task records are captured, not accepted. A file existing under `tasks/` is never eligibility.
 
 ## Core Principle
@@ -90,7 +90,7 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" --namespace "$NAMESPACE"
 | Body | `## Instructions` and `## Test` as ordinary Markdown. Never parsed as fields — write for the agent that will read it. |
 | `claim`, `result` | Helper-owned. `claim` records a bounded assignment and `record-result` records the outcome; never type either into the payload. |
 
-**`allowed_paths` entries** may be exact paths (`src/api/routes.py`, `src/api/routes.py:100-200`) or directory globs (`src/lib/governor/**`) when a task legitimately owns a whole subtree. Still never "relevant files" — the entry has to name a footprint.
+**`allowed_paths` entries** are whole paths (`src/api/routes.py`) or directory globs (`src/lib/governor/**`), the latter when a task legitimately owns a whole subtree. Line ranges within a file are not supported, because the runtime compares whole paths. Still never "relevant files" — the entry has to name a footprint.
 
 It is the **dispatch write boundary**: `/session-delegation` injects it into every agent payload as "you may only create or modify these paths", and overlapping boundaries stop dependent dispatch. An incomplete list means an agent stops mid-task and reports instead of doing the work, so list everything the task must touch. It is a prompt-level constraint the runtime checks between tasks, not an enforced sandbox — host permissions are what constrain an agent's actions.
 
@@ -107,12 +107,12 @@ Capture writes each record in `captured`. Creating it grants no execution permis
 Editing the parent while breaking it down is preparation, not a new decision. Send the `preparation` decision with the `revise` payload so the scope check is recorded and acceptance carries across:
 
 ```json
-{"expected_revision": 4,
+{"expect_revision": 4,
  "metadata": {"links": [{"role": "task", "target": "tasks/A1.md"},
                         {"role": "task", "target": "tasks/A2.md"}]},
  "preparation": {"actor": "<who is planning>",
                  "authority": {"source": "<the parent's acceptance>", "revision": "<its commit>"},
-                 "scope": "task preparation under the accepted outcome"}}
+                 "scope": ["plan"]}}
 ```
 
 A parent with no applicable acceptance answers `missing-authority`. That is the contract working: get the outcome accepted before breaking it into tasks.

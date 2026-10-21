@@ -876,8 +876,21 @@ def apply_operation(request: dict, payload: dict, command: str, changes=None) ->
         )
 
 
-def transition(request: dict) -> dict:
+OPERATION_KEYS = frozenset({"operation", "coordinator", "actor", "provenance", "takeover"})
+TRANSITION_KEYS = OPERATION_KEYS | frozenset({"changes", "correction"})
+ASSIGNMENT_KEYS = OPERATION_KEYS | frozenset({"seq", "task", "expect_revision"})
+CLAIM_KEYS = ASSIGNMENT_KEYS | frozenset({ALLOWED_PATHS_FIELD, "claimed_at", TAKEOVER_FIELD})
+RESULT_KEYS = ASSIGNMENT_KEYS | frozenset({"result"})
+
+
+def require_command_payload(request: dict, valid: frozenset[str]) -> dict:
     payload = require_payload(request)
+    records.check_payload_keys(payload, request["command"], valid)
+    return payload
+
+
+def transition(request: dict) -> dict:
+    payload = require_command_payload(request, TRANSITION_KEYS)
     return apply_operation(request, payload, "transition")
 
 
@@ -1142,7 +1155,10 @@ def claim_change(work_root: Path, current: dict, payload: dict, target: dict, co
     if takeover is not None:
         claim["reassigned_from"] = held.get("actor") if isinstance(held, dict) else None
         claim[TAKEOVER_RECORD_FIELD] = takeover
-    return dict(target, expect_revision=payload.get("expect_revision"), metadata={CLAIM_FIELD: claim})
+    patch = {CLAIM_FIELD: claim}
+    if current["metadata"].get(RESULT_FIELD) is not None:
+        patch[RESULT_FIELD] = None
+    return dict(target, expect_revision=payload.get("expect_revision"), metadata=patch)
 
 
 def claim(request: dict) -> dict:
@@ -1152,7 +1168,7 @@ def claim(request: dict) -> dict:
     is returned rather than validated again, and reusing its identity for another one
     is refused before any prerequisite or write scope is read.
     """
-    payload = require_payload(request)
+    payload = require_command_payload(request, CLAIM_KEYS)
     work_root = resolved_work_root(request)
     replayed = replayed_result(
         work_root, parse_operation_id(payload.get("operation")), records.digest(payload)
@@ -1179,7 +1195,7 @@ def validate_outcome(result) -> dict:
 
 def record_result(request: dict) -> dict:
     """Record a claimed task's own result. Judging its evidence is not this command's work."""
-    payload = require_payload(request)
+    payload = require_command_payload(request, RESULT_KEYS)
     work_root = resolved_work_root(request)
     target = record_target(request, payload)
     current = records.read_record(record_path(work_root, target["seq"], target["task"]))

@@ -90,10 +90,11 @@ while a named task is not done:
   3. Check the group's allowed_paths do not overlap (Step 1's table)
   4. Claim each task in the group, then dispatch it (Step 4)
   5. On completion, record-result against the claimed identity (Step 5)
-  6. Repeat
+  6. Finish each recorded task as Step 5 says; it counts as finished for its dependents only once `done`
+  7. Repeat
 ```
 
-The loop ends when the named IDs have results. Tasks outside the named set keep the state they had.
+The loop ends when the named IDs are `done`. Tasks outside the named set keep the state they had.
 
 ### Step 4: Claim, Then Dispatch
 
@@ -147,7 +148,25 @@ As each task returns, record its outcome against the identity that was claimed, 
 
 `outcome` is `passed`, `failed`, `blocked`, or `unknown`, and it says what happened: a check that could not run is `unknown`, never `passed`. Only the actor that claimed the task records its result. Then run `render` — never write progress into a generated view.
 
-Recording a result unblocks dependents, so do it as each task returns rather than in a batch.
+Record each result as its task returns rather than in a batch. A result does not unblock dependents: a dependent unblocks only when its prerequisite is `done`.
+
+**Close-out.** `record-result` leaves the task `accepted`. The completion gate reads the stored record, not the pending change, so the evidence must be stored before the `done` transition is sent. This close-out applies to a task whose recorded outcome is `passed`. A task recorded `failed`, `blocked`, or `unknown` is claimed again instead (a reclaim clears its result) and is never closed with a hand-written `pass` entry. In this order:
+
+1. `record-result` (above).
+2. `transition` to `active`, sent as the claim holder with `expect_revision` taken from the fresh record, whose `metadata` also carries the `evidence` entries for the task's acceptance fingerprint.
+3. A second `transition` to `done`, carrying only `"lifecycle": "done"` and a fresh `expect_revision`.
+
+```json
+{"operation": "close-<short unique id>", "coordinator": "session-delegation",
+ "actor": "agent:<task ID>",
+ "provenance": {"actor": "agent:<task ID>", "authority": {"source": "<the parent's acceptance>", "revision": "<its commit>"}},
+ "changes": [{"seq": "SEQ-042", "task": "A2", "expect_revision": 4,
+              "metadata": {"lifecycle": "active",
+                           "evidence": [{"check": "...", "criteria": "...", "environment": "...", "result": "pass",
+                                         "fingerprint": "<the task's acceptance fingerprint>", "revision": "..."}]}}]}
+```
+
+Send the `done` step with the new revision and `"metadata": {"lifecycle": "done"}` alone. A single `transition` to `done` that carries the evidence is refused with `inapplicable-evidence`, because the gate finds no evidence entry on the stored record.
 
 ### Step 6: Optional Quality Gates
 
@@ -159,11 +178,11 @@ For consequential tasks (P1, several files), optionally run after completion:
 
 Two records, kept apart. A task's result says its own checks passed. The item's aggregate acceptance says the accepted outcome holds, and only `/session-verify` establishes that.
 
-When every named task has a result:
+The run ends when every named task ID is `done`, or stops on one that cannot be closed (it is reported, not forced). Then:
 1. Run the project's full test suite and the accepted scope's own checks.
 2. Report the aggregate verdict separately from the per-task results. On failure, say the item is integration-failed, name the failing checks, and leave the task results as they are — they are still true.
 3. Report: the SEQ identity, the task IDs run, files changed, and any task of the same item left untouched.
-4. Say what the parent still needs — the tasks without results and the `delivery` target the accepted scope requires — and suggest `/session-post-implementation` for refinement, then `/session-verify` for the outcome.
+4. Say what the parent still needs — the tasks of the item outside the named set that are not yet `done`, and the `delivery` target the accepted scope requires — and suggest `/session-post-implementation` for refinement, then `/session-verify` for the outcome.
 
 ### Invocation and Continuation
 

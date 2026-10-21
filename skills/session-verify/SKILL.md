@@ -195,12 +195,13 @@ Each check that survived falsification becomes one evidence entry on the record,
 fingerprint it was gathered at:
 
 ```json
-{"expected_revision": 7,
+{"expect_revision": 7,
  "metadata": {"evidence": [
+   "<each existing entry, resent unchanged>",
    {"criteria": "<the accepted criterion this covers>",
     "fingerprint": "<the record's current scope_fingerprint>",
     "revision": "<code or artifact revision the check ran against>",
-    "environment": "<where it ran>", "result": "pass | fail",
+    "environment": "<where it ran>", "result": "pass | fail | waived | unverified",
     "limitations": ["<what this check does not cover>"]}]}}
 ```
 
@@ -209,7 +210,11 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" revise --seq SEQ-042 --i
 ```
 
 The response reports each entry's `applies`. An entry that does not apply is not evidence about this
-outcome, whatever its `result` says. Append entries — never overwrite the ones already recorded.
+outcome, whatever its `result` says. `metadata.evidence` replaces the whole list: send the existing
+entries followed by the new one, or the earlier entries are dropped. For each `criteria` value only
+the latest entry in list order counts, so re-running a check and resending the list with its result
+last supersedes the earlier entry for that criterion; the resent older entries stay as history.
+Resending does not clear a stale entry for a criterion you did not re-run.
 
 ### The completion gate
 
@@ -221,9 +226,11 @@ checked first.
 | Completion is refused when | Named error | What to do |
 |----------------------------|-------------|------------|
 | The accepted scope names a required delivery target that is not delivered — however many tasks passed | `inapplicable-evidence` | Leave the item `active`, name the target and what is missing, and say which authority the delivery needs. Merging is a separate action from implementing |
-| Stale evidence: an entry names a fingerprint the record no longer carries | `inapplicable-evidence` | Re-run that check against the current fingerprint, or record a same-meaning decision if the edit changed no meaning. A stored verdict is evidence about the revision it was recorded against |
+| Stale evidence: the latest entry for a criterion names a fingerprint the record no longer carries | `inapplicable-evidence` | Re-run that check against the current fingerprint and resend the evidence list with a new entry for it. A same-meaning decision rebinds acceptance only and never re-binds an evidence entry. A stored verdict is evidence about the revision it was recorded against |
+| No evidence entry applies to the current fingerprint, including a record with no evidence at all | `inapplicable-evidence` | Run the verification and resend the evidence list with an entry for the current fingerprint. A `waived` or `unverified` result counts as recorded, so state honestly what was not checked |
+| The latest applicable entry for a criterion has `result: fail` | `inapplicable-evidence` | Fix the cause, re-run the check and resend the evidence list with the new result last for that criterion, or record a waiver |
 | A task result is `unknown` or `blocked`, or a required check could not run | `inapplicable-evidence` | Report the unknown as unknown. An outcome nobody observed is not evidence, and defaulting it to a pass is how a run becomes untruthful |
-| Acceptance no longer names the record's current scope fingerprint | `missing-authority` | Stop. Re-acceptance or a recorded same-meaning decision comes before any completion |
+| The record has no acceptance, or it no longer names the record's current scope fingerprint | `inapplicable-evidence` | Stop. Re-acceptance or a recorded same-meaning decision comes before any completion |
 | A closure is reopened without a correction record | `missing-authority` | Supply the correction naming why the closure was premature — see below |
 
 When every row passes, transition the item:
@@ -232,14 +239,14 @@ When every row passes, transition the item:
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" revise --seq SEQ-042 --input "$PAYLOAD"
 ```
 
-with `{"metadata": {"lifecycle": "done"}, "expected_revision": <current>, "actor": "<claim holder>"}`.
+with `{"metadata": {"lifecycle": "done"}, "expect_revision": <current>, "actor": "<claim holder>"}`.
 The acting identity must hold the claim; take or reassign the claim before changing lifecycle.
 `revise` also refuses an illegal transition and, for a reopening, refuses without a correction.
 Use `transition` instead when one operation must change several records together.
 
 ### Reopening and successor work
 
-- **Premature closure**: reopen under the **same identity**. Send `{"expected_revision": <current>, "actor": "<claim holder>",
+- **Premature closure**: reopen under the **same identity**. Send `{"expect_revision": <current>, "actor": "<claim holder>",
   "metadata": {"lifecycle": "active"}, "correction": {"reason": "<why the closure was premature>",
   "actor": "<who decided>"}}`. The correction appends to the record's `corrections`; nothing already
   recorded is rewritten.

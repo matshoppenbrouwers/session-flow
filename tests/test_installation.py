@@ -64,7 +64,7 @@ ROUTES = {
 INSTALLED_ROUTES = ("native-plugin", "standalone")
 
 ACCEPTANCE_PAYLOAD = {
-    "expected_revision": 1,
+    "expect_revision": 1,
     "actor": "maintainer",
     "authority": {"source": "maintainer decision", "revision": "2026-09-07T12:30:00Z"},
     "scope": ["implement", "record"],

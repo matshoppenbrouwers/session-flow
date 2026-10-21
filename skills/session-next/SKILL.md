@@ -39,6 +39,22 @@ Read `result.candidate` and `result.considered`. The candidate is one work item,
 - **`candidate` is `null`**: nothing is eligible. Report each considered item with its reasons verbatim, and offer `/session-groom` for items needing a breakdown, `/session-gatekeeper` for untriaged intake, or acceptance for items still `captured`. Do not pick an ineligible item anyway.
 - **The user named an item**: pass `--seq SEQ-NNN`. The answer is then that item or its reasons for being ineligible — never a different item.
 
+### A Direct Instruction for a `captured` Item
+
+When the user directly instructs you to implement a named item that is still `captured`, their message is the authority. Record acceptance first, quoting the message as the authority source and giving the decision scope as a list of strings, then run `select --seq` again and continue:
+
+```bash
+python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" accept --seq SEQ-042 --input accept.json
+```
+
+```json
+{"expect_revision": 2, "actor": "<this session>",
+ "authority": {"source": "user message: \"implement SEQ-042\"", "revision": "<approval timestamp>"},
+ "scope": ["implement", "verify"]}
+```
+
+Quote only what the user said, and list only the actions it covers. A merge, deployment, or external post is not covered unless the message names it. Without a direct instruction, a `captured` item stays ineligible.
+
 ## Step 2: Resolve One Bounded Unit
 
 The candidate is a work item, not permission to run everything under it.

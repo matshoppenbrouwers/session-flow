@@ -329,6 +329,7 @@ BINDING_FIELDS = ("name", "path", "remote")
 ACCEPTANCE_KEY = "acceptance"
 SCOPE_CHECKS_KEY = "scope_checks"
 EVIDENCE_KEY = "evidence"
+EVIDENCE_RESULTS = ("pass", "fail", "waived", "unverified")
 DELIVERY_KEY = "delivery"
 DELIVERY_REQUIREMENT_KEYS = ("repository", "required", "target")
 DELIVERY_RECEIPT_KEY = "delivered_at"
@@ -468,6 +469,19 @@ def timestamp() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def decision_scope(value, action: str) -> list[str]:
+    """A decision's scope is a list of strings; a bare string would be split into characters."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(entry, str) for entry in value):
+        raise InvalidRequestError(
+            f"{action} needs `scope` as a list of strings, such as `\"scope\": [\"implement\", "
+            f"\"verify\"]`; got {value!r}",
+            action=action,
+        )
+    return list(value)
+
+
 def require_authority(decision, action: str) -> dict:
     """Return the trusted provenance for a decision, or refuse the decision."""
     decision = decision if isinstance(decision, dict) else {}
@@ -490,7 +504,7 @@ def require_authority(decision, action: str) -> dict:
     return {
         "actor": actor.strip(),
         "authority": {"source": source.strip(), "revision": revision},
-        "scope": list(decision.get("scope") or []),
+        "scope": decision_scope(decision.get("scope"), action),
         "at": decision.get("decided_at") if isinstance(decision.get("decided_at"), str) else timestamp(),
     }
 
@@ -552,8 +566,31 @@ def record_name(identity: dict) -> str:
 
 
 def stale_evidence(record: dict) -> list:
-    """Evidence entries gathered against a fingerprint the record no longer carries."""
-    return [entry for entry in evidence_status(record) if not entry["applies"]]
+    """Stale entries not followed by an applicable entry for the same criteria.
+
+    Older entries stay in the record as history; the latest entry per criteria decides.
+    """
+    entries = evidence_status(record)
+    return [
+        entry
+        for index, entry in enumerate(entries)
+        if not entry["applies"]
+        and not any(
+            later["applies"] and later["criteria"] == entry["criteria"]
+            for later in entries[index + 1 :]
+        )
+    ]
+
+
+def latest_applicable_evidence(record: dict) -> dict:
+    """The last evidence entry per criteria that applies to the current fingerprint."""
+    fingerprint = scope_fingerprint(record)
+    entries = record["metadata"].get(EVIDENCE_KEY) or []
+    return {
+        str(entry.get("criteria")): entry
+        for entry in entries
+        if isinstance(entry, dict) and entry.get("fingerprint") == fingerprint
+    }
 
 
 def check_evidence_applies(record: dict, name: str) -> None:
@@ -564,11 +601,59 @@ def check_evidence_applies(record: dict, name: str) -> None:
     raise InapplicableEvidenceError(
         f"{name} carries {len(stale)} evidence entry(ies) gathered against another scope "
         f"fingerprint ({criteria}), so they say nothing about the accepted outcome; re-run those "
-        "checks against the current fingerprint and append the results, or record a same-meaning "
-        "decision with `revise --same-meaning`, before completing it",
+        "checks against the current fingerprint and append the results before completing it",
         seq=record["identity"]["seq"],
         fingerprint=scope_fingerprint(record),
         evidence=stale,
+    )
+
+
+def check_evidence_recorded(record: dict, name: str) -> None:
+    latest = latest_applicable_evidence(record)
+    fingerprint = scope_fingerprint(record)
+    if not latest:
+        raise InapplicableEvidenceError(
+            f"{name} carries no evidence entry for its current scope fingerprint, so nothing "
+            "shows the accepted outcome holds; run the verification and append an evidence entry "
+            f"(criteria, result, fingerprint {fingerprint}) before completing it",
+            seq=record["identity"]["seq"],
+            fingerprint=fingerprint,
+        )
+    invalid = {
+        criteria: entry.get("result")
+        for criteria, entry in latest.items()
+        if entry.get("result") not in EVIDENCE_RESULTS
+    }
+    if invalid:
+        raise InapplicableEvidenceError(
+            f"{name} has a latest evidence entry with a missing or unknown `result` for "
+            f"{', '.join(f'{criteria} ({value!r})' for criteria, value in invalid.items())}; "
+            f"`result` must be one of {', '.join(EVIDENCE_RESULTS)}, so correct the entry and "
+            "append it again before completing it",
+            seq=record["identity"]["seq"],
+            fingerprint=fingerprint,
+            invalid=invalid,
+        )
+    failing = [criteria for criteria, entry in latest.items() if entry.get("result") == "fail"]
+    if failing:
+        raise InapplicableEvidenceError(
+            f"{name} has a latest evidence entry with result fail for {', '.join(failing)}; fix "
+            "the cause, re-run those checks and append a new entry for each, or record a waiver, "
+            "before completing it",
+            seq=record["identity"]["seq"],
+            fingerprint=fingerprint,
+            failing=failing,
+        )
+
+
+def check_acceptance_applies(record: dict, name: str) -> None:
+    status = acceptance_status(record)
+    if status["applies"]:
+        return
+    raise InapplicableEvidenceError(
+        f"{name} cannot be completed because its acceptance does not apply: {status['reason']}",
+        seq=record["identity"]["seq"],
+        fingerprint=status["fingerprint"],
     )
 
 
@@ -628,7 +713,9 @@ def check_completion(work_root: Path, record: dict) -> None:
     own closure are each recorded before the item that rests on them is completed.
     """
     name = record_name(record["identity"])
+    check_acceptance_applies(record, name)
     check_evidence_applies(record, name)
+    check_evidence_recorded(record, name)
     check_delivery_recorded(record, name)
     check_tasks_closed(work_root, record, name)
 
@@ -757,11 +844,38 @@ def require_payload(request: dict, command: str) -> dict:
     return payload
 
 
+def check_payload_keys(payload: dict, command: str, valid: frozenset[str]) -> None:
+    """Refuse a top-level key the command never reads, so a misspelt key cannot be dropped silently."""
+    unknown = sorted(set(payload) - valid)
+    if unknown:
+        raise InvalidRequestError(
+            f"{command} does not read {', '.join(f'`{key}`' for key in unknown)} in its payload; "
+            f"valid keys are {', '.join(sorted(valid))}",
+            command=command,
+            unknown=unknown,
+        )
+
+
+def requested_revision(payload: dict, command: str):
+    """The revision the caller expects: `expect_revision`, or its deprecated alias `expected_revision`."""
+    expected = payload.get("expect_revision")
+    alias = payload.get("expected_revision")
+    if expected is None:
+        return alias
+    if alias is not None and alias != expected:
+        raise InvalidRequestError(
+            f"{command} got `expect_revision` {expected!r} and `expected_revision` {alias!r}; send only "
+            "`expect_revision` (`expected_revision` is a deprecated alias)",
+            command=command,
+        )
+    return expected
+
+
 def check_expected_revision(record: dict, payload: dict, command: str) -> int:
-    expected = payload.get("expected_revision")
+    expected = requested_revision(payload, command)
     if type(expected) is not int:
         raise InvalidRequestError(
-            f"{command} needs an integer `expected_revision` in its payload; read the current one with "
+            f"{command} needs an integer `expect_revision` in its payload; read the current one with "
             "`show` and send it back",
             command=command,
         )
@@ -878,9 +992,13 @@ def build_capture_metadata(request: dict, payload: dict) -> dict:
     return metadata
 
 
+CAPTURE_KEYS = frozenset({"scope", "body", "metadata", "auto"})
+
+
 def capture(request: dict) -> dict:
     """Write a new record in the captured state. Capture grants no acceptance."""
     payload = require_payload(request, "capture")
+    check_payload_keys(payload, "capture", CAPTURE_KEYS)
     path = resolve_record_path(request)
     if path.exists():
         raise InvalidIdentityError(
@@ -925,8 +1043,9 @@ def apply_revision_edits(current: dict, payload: dict) -> dict:
     )
 
 
-def load_for_mutation(request: dict, command: str) -> tuple[Path, dict, dict]:
+def load_for_mutation(request: dict, command: str, valid: frozenset[str]) -> tuple[Path, dict, dict]:
     payload = require_payload(request, command)
+    check_payload_keys(payload, command, valid)
     path = resolve_record_path(request)
     current = read_record(path)
     check_namespace(current["identity"], request.get("namespace"))
@@ -934,9 +1053,13 @@ def load_for_mutation(request: dict, command: str) -> tuple[Path, dict, dict]:
     return path, current, payload
 
 
+REVISION_KEYS = frozenset({"expect_revision", "expected_revision", "actor", "coordinator", "correction"})
+REVISE_KEYS = REVISION_KEYS | frozenset({"metadata", "scope", "body", *SCOPE_DECISIONS})
+
+
 def revise(request: dict) -> dict:
     """Edit a record. A declared same-meaning decision carries acceptance across."""
-    path, current, payload = load_for_mutation(request, "revise")
+    path, current, payload = load_for_mutation(request, "revise", REVISE_KEYS)
     updated = apply_revision_edits(current, payload)
     check_record_claim(request, current, updated)
     check_completed_record(request, current, updated)
@@ -957,9 +1080,12 @@ def revise(request: dict) -> dict:
     }
 
 
+ACCEPT_KEYS = REVISION_KEYS | frozenset({"authority", "scope", "decided_at", "lifecycle"})
+
+
 def accept(request: dict) -> dict:
     """Bind the current fingerprint to a decision actor and a trusted authority."""
-    path, current, payload = load_for_mutation(request, "accept")
+    path, current, payload = load_for_mutation(request, "accept", ACCEPT_KEYS)
     provenance = require_authority(payload, "accept")
     fingerprint = scope_fingerprint(current)
     previous = acceptance_of(current)

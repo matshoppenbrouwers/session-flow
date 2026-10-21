@@ -195,11 +195,18 @@ claim, and any edit that leaves lifecycle unchanged. The same claim guard runs o
 `claim`, `record-result`, `revise`, and `accept`. The acting identity is the payload
 `actor`, falling back to `coordinator` and then `session-flow` when no actor is supplied.
 
-**Reaching `done` is gated on the record itself**, and the gate runs before any write. It refuses
-when an evidence entry was gathered against a fingerprint the record no longer carries
-(`inapplicable-evidence` — re-run the check, or record a same-meaning decision), when
-`delivery.required` is true and no `delivery.delivered_at` is recorded, or when the item owns a
-task that is neither `done` nor `cancelled`. Each refusal names the clause and what satisfies it.
+**Reaching `done` is gated on the record itself**, and the gate runs before any write. For each
+`criteria` value only the latest evidence entry in list order counts. `metadata.evidence` replaces
+the whole list on `revise`, so a new entry is sent after the existing ones, which then stay as
+history. It refuses when acceptance is absent or no longer names the current fingerprint, when no
+evidence entry applies to the current fingerprint, when the latest entry for a criterion was
+gathered against another fingerprint (`inapplicable-evidence`: re-run the check and resend the list
+with a new entry for the current fingerprint; a same-meaning decision rebinds acceptance only, never
+an evidence entry), when the latest applicable entry for a criterion has
+`result: fail`, when an applicable entry's `result` is missing or not one of `pass`, `fail`,
+`waived`, `unverified`, when `delivery.required` is true and no `delivery.delivered_at` is recorded, or when
+the item owns a task that is neither `done` nor `cancelled`. Entries with `result` of `waived` or
+`unverified` count as recorded evidence. Each refusal names the clause and what satisfies it.
 
 Task records use the same state names. Tasks can reach `done` while the parent still needs
 integration or delivery: completing every task does not by itself move the parent to `done`, which
@@ -245,10 +252,10 @@ change of algorithm is detectable rather than silent.
 ```json
 "acceptance": {
   "fingerprint": "sha256:4f2c1b90a7d3e5f6082a4c1d9e7b3f5a2c8d0e1f4a6b8c9d0e2f4a6b8c9d0e1f",
-  "decided_by": "maintainer",
+  "actor": "maintainer",
   "authority": {"source": "_devdocs/PRD.md", "revision": "9829a5b"},
-  "scope": "implement and verify; delivery needs its own authority",
-  "decided_at": "2026-09-07T10:14:00Z"
+  "scope": ["implement", "verify"],
+  "accepted_at": "2026-09-07T10:14:00Z"
 }
 ```
 
@@ -280,14 +287,15 @@ the outcome, with the scope check recorded on the task.
 {
   "acceptance": {
     "authority": {"revision": "9829a5b", "source": "_devdocs/PRD.md"},
-    "decided_at": "2026-09-07T10:14:00Z",
-    "decided_by": "maintainer",
+    "accepted_at": "2026-09-07T10:14:00Z",
+    "actor": "maintainer",
     "fingerprint": "sha256:4f2c1b90a7d3e5f6082a4c1d9e7b3f5a2c8d0e1f4a6b8c9d0e2f4a6b8c9d0e1f",
-    "scope": "implement and verify; no delivery"
+    "scope": ["implement", "verify"]
   },
   "evidence": [
     {"check": "python3 -B -m unittest -v tests.test_records", "criteria": "stale writes fail",
-     "environment": "WSL2 ext4", "result": "pass", "revision": "62ede10"}
+     "environment": "WSL2 ext4", "fingerprint": "sha256:4f2c1b90a7d3e5f6082a4c1d9e7b3f5a2c8d0e1f4a6b8c9d0e2f4a6b8c9d0e1f",
+     "result": "pass", "revision": "62ede10"}
   ],
   "format": 1,
   "lifecycle": "done",

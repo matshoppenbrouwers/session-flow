@@ -1,5 +1,5 @@
 {
-  "expected_revision": 1,
+  "expect_revision": 1,
   "actor": "maintainer",
   "authority": {
     "source": "maintainer decision",

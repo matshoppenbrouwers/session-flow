@@ -189,9 +189,9 @@ If issues are found:
 2. Fix Critical and Warning findings labelled high or medium confidence.
 3. List low-confidence findings for the user with one line each; do not act on them unless the
    user asks.
-4. Re-run the reviewer once on the fixes.
+4. Re-review the fixes.
 
-Loop until the reviewer passes with no significant issues, but do not yet run the full test suite at this stage (you can run individual tests)
+Run one review, then at most two fix-and-re-review rounds per work unit. Stop earlier when the reviewer passes with no significant issues. At the cap, record any open findings as blockers and never ship them. Do not yet run the full test suite at this stage (you can run individual tests).
 
 ### Step 3: Security & Liability Audit
 

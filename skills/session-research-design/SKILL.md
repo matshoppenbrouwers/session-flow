@@ -330,7 +330,7 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" revise --seq SEQ-042 --i
 ```
 
 ```json
-{"expected_revision": 4,
+{"expect_revision": 4,
  "metadata": {"references": [{"path": "spec.md", "commit": "<work-root commit>", "role": "specification"}]}}
 ```
 
@@ -343,12 +343,12 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" accept --seq SEQ-042 --i
 ```
 
 ```json
-{"expected_revision": 5, "actor": "<who decided>",
+{"expect_revision": 5, "actor": "<who decided>",
  "authority": {"source": "_devdocs/PRD.md", "revision": "<commit or approval timestamp>"},
- "scope": "implement and verify; delivery needs its own authority"}
+ "scope": ["plan", "implement", "verify"]}
 ```
 
-   The `scope` names which actions the decision covers. Investigate, implement, create PR, merge, deploy, and external posting stay separate: an acceptance that says "implement and verify" authorizes neither a merge nor a deployment.
+   The `scope` is a list of strings naming which actions the decision covers; a bare string is refused. Investigate, implement, create PR, merge, deploy, and external posting stay separate: an acceptance that says "implement and verify" authorizes neither a merge nor a deployment.
 
 5. Suggest: "SEQ-042 is designed and accepted. Run `/session-task-planning` for SEQ-042 to break it into task records" -- or, for a small item that stayed compact, "/session-next will pick it up."
 

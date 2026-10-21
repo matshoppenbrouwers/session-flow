@@ -659,7 +659,7 @@ class MutationTest(unittest.TestCase):
         return records.parse_record((self.work / relative).read_text(encoding="utf-8"))
 
     def revise(self, **payload):
-        payload.setdefault("expected_revision", 4)
+        payload.setdefault("expect_revision", 4)
         return self.call("revise", payload)
 
 
@@ -730,7 +730,7 @@ class AcceptanceApplicabilityTest(MutationTest):
         _, response = self.call(
             "revise",
             {
-                "expected_revision": 2,
+                "expect_revision": 2,
                 "scope": "Collapse whitespace runs and apply NFC before fingerprinting the scope text.",
                 "preparation": dict(AUTHORITY, scope=["implement"]),
             },
@@ -746,7 +746,7 @@ class AcceptanceApplicabilityTest(MutationTest):
 
     def test_a_preparation_change_without_applicable_acceptance_is_refused(self):
         shutil.copy(FIXTURES / WIDENED, self.work / "seq-002" / "intent.md")
-        _, response = self.revise(expected_revision=5, scope="narrower still", preparation=AUTHORITY)
+        _, response = self.revise(expect_revision=5, scope="narrower still", preparation=AUTHORITY)
         self.assertEqual("missing-authority", response["error"]["code"])
         self.assertIn("applicable acceptance", response["error"]["message"])
 
@@ -756,7 +756,7 @@ class StaleRevisionTest(MutationTest):
 
     def test_a_stale_expected_revision_fails_before_any_write(self):
         before = snapshot(self.work)
-        result, response = self.revise(expected_revision=3, metadata={"priority": "P0"})
+        result, response = self.revise(expect_revision=3, metadata={"priority": "P0"})
         self.assertEqual(1, result.returncode, result.stdout)
         self.assertEqual("stale-revision", response["error"]["code"])
         self.assertEqual({"expected": 3, "held": 4}, response["error"]["detail"])
@@ -764,20 +764,69 @@ class StaleRevisionTest(MutationTest):
 
     def test_a_stale_acceptance_fails_before_any_write(self):
         before = snapshot(self.work)
-        _, response = self.call("accept", dict(AUTHORITY, expected_revision=1))
+        _, response = self.call("accept", dict(AUTHORITY, expect_revision=1))
         self.assertEqual("stale-revision", response["error"]["code"])
         self.assertEqual(before, snapshot(self.work))
 
     def test_a_missing_expected_revision_is_a_named_request_error(self):
         before = snapshot(self.work)
-        _, response = self.revise(expected_revision=None, metadata={"priority": "P0"})
+        _, response = self.revise(expect_revision=None, metadata={"priority": "P0"})
         self.assertEqual("invalid-request", response["error"]["code"])
-        self.assertIn("expected_revision", response["error"]["message"])
+        self.assertIn("expect_revision", response["error"]["message"])
+        self.assertEqual(before, snapshot(self.work))
+
+    def test_the_deprecated_expected_revision_alias_is_accepted(self):
+        _, response = self.call("revise", {"expected_revision": 4, "metadata": {"priority": "P0"}})
+        self.assertTrue(response["ok"], response)
+        self.assertEqual("P0", self.stored()["metadata"]["priority"])
+
+    def test_conflicting_revision_keys_are_refused_naming_expect_revision(self):
+        before = snapshot(self.work)
+        _, response = self.revise(expected_revision=3, metadata={"priority": "P0"})
+        self.assertEqual("invalid-request", response["error"]["code"])
+        self.assertIn("expect_revision", response["error"]["message"])
         self.assertEqual(before, snapshot(self.work))
 
     def test_an_unchanged_revision_keeps_the_record_at_its_revision(self):
         _, response = self.revise()
         self.assertEqual(4, response["result"]["identity"]["revision"])
+
+
+class StrictPayloadTest(MutationTest):
+    """A decision scope is a list of strings, and a key no command reads is refused."""
+
+    def refused(self, command: str, data: dict, *needles: str) -> None:
+        before = snapshot(self.work)
+        _, response = self.call(command, data)
+        self.assertEqual("invalid-request", response["error"]["code"], response)
+        for needle in needles:
+            self.assertIn(needle, response["error"]["message"])
+        self.assertEqual(before, snapshot(self.work))
+
+    def test_a_string_decision_scope_is_refused_with_the_list_form(self):
+        decision = dict(AUTHORITY, scope="implement")
+        self.refused("accept", dict(decision, expect_revision=4), '"scope": ["implement"')
+        for key in ("same_meaning", "preparation"):
+            self.refused("revise", {"expect_revision": 4, "metadata": {"priority": "P0"}, key: decision}, "scope")
+
+    def test_a_decision_scope_list_is_accepted(self):
+        _, response = self.call("accept", dict(AUTHORITY, expect_revision=4, scope=["implement", "verify"]))
+        self.assertTrue(response["ok"], response)
+        self.assertEqual(["implement", "verify"], self.stored()["metadata"]["acceptance"]["scope"])
+
+    def test_an_unknown_key_is_refused_and_the_valid_ones_are_listed(self):
+        self.refused("accept", dict(AUTHORITY, expect_revision=4, bogus=1), "bogus", "authority", "expect_revision")
+        self.refused("revise", {"expect_revision": 4, "bogus": 1}, "bogus", "metadata", "expect_revision")
+
+    def test_capture_refuses_an_unknown_key(self):
+        data = dict(CaptureAndAcceptTest.payload, bogus=1)
+        _, response = run_cli(
+            self.root, "capture", "--seq", "SEQ-003", "--namespace", NAMESPACE, "--input", self.payload_file(data)
+        )
+        self.assertEqual("invalid-request", response["error"]["code"])
+        for needle in ("bogus", "scope", "body", "metadata"):
+            self.assertIn(needle, response["error"]["message"])
+        self.assertFalse((self.work / "seq-003").exists())
 
 
 class CaptureAndAcceptTest(MutationTest):
@@ -826,7 +875,7 @@ class CaptureAndAcceptTest(MutationTest):
         self.assertTrue(self.stored("seq-003/intent.md")["metadata"]["provenance"]["auto"])
         _, response = self.call(
             "accept",
-            {"expected_revision": 1, "actor": "session-groom", "authority": {"source": "auto", "revision": "1"}},
+            {"expect_revision": 1, "actor": "session-groom", "authority": {"source": "auto", "revision": "1"}},
             "--seq",
             "SEQ-003",
         )
@@ -836,7 +885,7 @@ class CaptureAndAcceptTest(MutationTest):
         self.capture()
         captured = self.stored("seq-003/intent.md")
         _, response = self.call(
-            "accept", dict(AUTHORITY, expected_revision=1, scope=["implement", "create-pr"]), "--seq", "SEQ-003"
+            "accept", dict(AUTHORITY, expect_revision=1, scope=["implement", "create-pr"]), "--seq", "SEQ-003"
         )
         result = response["result"]
         self.assertEqual("accepted", result["lifecycle"])
@@ -850,14 +899,14 @@ class CaptureAndAcceptTest(MutationTest):
     def test_accept_without_authority_writes_nothing(self):
         self.capture()
         before = snapshot(self.work)
-        _, response = self.call("accept", {"expected_revision": 1, "actor": "maintainer"}, "--seq", "SEQ-003")
+        _, response = self.call("accept", {"expect_revision": 1, "actor": "maintainer"}, "--seq", "SEQ-003")
         self.assertEqual("missing-authority", response["error"]["code"])
         self.assertEqual(before, snapshot(self.work))
 
     def test_re_acceptance_records_the_superseded_fingerprint(self):
         _, response = self.revise(scope=fixture_record(WIDENED)["scope"])
         superseded = response["result"]["previous_fingerprint"]
-        _, response = self.call("accept", dict(AUTHORITY, expected_revision=5))
+        _, response = self.call("accept", dict(AUTHORITY, expect_revision=5))
         self.assertTrue(response["result"]["acceptance"]["applies"])
         checks = self.stored()["metadata"]["scope_checks"]
         self.assertEqual(["accepted", "accepted"], [entry["kind"] for entry in checks])
@@ -866,6 +915,41 @@ class CaptureAndAcceptTest(MutationTest):
     def test_a_mutation_without_a_payload_is_a_named_request_error(self):
         _, response = run_cli(self.root, "revise", "--seq", "SEQ-002")
         self.assertEqual("invalid-request", response["error"]["code"])
+
+
+class EvidenceResultVocabularyTest(unittest.TestCase):
+    """The completion gate accepts only the four documented result values."""
+
+    def gate(self, result):
+        record = fixture_record(ACCEPTED_ITEM)
+        entry = {"criteria": "c", "fingerprint": records.scope_fingerprint(record)}
+        if result is not None:
+            entry["result"] = result
+        record["metadata"]["evidence"] = [entry]
+        records.check_evidence_recorded(record, "SEQ-002")
+
+    def test_a_result_outside_the_vocabulary_is_refused(self):
+        for result in ("failed", "FAIL", "Pass", "", None):
+            with self.subTest(result=result):
+                with self.assertRaises(session_flow.InapplicableEvidenceError) as caught:
+                    self.gate(result)
+                message = str(caught.exception)
+                self.assertIn("c", message)
+                self.assertIn("pass, fail, waived, unverified", message)
+
+    def test_fail_is_refused_and_the_other_valid_values_are_accepted(self):
+        with self.assertRaises(session_flow.InapplicableEvidenceError):
+            self.gate("fail")
+        for result in ("pass", "waived", "unverified"):
+            with self.subTest(result=result):
+                self.gate(result)
+
+    def test_the_stale_evidence_message_offers_no_same_meaning_route(self):
+        record = fixture_record(ACCEPTED_ITEM)
+        record["metadata"]["evidence"] = [{"criteria": "c", "fingerprint": "sha256:old", "result": "pass"}]
+        with self.assertRaises(session_flow.InapplicableEvidenceError) as caught:
+            records.check_evidence_applies(record, "SEQ-002")
+        self.assertNotIn("same-meaning", str(caught.exception))
 
 
 if __name__ == "__main__":

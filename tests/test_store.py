@@ -547,7 +547,7 @@ class LifecycleGuardTest(StoreCase):
         self.assertEqual([earlier, correction], self.record_metadata()["corrections"])
 
     def record_change(self, command, lifecycle="active", **fields):
-        document = payload("acceptance.json") if command == "accept" else {"expected_revision": 1}
+        document = payload("acceptance.json") if command == "accept" else {"expect_revision": 1}
         document["actor"] = FIXTURE_COORDINATOR
         document.update(fields)
         if command == "accept":
@@ -613,7 +613,7 @@ class LifecycleGuardTest(StoreCase):
     def test_a_revision_without_lifecycle_needs_no_claim(self):
         self.drop_claim()
         completed, answer = self.run_cli(
-            "revise", {"expected_revision": 1, "body": "Progress recorded."}, "--seq", "SEQ-001"
+            "revise", {"expect_revision": 1, "body": "Progress recorded."}, "--seq", "SEQ-001"
         )
         self.assertEqual(0, completed.returncode, answer)
         self.assertEqual("accepted", self.record_metadata()["lifecycle"])
@@ -635,6 +635,26 @@ class CompletionGateTest(StoreCase):
     def setUp(self):
         super().setUp()
         self.patch_record({"lifecycle": "active"})
+        self.seed_gate_inputs()
+
+    def seed_gate_inputs(self, task=None) -> None:
+        """Acceptance and a passing entry for the record's current scope fingerprint."""
+        fingerprint = self.fingerprint(task=task)
+        self.patch_record(
+            {
+                "acceptance": {
+                    "fingerprint": fingerprint,
+                    "actor": "maintainer",
+                    "authority": {"source": "user-request", "revision": "2026-09-07T09:00:00Z"},
+                    "scope": ["complete"],
+                    "accepted_at": "2026-09-07T09:00:00Z",
+                },
+                "evidence": [
+                    {"criteria": "baseline", "fingerprint": fingerprint, "result": "pass"}
+                ],
+            },
+            task=task,
+        )
 
     def complete(self, task=None) -> dict:
         document = payload("lifecycle-change.json")
@@ -662,6 +682,7 @@ class CompletionGateTest(StoreCase):
     def test_a_required_delivery_without_a_receipt_cannot_be_completed(self):
         self.close_task()
         self.patch_record({"delivery": self.DELIVERY})
+        self.seed_gate_inputs()
         error = self.assert_fails_without_writing(
             "transition", self.complete(), "inapplicable-evidence"
         )
@@ -687,27 +708,37 @@ class CompletionGateTest(StoreCase):
         self.assertIn("the second writer is refused", error["message"])
         self.assertEqual(self.fingerprint(), error["detail"]["fingerprint"])
 
-    def test_an_item_satisfying_every_clause_is_completed(self):
+    def test_a_record_without_acceptance_cannot_be_completed(self):
         self.close_task()
-        self.patch_record({"delivery": dict(self.DELIVERY, delivered_at="2026-09-08T09:00:00Z")})
+        self.patch_record({"acceptance": None})
+        error = self.assert_fails_without_writing(
+            "transition", self.complete(), "inapplicable-evidence"
+        )
+        self.assertIn("accept", error["message"])
+
+    def test_a_waived_entry_still_counts_as_recorded_evidence(self):
+        self.close_task()
         self.patch_record(
             {
                 "evidence": [
-                    {
-                        "criteria": "the second writer is refused",
-                        "fingerprint": self.fingerprint(),
-                        "result": "pass",
-                    }
+                    {"criteria": "baseline", "fingerprint": self.fingerprint(), "result": "waived"}
                 ]
             }
         )
+        completed, _ = self.run_cli("transition", self.complete())
+        self.assertEqual(0, completed.returncode, completed.stderr)
+
+    def test_an_item_satisfying_every_clause_is_completed(self):
+        self.close_task()
+        self.patch_record({"delivery": dict(self.DELIVERY, delivered_at="2026-09-08T09:00:00Z")})
+        self.seed_gate_inputs()
         completed, _ = self.run_cli("transition", self.complete())
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertEqual("done", self.record_metadata()["lifecycle"])
 
     def revise_to_done(self):
         return self.run_cli(
-            "revise", {"expected_revision": 1, "actor": FIXTURE_COORDINATOR, "metadata": {"lifecycle": "done"}}, "--seq", "SEQ-001"
+            "revise", {"expect_revision": 1, "actor": FIXTURE_COORDINATOR, "metadata": {"lifecycle": "done"}}, "--seq", "SEQ-001"
         )
 
     def test_revise_reaches_the_same_gate_as_a_planned_transition(self):
@@ -728,7 +759,7 @@ class CompletionGateTest(StoreCase):
         return self.run_cli(
             "accept",
             {
-                "expected_revision": 1,
+                "expect_revision": 1,
                 "lifecycle": "done",
                 "actor": FIXTURE_COORDINATOR,
                 "authority": {"source": "maintainer decision", "revision": "2026-09-08T09:00:00Z"},
@@ -750,6 +781,7 @@ class CompletionGateTest(StoreCase):
     def test_a_leaf_task_is_not_judged_as_a_parent(self):
         self.seed_claim(task="A1")
         self.patch_record({"lifecycle": "active"}, task="A1")
+        self.seed_gate_inputs(task="A1")
         self.assertEqual([], records.open_tasks(self.root, {"seq": "SEQ-001", "task": "A1"}))
         completed, _ = self.run_cli("transition", self.complete(task="A1"))
         self.assertEqual(0, completed.returncode, completed.stderr)
@@ -837,6 +869,29 @@ class WorkRootVersioningTest(StoreCase):
         commit = answer["result"]["commit"]
         self.assertFalse(commit["committed"])
         self.assertIn("backup and restore are unavailable", commit["reason"])
+
+
+class StrictPayloadTest(StoreCase):
+    """A mutating command refuses a top-level key it never reads and lists the ones it does."""
+
+    def test_each_command_refuses_an_unknown_key(self):
+        self.run_cli("claim", payload("claim.json"))
+        commands = {
+            "transition": payload("lifecycle-change.json"),
+            "claim": payload("claim.json"),
+            "record-result": payload("result.json"),
+        }
+        for command, document in commands.items():
+            with self.subTest(command=command):
+                error = self.assert_fails_without_writing(command, dict(document, bogus=1), "invalid-request")
+                self.assertIn("bogus", error["message"])
+                self.assertIn("expect_revision" if command != "transition" else "changes", error["message"])
+
+    def test_the_misspelt_revision_key_is_named_rather_than_dropped(self):
+        document = payload("claim.json")
+        document["expected_revision"] = document.pop("expect_revision")
+        error = self.assert_fails_without_writing("claim", document, "invalid-request")
+        self.assertIn("expected_revision", error["message"])
 
 
 class ClaimAndResultTest(StoreCase):
@@ -1058,6 +1113,28 @@ class WriteScopeTest(StoreCase):
         self.hold_scope(["scripts/session_flow/store.py"])
         self.patch_record({store.RESULT_FIELD: {"outcome": "passed"}})
         self.assert_claimed(payload("claim.json"))
+
+    def test_reclaiming_after_a_failed_result_clears_it_and_reserves_the_paths(self):
+        self.run_cli("claim", payload("claim.json"))
+        failed = payload("result.json")
+        failed["result"]["outcome"] = "failed"
+        self.run_cli("record-result", failed)
+        reclaim = dict(payload("claim.json"), operation="op-claim-0002", expect_revision=3)
+        completed, _ = self.run_cli("claim", reclaim)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertNotIn(store.RESULT_FIELD, self.record_metadata(task="A1"))
+
+        self.drop_claim()
+        other = dict(
+            payload("claim.json"),
+            operation="op-claim-0003",
+            actor="agent:other",
+            task=None,
+            expect_revision=1,
+            allowed_paths=["scripts/session_flow"],
+        )
+        error = self.assert_fails_without_writing("claim", other, "invalid-request")
+        self.assertEqual("agent:store-implementer", error["detail"]["holder"])
 
     def test_a_write_scope_that_is_not_a_list_of_paths_is_refused(self):
         self.assert_fails_without_writing("claim", self.claim_paths("src/a"), "invalid-request")
