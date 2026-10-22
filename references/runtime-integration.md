@@ -71,7 +71,7 @@ Paths resolve from `.session-flow.json`: `paths.work` (default `_devdocs/work`) 
 
 ## Request and response protocol
 
-stdout carries exactly one JSON object; diagnostics go to stderr. Parse stdout, never stderr.
+stdout carries exactly one JSON object; diagnostics go to stderr. Parse stdout, never stderr. The one exception is `--help` (or `-h`), which prints usage text and exits 0.
 
 Success, exit code 0:
 
@@ -207,7 +207,7 @@ the record `accepted`. A direct `accepted` to `done` transition stays illegal.
 
 ### Field ownership
 
-In a `revise` metadata edit and in a `transition` change to an existing record, three fields belong to their own commands. `claim` and `result` are written only by `claim` and `record-result`, and `corrections` only grows through the `correction` key. A value that differs from the stored one is refused as `invalid-request`, and the message names the command to use. Sending the stored value unchanged is allowed, so a payload built from `show` output still works.
+In a `revise` metadata edit and in a `transition` change to an existing record, three fields belong to their own commands. `claim` and `result` are written only by `claim` and `record-result`, and `corrections` only grows through the `correction` key. A value that differs from the stored one is refused as `invalid-request`, and the message names the command to use. Sending the stored value unchanged is allowed, so a payload built from `show`'s `metadata` still works. The top-level `evidence` view in `show` adds an `applies` key per entry, so it cannot be sent back as `metadata.evidence`.
 
 `evidence` is append-only in `revise` and `transition`: the stored entries must come first, unchanged and in order, with new entries after them. Removing, editing or reordering an entry, or sending `null`, is refused as `invalid-request`.
 

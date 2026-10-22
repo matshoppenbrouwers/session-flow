@@ -39,8 +39,8 @@
 - `claim`, `result` and `corrections` are written only by their own commands (`claim`,
   `record-result` and the `correction` key). A `revise` metadata edit or a `transition` change to an
   existing record that differs from the stored value is refused as `invalid-request`, naming the
-  command to use. A value equal to the stored one is accepted, so a payload built from `show` output
-  still works.
+  command to use. A value equal to the stored one is accepted, so a payload built from `show`'s
+  `metadata` still works.
 - `evidence` is append-only in `revise` and `transition`: the stored entries must come first,
   unchanged and in order. Removing, editing or reordering one, or sending `null`, is refused as
   `invalid-request`. `session-verify` still records evidence with `revise`. A new record from
