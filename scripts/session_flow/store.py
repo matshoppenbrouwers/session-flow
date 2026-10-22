@@ -52,6 +52,7 @@ IMPORT_COMMAND = "import"
 CLAIM_FIELD = "claim"
 RESULT_FIELD = "result"
 RESULT_COMMAND = "record-result"
+TRANSITION_COMMAND = "transition"
 DEPENDS_FIELD = "depends_on"
 ALLOWED_PATHS_FIELD = "allowed_paths"
 TAKEOVER_FIELD = "takeover_claim"
@@ -653,7 +654,7 @@ def result_evidence_entry(current: dict, evidence, actor: str, recorded_at: str)
         "environment": evidence.get("environment"),
         "result": "pass",
         "limitations": evidence.get("limitations"),
-        "source": RESULT_COMMAND,
+        "source": records.RESULT_EVIDENCE_SOURCE,
         "actor": actor,
         "recorded_at": recorded_at,
     }
@@ -669,12 +670,21 @@ def with_result_evidence(current: dict, patch: dict, actor: str) -> dict:
     return dict(patch, **{records.EVIDENCE_KEY: held + [entry]})
 
 
+NOT_ACTIVE_REMEDIES = {
+    records.LIFECYCLE_ACCEPTED: "claim the task, which moves it to `active`, and record the result again",
+    records.LIFECYCLE_BLOCKED: "transition it to `active` as the claim holder and record the result again",
+    records.LIFECYCLE_DONE: "it is already closed, so nothing needs to be done",
+}
+NOT_ACTIVE_DEFAULT_REMEDY = (
+    "it needs acceptance, or a reopening with a correction, before a result can close it"
+)
+
+
 def not_active_reason(identity: dict, lifecycle: str) -> str:
+    remedy = NOT_ACTIVE_REMEDIES.get(lifecycle, NOT_ACTIVE_DEFAULT_REMEDY)
     return (
         f"{records.record_name(identity)} is `{lifecycle}`, not `active`, so the result was recorded "
-        "without evidence and the task did not move; move it to `active` (claim an accepted task "
-        "again, or transition a blocked task to `active` as the claim holder) and record the "
-        "result again"
+        f"without evidence and the task did not move; {remedy}"
     )
 
 
@@ -706,6 +716,18 @@ def settled_patch(work_root: Path, current: dict, change: dict, authority: dict)
     return closing, None
 
 
+def transition_patch(current: dict, patch):
+    """The patch a `transition` may merge: judged against the stored record, helper-owned keys left out."""
+    if not isinstance(patch, dict):
+        return patch
+    records.check_metadata_patch(current["metadata"], patch)
+    return {key: value for key, value in patch.items() if key not in records.GUARDED_METADATA}
+
+
+def moves_to_done(patch) -> bool:
+    return isinstance(patch, dict) and patch.get("lifecycle") == records.LIFECYCLE_DONE
+
+
 def plan_existing_record(work_root: Path, namespace: dict, change: dict, authority: dict) -> dict:
     seq = records.parse_item_id(change.get("seq"))
     path = record_path(work_root, seq, change.get("task"))
@@ -722,8 +744,11 @@ def plan_existing_record(work_root: Path, namespace: dict, change: dict, authori
             expected=expected,
         )
     patch, not_closed, judged = change.get("metadata"), None, None
+    if authority["command"] == TRANSITION_COMMAND:
+        patch = transition_patch(current, patch)
     if authority["command"] == RESULT_COMMAND:
         patch, not_closed = settled_patch(work_root, current, change, authority)
+    if authority["command"] == RESULT_COMMAND or moves_to_done(patch):
         judged = planned_record(current, change, patch, authority)
     check_lifecycle_authority(work_root, current, patch, authority, judged)
     updated = updated_record(current, change, patch, authority)
@@ -747,8 +772,7 @@ def plan_new_record(work_root: Path, namespace: dict, change: dict, operation_id
     seq = reserve_item_id(work_root, operation_id)
     task = change.get("task")
     path = record_path(work_root, seq, task)
-    metadata = patch_metadata({}, change.get("metadata"))
-    metadata.pop("task", None)
+    metadata = records.new_record_metadata(patch_metadata({}, change.get("metadata")))
     metadata.update(
         {
             "format": RECORD_FORMAT_VERSION,
@@ -1358,6 +1382,37 @@ def takeover_authority(payload: dict) -> dict | None:
     return records.require_authority(offered, f"a `{TAKEOVER_FIELD}`")
 
 
+def require_applicable_acceptance(current: dict, target: dict) -> None:
+    status = records.acceptance_status(current)
+    if status["applies"]:
+        return
+    raise MissingAuthorityError(
+        f"{records.record_name(target)} cannot be claimed: {status['reason']}. Accept the record, "
+        "or record a same-meaning decision, then claim it",
+        seq=target["seq"],
+    )
+
+
+CLAIMABLE_LIFECYCLES = (
+    records.LIFECYCLE_ACCEPTED,
+    records.LIFECYCLE_ACTIVE,
+    records.LIFECYCLE_BLOCKED,
+)
+
+
+def require_claimable_lifecycle(current: dict, target: dict) -> None:
+    lifecycle = records.lifecycle_of(current)
+    if lifecycle in CLAIMABLE_LIFECYCLES:
+        return
+    raise MissingAuthorityError(
+        f"{records.record_name(target)} is `{lifecycle}` and cannot be claimed; only an `accepted`, "
+        "`active` or `blocked` record takes a claim. Accept it, or reopen it with a correction, "
+        "then claim it",
+        seq=target["seq"],
+        lifecycle=lifecycle,
+    )
+
+
 def claim_change(work_root: Path, current: dict, payload: dict, target: dict, coordinator: str) -> dict:
     """Plan one bounded assignment, refusing it while another claim or a prerequisite stands.
 
@@ -1375,6 +1430,8 @@ def claim_change(work_root: Path, current: dict, payload: dict, target: dict, co
             "result, or supply `takeover_claim` with the authority that reassigns it",
             actor=held.get("actor"),
         )
+    require_applicable_acceptance(current, target)
+    require_claimable_lifecycle(current, target)
     check_prerequisites(work_root, records.record_name(target), current)
     check_write_scope(work_root, record_path(work_root, target["seq"], target["task"]), payload, actor)
     claim = {

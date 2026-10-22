@@ -316,6 +316,10 @@ class A3StoreGateTest(_store_tests.StoreCase):
 
 
 class A4ReclaimTest(_store_tests.StoreCase):
+    def setUp(self):
+        super().setUp()
+        self.accept_fixture(task="A1")
+
     def test_a4_reclaiming_after_a_failed_result_clears_it_and_reserves_the_paths(self):
         self.run_cli("claim", payload("claim.json"))
         failed = payload("result.json")
@@ -332,6 +336,7 @@ class A4ReclaimTest(_store_tests.StoreCase):
         self.assertEqual("agent:store-implementer", metadata["claim"]["actor"])
 
         self.drop_claim()
+        self.accept_fixture()
         other = {
             "operation": "op-claim-0003",
             "coordinator": "session-delegation",

@@ -22,7 +22,7 @@ REQUIRED = {
     "capture": ("scope",),
     "accept": ("actor", "authority", "expect_revision"),
     "revise": ("expect_revision",),
-    "transition": ("actor", "changes"),
+    "transition": ("changes",),
     "claim": ("seq", "actor", "expect_revision"),
     "record-result": ("seq", "actor", "expect_revision", "result"),
 }

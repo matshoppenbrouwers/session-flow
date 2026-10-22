@@ -329,12 +329,24 @@ BINDING_FIELDS = ("name", "path", "remote")
 ACCEPTANCE_KEY = "acceptance"
 SCOPE_CHECKS_KEY = "scope_checks"
 EVIDENCE_KEY = "evidence"
+RESULT_EVIDENCE_SOURCE = "record-result"
 EVIDENCE_RESULTS = ("pass", "fail", "waived", "unverified")
 DELIVERY_KEY = "delivery"
 DELIVERY_REQUIREMENT_KEYS = ("repository", "required", "target")
 DELIVERY_RECEIPT_KEY = "delivered_at"
 RESERVED_METADATA = (ACCEPTANCE_KEY, SCOPE_CHECKS_KEY, "format", "namespace", "seq", "revision")
-CAPTURE_RESERVED_METADATA = RESERVED_METADATA + ("task",)
+IDENTITY_METADATA = ("format", "namespace", "seq", "task")
+RUNTIME_METADATA = {
+    ACCEPTANCE_KEY: "acceptance is written by `accept`; accept the record instead of editing it",
+    SCOPE_CHECKS_KEY: "scope_checks are written by `accept` and the same-meaning decision; use `accept` instead of editing them",
+    "revision": "revision is advanced by the runtime on every write and cannot be set",
+}
+HELPER_OWNED_METADATA = {
+    "claim": "claim is written by the `claim` command; use `claim` instead of editing it",
+    "result": "result is written by the `record-result` command; use `record-result` instead of editing it",
+    "corrections": "corrections only grow through the `correction` key; send `correction` instead of rewriting the list",
+}
+CAPTURE_RESERVED_METADATA = RESERVED_METADATA + ("task", "claim", "result", EVIDENCE_KEY, "corrections")
 PROVENANCE_SOURCES = ("auto", "provenance", "[auto]")
 
 LIFECYCLE_CAPTURED = "captured"
@@ -763,10 +775,12 @@ def check_record_claim(request: dict, current: dict, updated: dict) -> None:
 
 
 def check_completed_record(request: dict, current: dict, updated: dict) -> None:
-    """The gate for the record-level handlers, which write without the store's plan."""
+    """The gate for the record-level handlers, judging the record as it would be written."""
     if lifecycle_of(updated) != LIFECYCLE_DONE or lifecycle_of(current) == LIFECYCLE_DONE:
         return
-    check_completion(Path(request["work_root"]), current)
+    metadata = dict(updated["metadata"], revision=advance_revision(current, updated))
+    planned = parse_record(render_record(metadata, updated["scope"], updated["body"]))
+    check_completion(Path(request["work_root"]), planned)
 
 
 def lifecycle_of(record: dict) -> str:
@@ -973,12 +987,22 @@ def capture_namespace(request: dict, metadata: dict) -> str:
     return parse_namespace(supplied)
 
 
+def new_record_metadata(supplied: dict) -> dict:
+    """What a new record keeps of supplied metadata: nothing a command or a delivery owns, and `captured`."""
+    metadata = {key: value for key, value in supplied.items() if key not in CAPTURE_RESERVED_METADATA}
+    delivery = metadata.get(DELIVERY_KEY)
+    if isinstance(delivery, dict) and DELIVERY_RECEIPT_KEY in delivery:
+        metadata[DELIVERY_KEY] = {key: value for key, value in delivery.items() if key != DELIVERY_RECEIPT_KEY}
+    metadata["lifecycle"] = LIFECYCLE_CAPTURED
+    return metadata
+
+
 def build_capture_metadata(request: dict, payload: dict) -> dict:
     """Capture fills identity, title, provenance, bindings, captured state, and ordering."""
     supplied = payload.get("metadata")
     if supplied is not None and not isinstance(supplied, dict):
         raise InvalidRequestError("`metadata` must be a JSON object of envelope fields")
-    metadata = {key: value for key, value in dict(supplied or {}).items() if key not in CAPTURE_RESERVED_METADATA}
+    metadata = new_record_metadata(dict(supplied or {}))
     provenance = dict(metadata.get("provenance") or {})
     if payload.get("auto"):
         provenance["auto"] = True
@@ -1030,14 +1054,73 @@ def capture(request: dict) -> dict:
     }
 
 
+def changed_keys(stored: dict, patch: dict, keys) -> list[str]:
+    return [key for key in keys if key in patch and patch[key] != stored.get(key)]
+
+
+def canonical_entry(entry) -> str:
+    return json.dumps(entry, sort_keys=True, default=str)
+
+
+def evidence_appends_only(stored: dict, sent) -> bool:
+    kept = stored.get(EVIDENCE_KEY) or []
+    return (
+        isinstance(sent, list)
+        and len(sent) >= len(kept)
+        and [canonical_entry(entry) for entry in sent[: len(kept)]] == [canonical_entry(entry) for entry in kept]
+    )
+
+
+def check_evidence_patch(stored: dict, patch: dict) -> None:
+    sent = patch[EVIDENCE_KEY]
+    if sent is None:
+        raise InvalidRequestError(
+            "`evidence` cannot be null: it is append-only, so leave the key out to keep the stored "
+            "entries, or send them first and unchanged with any new entries after them"
+        )
+    if not evidence_appends_only(stored, sent):
+        raise InvalidRequestError(
+            "`evidence` is append-only: send the stored entries first, unchanged and in order, "
+            "then any new entries after them"
+        )
+    appended = sent[len(stored.get(EVIDENCE_KEY) or []) :]
+    if any(isinstance(entry, dict) and entry.get("source") == RESULT_EVIDENCE_SOURCE for entry in appended):
+        raise InvalidRequestError(
+            f'`source: "{RESULT_EVIDENCE_SOURCE}"` is reserved for the entries `record-result` builds; '
+            "append the entry without that source, or record the result with `record-result`"
+        )
+
+
+def check_metadata_patch(stored: dict, patch: dict) -> None:
+    """Refuse a metadata patch that changes identity, runtime-owned or helper-owned fields.
+
+    A key sent with its stored value is a no-op; `None` counts as a change when a value is stored.
+    """
+    for key in changed_keys(stored, patch, IDENTITY_METADATA):
+        raise InvalidIdentityError(
+            f"`{key}` is part of the record's identity and cannot be edited; "
+            "capture a new item or task to get a different identity"
+        )
+    for key in changed_keys(stored, patch, RUNTIME_METADATA):
+        raise InvalidRequestError(RUNTIME_METADATA[key])
+    for key in changed_keys(stored, patch, HELPER_OWNED_METADATA):
+        raise InvalidRequestError(HELPER_OWNED_METADATA[key])
+    if EVIDENCE_KEY in patch:
+        check_evidence_patch(stored, patch)
+
+
+GUARDED_METADATA = IDENTITY_METADATA + tuple(RUNTIME_METADATA) + tuple(HELPER_OWNED_METADATA)
+
+
 def apply_revision_edits(current: dict, payload: dict) -> dict:
-    """Merge the requested edits onto the current record without touching identity."""
+    """Merge the requested edits onto the current record, refusing changes to fields a command owns."""
     edits = payload.get("metadata")
     if edits is not None and not isinstance(edits, dict):
         raise InvalidRequestError("`metadata` must be a JSON object of envelope fields")
     edits = dict(edits or {})
+    check_metadata_patch(current["metadata"], edits)
     metadata = dict(current["metadata"])
-    metadata.update({key: value for key, value in edits.items() if key not in RESERVED_METADATA})
+    metadata.update({key: value for key, value in edits.items() if key not in GUARDED_METADATA})
     if "lifecycle" in edits:
         metadata["lifecycle"] = check_lifecycle_change(
             lifecycle_of(current), edits["lifecycle"], payload.get("correction")
@@ -1072,8 +1155,8 @@ def revise(request: dict) -> dict:
     path, current, payload = load_for_mutation(request, "revise", REVISE_KEYS)
     updated = apply_revision_edits(current, payload)
     check_record_claim(request, current, updated)
-    check_completed_record(request, current, updated)
     check = settle_scope(current, updated, scope_decision(payload))
+    check_completed_record(request, current, updated)
     updated["metadata"]["revision"] = advance_revision(current, updated)
     text = render_record(updated["metadata"], updated["scope"], updated["body"])
     written = parse_record(text)

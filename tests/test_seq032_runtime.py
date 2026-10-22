@@ -273,20 +273,24 @@ class OperationCase(StoreCase):
         "limitations": ["no multi-host run was attempted"],
     }
 
+    def setUp(self):
+        super().setUp()
+        self.accept()
+
     def revision(self, task="A1") -> int:
         return self.record_metadata(task=task)["revision"]
 
     def fingerprint(self, task="A1") -> str:
         return records.scope_fingerprint(records.read_record(store.record_path(self.root, "SEQ-001", task)))
 
-    def accept(self, task="A1") -> None:
+    def accept(self, task="A1", fingerprint=None) -> None:
         self.patch_record(
             {
                 "acceptance": {
                     "actor": "user:fixture",
                     "accepted_at": "2026-09-07T10:00:00Z",
                     "authority": {"source": "user request", "revision": "2026-09-07T10:00:00Z"},
-                    "fingerprint": self.fingerprint(task),
+                    "fingerprint": fingerprint or self.fingerprint(task),
                     "scope": ["implement", "verify"],
                 }
             },
@@ -443,6 +447,7 @@ class A3OperationIdAndClaimTest(OperationCase):
 
     def test_a3_claiming_an_accepted_item_leaves_it_active_with_the_claim_recorded(self):
         self.drop_claim()
+        self.accept(task=None)
         self.assertEqual("accepted", self.record_metadata()["lifecycle"])
         self.ok("claim", self.claim_document(task=None, allowed_paths=[]))
         metadata = self.record_metadata()
@@ -533,6 +538,7 @@ class A4ResultCloseOutTest(OperationCase):
 
     def test_a4_a_task_that_depends_on_the_closed_task_can_then_be_claimed(self):
         self.add_dependent_task()
+        self.accept("A2")
         self.claimed_and_accepted()
         dependent_claim = self.claim_document("A2", allowed_paths=["docs/other.md"], operation="op-a4-claim-a2")
         self.assert_fails_without_writing("claim", dependent_claim, "invalid-request")
@@ -555,6 +561,7 @@ class A4ResultCloseOutTest(OperationCase):
     def test_a4_acceptance_that_does_not_apply_records_result_and_evidence_but_does_not_close(self):
         self.claim_the_task()
         fingerprint = self.fingerprint()
+        self.accept(fingerprint="sha256:" + "0" * 64)
         self.assertFalse(
             records.acceptance_status(records.read_record(store.record_path(self.root, "SEQ-001", "A1")))["applies"]
         )

@@ -116,8 +116,14 @@ values and revisions; the agent owns the prose and invokes the helper.
 | `parent` | string | The `SEQ-NNN` this task belongs to. Task records only. |
 | `depends_on` | list | Prerequisite identities, each `SEQ-NNN` or `SEQ-NNN/TASK`. Enforced when the record is claimed. |
 | `allowed_paths` | list | The write scope the record declares. What the runtime compares is the copy the claim carries. |
-| `claim` | object | The live assignment: `actor`, `coordinator`, `host`, `claimed_at`, and the claim's own `allowed_paths`. One per record. |
-| `result` | object | The claimed work's outcome, written by `record-result`. Recording it ends the claim's hold on its paths. |
+| `claim` | object | The live assignment: `actor`, `coordinator`, `host`, `claimed_at`, and the claim's own `allowed_paths`. One per record. Written only by `claim`. |
+| `result` | object | The claimed work's outcome, written only by `record-result`. Recording it ends the claim's hold on its paths. |
+
+**Field ownership.** `claim`, `result` and `corrections` are written only by their own commands: `claim`, `record-result`, and the `correction` key, which appends. In a `revise` metadata edit or a `transition` change to an existing record, a value that differs from the stored one is refused as `invalid-request`, naming the command to use. `evidence` is append-only there: stored entries come first, unchanged and in order, and removing, editing, reordering or nulling one is refused. `format`, `namespace`, `seq` and `task` refuse a change as `invalid-identity`, and `revision`, `acceptance` and `scope_checks` refuse it as `invalid-request`. A value equal to the stored one is a no-op. `evidence: null` is refused as `invalid-request`, and an entry appended through `revise` or `transition` may not carry `source: "record-result"`, which only `record-result` writes. A new record from `capture`, or from a `transition` with `new: true`, is always `captured` whatever the payload says, and drops `claim`, `result`, `evidence`, `corrections`, `acceptance`, `scope_checks` and a delivery receipt.
+
+**A claim needs an open lifecycle and applicable acceptance.** `claim` is refused as `missing-authority` unless the record is `accepted`, `active` or `blocked`, so a `captured`, `deferred`, `cancelled` or `done` record is refused before any write. It is also refused when the record's acceptance does not name its current scope fingerprint. Accept the record, or record a same-meaning decision, first.
+
+**Argument errors answer in JSON.** An unknown option or a stray positional argument writes one JSON object with `ok: false` and `error.code` `invalid-request` to stdout and exits with code 2.
 
 **Prerequisites are checked at claim time, over the transitive closure.** `claim` walks
 `depends_on` from the claimed record through the prerequisites of its prerequisites, so an
@@ -195,10 +201,10 @@ claim, and any edit that leaves lifecycle unchanged. The same claim guard runs o
 `claim`, `record-result`, `revise`, and `accept`. The acting identity is the payload
 `actor`, falling back to `coordinator` and then `session-flow` when no actor is supplied.
 
-**Reaching `done` is gated on the record itself**, and the gate runs before any write. For each
-`criteria` value only the latest evidence entry in list order counts. `metadata.evidence` replaces
-the whole list on `revise`, so a new entry is sent after the existing ones, which then stay as
-history. It refuses when acceptance is absent or no longer names the current fingerprint, when no
+**Reaching `done` is gated on the record itself**, and the gate runs before any write, on the record as it would be written (new scope, delivery and evidence included), not on the stored one. For each
+`criteria` value only the latest evidence entry in list order counts. `metadata.evidence` is
+append-only on `revise` and `transition`: the stored entries are sent first, unchanged and in order,
+and a new entry follows them. The older entries stay as history. It refuses when acceptance is absent or no longer names the current fingerprint, when no
 evidence entry applies to the current fingerprint, when the latest entry for a criterion was
 gathered against another fingerprint (`inapplicable-evidence`: re-run the check and resend the list
 with a new entry for the current fingerprint; a same-meaning decision rebinds acceptance only, never
@@ -267,7 +273,7 @@ authority.
 applicability of evidence gathered against the old fingerprint. The runtime detects that content
 changed; it does not decide semantic equivalence. Two paths follow from that:
 
-- `revise --same-meaning` records the actor, the authority, and both fingerprints in one step and
+- A `same_meaning` decision in a `revise` payload records the actor, the authority, and both fingerprints in one step and
   keeps acceptance, without opening a review cycle. Benign re-invalidation is the common case, and
   this is its answer.
 - A meaning-changing edit takes the full applicability path: acceptance is invalidated and a new

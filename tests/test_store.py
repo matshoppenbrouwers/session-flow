@@ -108,6 +108,19 @@ class StoreCase(unittest.TestCase):
         self.patch_record({store.CLAIM_FIELD: claim}, seq, task)
         return claim
 
+    def accept_fixture(self, seq="SEQ-001", task=None) -> None:
+        """Give a fixture record an acceptance naming its current scope: `claim` needs one."""
+        path = store.record_path(self.root, seq, task)
+        fingerprint = records.scope_fingerprint(records.read_record(path))
+        acceptance = {
+            "actor": "user:fixture",
+            "accepted_at": "2026-09-07T10:00:00Z",
+            "authority": {"source": "user request", "revision": "2026-09-07T10:00:00Z"},
+            "fingerprint": fingerprint,
+            "scope": ["implement", "verify"],
+        }
+        self.patch_record({"acceptance": acceptance}, seq, task)
+
     def drop_claim(self, seq="SEQ-001", task=None) -> None:
         self.patch_record({store.CLAIM_FIELD: None}, seq, task)
 
@@ -470,6 +483,10 @@ class TransitionTest(StoreCase):
 class LifecycleGuardTest(StoreCase):
     """Every existing-record mutation is judged against the transition table and the claim."""
 
+    def setUp(self):
+        super().setUp()
+        self.accept_fixture(task="A1")
+
     def change(self, lifecycle: str, expect_revision=1, **fields) -> dict:
         document = payload("lifecycle-change.json")
         document.update(fields)
@@ -527,14 +544,14 @@ class LifecycleGuardTest(StoreCase):
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertEqual("accepted", self.record_metadata()["lifecycle"])
 
-    def test_a_claim_starts_the_work_and_a_result_leaves_it_active_through_the_guard(self):
+    def test_a_claim_starts_the_work_and_an_applicable_result_closes_it_through_the_guard(self):
         self.assertEqual("accepted", self.record_metadata(task="A1")["lifecycle"])
         completed, _ = self.run_cli("claim", payload("claim.json"))
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertEqual("active", self.record_metadata(task="A1")["lifecycle"])
         completed, _ = self.run_cli("record-result", payload("result.json"))
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertEqual("active", self.record_metadata(task="A1")["lifecycle"])
+        self.assertEqual("done", self.record_metadata(task="A1")["lifecycle"])
 
     def test_reopening_done_work_still_needs_a_correction(self):
         self.patch_record({"lifecycle": "done"})
@@ -1139,6 +1156,10 @@ class StrictPayloadTest(StoreCase):
 class ClaimAndResultTest(StoreCase):
     """A claim is a bounded assignment; a result is the claimed actor's own report."""
 
+    def setUp(self):
+        super().setUp()
+        self.accept_fixture(task="A1")
+
     def claim_the_task(self):
         return self.run_cli("claim", payload("claim.json"))
 
@@ -1250,6 +1271,10 @@ class ClaimAndResultTest(StoreCase):
 class ResultSettlementTest(StoreCase):
     """A result settles only an `active` task, and identity decides task versus item."""
 
+    def setUp(self):
+        super().setUp()
+        self.accept_fixture(task="A1")
+
     ACTOR = "agent:store-implementer"
     EVIDENCE = {"criteria": "one effective writer", "environment": "fixture root"}
 
@@ -1329,8 +1354,8 @@ class ResultSettlementTest(StoreCase):
         self.assertEqual([], self.evidence_entries())
         self.assertEqual(
             "SEQ-001/A1 is `blocked`, not `active`, so the result was recorded without evidence and "
-            "the task did not move; move it to `active` (claim an accepted task again, or transition "
-            "a blocked task to `active` as the claim holder) and record the result again",
+            "the task did not move; transition it to `active` as the claim holder and record the "
+            "result again",
             answer["not_closed"],
         )
 
@@ -1404,7 +1429,7 @@ class ResultSettlementTest(StoreCase):
         completed, answer = self.run_cli("revise", document, "--seq", "SEQ-001")
         self.assertEqual(1, completed.returncode, completed.stdout)
         self.assertEqual("invalid-identity", answer["error"]["code"])
-        self.assertIn("identity fields cannot be edited", answer["error"]["message"])
+        self.assertIn("`task` is part of the record's identity", answer["error"]["message"])
         self.assertEqual(before, snapshot(self.root))
 
     def test_task_cannot_be_changed_by_a_transition_patch(self):
@@ -1421,7 +1446,7 @@ class ResultSettlementTest(StoreCase):
             ],
         }
         error = self.assert_fails_without_writing("transition", document, "invalid-identity")
-        self.assertIn("identity fields cannot be edited", error["message"])
+        self.assertIn("`task` is part of the record's identity", error["message"])
 
     def test_a_result_on_an_item_never_closes_it_even_when_its_metadata_names_a_task(self):
         self.patch_record({"lifecycle": "active", "task": "A1", store.CLAIM_FIELD: None})
@@ -1452,6 +1477,10 @@ class ResultSettlementTest(StoreCase):
 
 class PrerequisiteGateTest(StoreCase):
     """A claim waits on the records its `depends_on` names, and says which one stops it."""
+
+    def setUp(self):
+        super().setUp()
+        self.accept_fixture(task="A1")
 
     def test_a_prerequisite_that_is_not_done_refuses_the_claim(self):
         self.patch_record({store.DEPENDS_FIELD: ["SEQ-001"]}, task="A1")
@@ -1492,6 +1521,10 @@ class PrerequisiteGateTest(StoreCase):
 
 class WriteScopeTest(StoreCase):
     """`allowed_paths` is enforced between concurrent claims of different actors."""
+
+    def setUp(self):
+        super().setUp()
+        self.accept_fixture(task="A1")
 
     def hold_scope(self, paths: list, actor="agent:other", seq="SEQ-001", task=None) -> None:
         """Give a record a live claim of another actor over `paths`."""
@@ -1570,6 +1603,7 @@ class WriteScopeTest(StoreCase):
         self.assertNotIn(store.RESULT_FIELD, self.record_metadata(task="A1"))
 
         self.drop_claim()
+        self.accept_fixture()
         other = dict(
             payload("claim.json"),
             operation="op-claim-0003",
@@ -1593,6 +1627,10 @@ class WriteScopeTest(StoreCase):
 
 class TaskDiagnosticTest(StoreCase):
     """A refusal on a task names the task, not only the item that holds it."""
+
+    def setUp(self):
+        super().setUp()
+        self.accept_fixture(task="A1")
 
     def test_a_claim_held_by_another_actor_names_the_task(self):
         self.run_cli("claim", payload("claim.json"))

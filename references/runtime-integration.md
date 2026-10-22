@@ -101,6 +101,10 @@ Failure, exit code 1:
 
 `protocol`, `command`, and `ok` are always present. `result` and `error` are mutually exclusive.
 `error.detail` is an object whose keys depend on the code; treat unknown keys as informational.
+
+Argument errors answer in JSON too. A stray positional word, an unknown option or a missing command writes one JSON object to stdout with `ok: false` and `error.code` `invalid-request`, and the exit code is 2, not 1. In that answer `command` is the first non-option word when it names a command, and `null` otherwise. The usage text from the argument parser may still go to stderr as the diagnostic.
+
+`--help` and `-h` are the exception. They print the usage text and exit 0, and that is the one answer that is not JSON.
 An unsupported interpreter answers on the same protocol with `command: null` — the guard runs before
 any package module is imported, so a too-old interpreter receives JSON and an install instruction
 rather than a `SyntaxError`.
@@ -126,7 +130,7 @@ hand.
 | `schema` | Print a mutating command's required fields, optional fields and an example payload. Never mutates. |
 | `show` | Return one record's identity, metadata, scope, `body`, `fingerprint`, `acceptance` and `evidence`. |
 | `capture` | Create a work item in `captured`. |
-| `revise` | Change a record under an expected revision. `--same-meaning` records both fingerprints. |
+| `revise` | Change a record under an expected revision. A `same_meaning` decision in the payload records both fingerprints. |
 | `accept` | Bind an acceptance record to the current fingerprint and authority. |
 | `select` | Return one candidate and its eligibility reasons. It never starts execution. |
 | `claim` | Record a bounded assignment and move an `accepted` record to `active`. It does not run or schedule that assignment. |
@@ -182,22 +186,38 @@ the record `accepted`. A direct `accepted` to `done` transition stays illegal.
   "record-result"`, the claiming `actor` and `recorded_at`. `result.evidence` is optional, but when
   it is present on a `passed` result for an `active` task its `criteria` must be a non-empty string;
   otherwise the call is refused and nothing is recorded. Other outcomes, and tasks that are not
-  `active`, store `result.evidence` as sent. Leave `evidence` out to record a result that will not close the task.
+  `active`, store `result.evidence` as sent. Leaving `evidence` out closes the task only when an applicable evidence entry is already recorded on it; otherwise the result is recorded, the task stays `active` and `not_closed` says why.
 - If the completion check refuses, the result and the evidence entry are still recorded, the task
   stays `active`, and the response has `result.not_closed` with the reason. Fix the cause:
   re-accept with `"lifecycle": "active"` in the accept payload (a bare `accept` fails on an active
-  task), or record a same-meaning decision with `revise` when the meaning did not change, or add the
-  missing evidence; then record the result again.
+  task), or record a same-meaning decision (the `same_meaning` key in a `revise` payload) when the
+  meaning did not change, or add the missing evidence; then record the result again.
 - `blocked` records the result and moves the task to `blocked`.
 - `failed` and `unknown` record the result and leave the lifecycle unchanged.
-- When the task is not `active` (for example `blocked` or `done`), the result is recorded without an
-  evidence entry and without a lifecycle move, and a `passed` result returns `not_closed` saying so.
-  To resume a blocked task, the claim holder sends a `transition` to `active`, then records the
-  result again.
+- When the task is not `active`, the result is recorded without an evidence entry and without a
+  lifecycle move, and a `passed` result returns `not_closed` saying so. The remedy depends on the
+  lifecycle. For `accepted`, claim the task, then record the result again. For `blocked`, the claim
+  holder sends a `transition` to `active`, then records the result again. For `done`, nothing needs
+  to happen: the task is already closed. For `captured`, `deferred` and `cancelled`, the task needs
+  acceptance, or a reopening with a correction, before a result can close it.
 
 `record-result` decides task versus item by the record's path. A new record created by `capture` or
 `transition` gets `task` only from its path (a `task` in the supplied metadata is dropped), and
 `revise` and `transition` patches cannot set or change a record's `task` or `seq`.
+
+### Field ownership
+
+In a `revise` metadata edit and in a `transition` change to an existing record, three fields belong to their own commands. `claim` and `result` are written only by `claim` and `record-result`, and `corrections` only grows through the `correction` key. A value that differs from the stored one is refused as `invalid-request`, and the message names the command to use. Sending the stored value unchanged is allowed, so a payload built from `show` output still works.
+
+`evidence` is append-only in `revise` and `transition`: the stored entries must come first, unchanged and in order, with new entries after them. Removing, editing or reordering an entry, or sending `null`, is refused as `invalid-request`.
+
+`format`, `namespace`, `seq` and `task` are identity fields, and `revision`, `acceptance` and `scope_checks` are runtime fields. In a `revise` edit or a `transition` change to an existing record, a value equal to the stored one is a no-op and a different value is refused: `invalid-identity` for `format`, `namespace`, `seq` and `task`, `invalid-request` for the rest. The message names what to use instead, such as `accept` for acceptance. `evidence: null` in a `revise` or `transition` patch is refused as `invalid-request`, whether or not entries are stored. An entry appended through `revise` or `transition` may not carry `source: "record-result"`. That marker is reserved for the entries the runtime builds in `record-result`, so an agent cannot append one, and a patch that tries is refused as `invalid-request`.
+
+**New records.** A `transition` change with `new: true` handles metadata the same way `capture` does. The lifecycle is always `captured`, whatever the payload says. `claim`, `result`, `evidence`, `corrections`, `acceptance`, `scope_checks` and a delivery receipt (`delivery.delivered_at`) are dropped. A new record therefore starts without any claim, result, evidence or acceptance, and cannot be written with an invalid lifecycle.
+
+**Completion is judged on the record as written.** A move to `done` through `revise` or `transition` is checked by the completion gate against the record as it would be after the write, with its new scope, delivery and evidence, not against the stored record. A `revise` that changes the scope and sets `done` in the same payload is refused as `inapplicable-evidence`, whether the acceptance no longer applies or the evidence does not. `record-result` is judged the same way.
+
+**A claim needs an open lifecycle and applicable acceptance.** `claim` is refused as `missing-authority` unless the record is `accepted`, `active` or `blocked`. `captured`, `deferred`, `cancelled` and `done` records are refused before any write, so a stored result on a closed task is never cleared. To claim a `captured` record, accept it first. To work on a closed one, reopen it with a correction. `claim` is also refused as `missing-authority` when the record's acceptance does not name its current scope fingerprint. Accept the record again, or record a same-meaning decision, first.
 
 On an **item**, `record-result` never changes the lifecycle, whatever the outcome. A result does
 not close an item: item completion stays with `/session-verify` and the completion gate.
@@ -296,12 +316,12 @@ whether it is available, so a consumer can check before invoking rather than aft
 | `unsupported-format` | Envelope missing, duplicated, malformed, or of an unknown format version. |
 | `stale-revision` | The expected record revision does not match the stored one. |
 | `root-busy` | The work root is locked by another writer or needs reconciliation. |
-| `invalid-identity` | Identity, immutable field, illegal transition, or resolved path is not valid. |
+| `invalid-identity` | Identity, immutable field (a `revise` or `transition` edit that changes `format`, `namespace`, `seq` or `task`), illegal transition, or resolved path is not valid. |
 | `missing-authority` | The requested change needs authority that was not supplied. |
 | `inapplicable-evidence` | The evidence does not apply to the accepted scope revision. |
 | `not-implemented` | The command family is reachable but its handler has not landed. |
 | `unsupported-runtime` | The interpreter is older than the supported floor. |
-| `invalid-request` | The request itself is malformed: unknown option, unreadable input file. |
+| `invalid-request` | The request itself is malformed: an argument error (exit code 2), an unreadable input file, or an edit to a field only another command writes. |
 | `internal` | Unexpected failure; the diagnostic on stderr carries the traceback. |
 
 Every rejection happens before any file is written. A failed commit is not a rejection: it is a
@@ -356,11 +376,14 @@ holding, and what did not is stated as a limit rather than engineered around.
 - **Enforcement stops at the CLI boundary.** The runtime rejects invalid calls and detects unexpected
   revisions. It cannot constrain other permitted tools. Host permissions must constrain external
   actions; no acceptance field and no model-generated policy is a credential. `actor` is
-  self-declared: the runtime does not authenticate it. `revise` and `transition` metadata patches can
-  still write `claim`, `evidence`, `result` and fields next to the lifecycle. The claim-holder and
-  evidence guarantees therefore hold for agents that use `claim` and `record-result`, not against a
-  hostile caller. Evidence built by `record-result` carries `source: "record-result"` and is the
-  claiming agent's own report, not independent verification.
+  self-declared: the runtime does not authenticate it. `revise` and `transition` metadata patches
+  refuse changes to `claim`, `result`, `corrections`, identity and acceptance fields, and only append
+  to `evidence`. A hostile caller can still edit the files directly. Because `actor` is self-declared,
+  the claim-holder rule and acceptance authority also assume honest actors: they stop mistakes and
+  agents that skip a step, not someone who names another actor. The guarantees hold for agents that
+  use the commands, not for anything that bypasses them. Evidence built by `record-result` carries
+  `source: "record-result"`, a marker that agents cannot append themselves, and is the claiming
+  agent's own report, not independent verification.
 - **Host plugin storage is not authoritative.** Records live in the configured work root only.
   Host plugin caches and host-managed plugin data are replaceable, and a documented uninstall can
   remove the latter; never keep state there.

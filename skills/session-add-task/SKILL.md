@@ -109,6 +109,8 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" transition --input "$PAY
 }
 ```
 
+The runtime always creates the record as `captured`: the `lifecycle` key is ignored, and so are the helper-owned fields (`claim`, `result`, `evidence`, `corrections`, `acceptance`, `scope_checks` and a delivery receipt), which are dropped.
+
 For the required and optional fields of any other payload, run `python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" schema <command>`; it returns a minimal example.
 
 `operation` is unique per capture: re-sending the same id with the same payload returns the first result instead of capturing twice, and re-sending it with a different payload is refused. Omit `source`, `capture_id` and `annotations` for something surfaced in conversation rather than filed anywhere — never invent a URL to fill the slot. Omit `needs_breakdown` in Mode A. Set `"auto": true` only when a skill is enqueuing on the user's behalf.

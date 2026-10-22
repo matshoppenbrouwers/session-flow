@@ -197,7 +197,7 @@ fingerprint it was gathered at:
 ```json
 {"expect_revision": 7,
  "metadata": {"evidence": [
-   "<each existing entry, resent unchanged>",
+   "<each stored entry, first, unchanged and in the same order>",
    {"criteria": "<the accepted criterion this covers>",
     "fingerprint": "<the record's current scope_fingerprint>",
     "revision": "<code or artifact revision the check ran against>",
@@ -211,14 +211,15 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" revise --seq SEQ-042 --i
 
 For the fields of this and every other payload, run `python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" schema <command>`; the example above is the only one shown here.
 
-Evidence entries with `source: "record-result"` are the implementing agent's own report. Reproduce or independently check them; do not count them as independent evidence.
+Evidence entries with `source: "record-result"` are the implementing agent's own report. Reproduce or independently check them; do not count them as independent evidence. The entries you append must not carry `source: "record-result"`, because the runtime reserves that marker for itself and refuses the patch. Moving the item to `done` is judged by the gate on the record as written, with the new evidence and any scope change in the same payload, not on the stored record.
 
 The response reports each entry's `applies`. An entry that does not apply is not evidence about this
-outcome, whatever its `result` says. `metadata.evidence` replaces the whole list: send the existing
-entries followed by the new one, or the earlier entries are dropped. For each `criteria` value only
-the latest entry in list order counts, so re-running a check and resending the list with its result
-last supersedes the earlier entry for that criterion; the resent older entries stay as history.
-Resending does not clear a stale entry for a criterion you did not re-run.
+outcome, whatever its `result` says. `metadata.evidence` is append-only: send the stored
+entries first, unchanged and in the same order, followed by the new one. The runtime refuses a list
+that removes, edits or reorders a stored entry, or that sends `null`. For each `criteria` value only
+the latest entry in list order counts, so re-running a check and appending its result supersedes the
+earlier entry for that criterion; the older entries stay as history. Appending does not clear a stale
+entry for a criterion you did not re-run.
 
 ### The completion gate
 
@@ -230,9 +231,9 @@ checked first.
 | Completion is refused when | Named error | What to do |
 |----------------------------|-------------|------------|
 | The accepted scope names a required delivery target that is not delivered — however many tasks passed | `inapplicable-evidence` | Leave the item `active`, name the target and what is missing, and say which authority the delivery needs. Merging is a separate action from implementing |
-| Stale evidence: the latest entry for a criterion names a fingerprint the record no longer carries | `inapplicable-evidence` | Re-run that check against the current fingerprint and resend the evidence list with a new entry for it. A same-meaning decision rebinds acceptance only and never re-binds an evidence entry. A stored verdict is evidence about the revision it was recorded against |
-| No evidence entry applies to the current fingerprint, including a record with no evidence at all | `inapplicable-evidence` | Run the verification and resend the evidence list with an entry for the current fingerprint. A `waived` or `unverified` result counts as recorded, so state honestly what was not checked |
-| The latest applicable entry for a criterion has `result: fail` | `inapplicable-evidence` | Fix the cause, re-run the check and resend the evidence list with the new result last for that criterion, or record a waiver |
+| Stale evidence: the latest entry for a criterion names a fingerprint the record no longer carries | `inapplicable-evidence` | Re-run that check against the current fingerprint and append a new entry for it after the stored ones. A same-meaning decision rebinds acceptance only and never re-binds an evidence entry. A stored verdict is evidence about the revision it was recorded against |
+| No evidence entry applies to the current fingerprint, including a record with no evidence at all | `inapplicable-evidence` | Run the verification and append an entry for the current fingerprint after the stored ones. A `waived` or `unverified` result counts as recorded, so state honestly what was not checked |
+| The latest applicable entry for a criterion has `result: fail` | `inapplicable-evidence` | Fix the cause, re-run the check and append the new result after the stored entries, or record a waiver |
 | A task result is `unknown` or `blocked`, or a required check could not run | `inapplicable-evidence` | Report the unknown as unknown. An outcome nobody observed is not evidence, and defaulting it to a pass is how a run becomes untruthful |
 | The record has no acceptance, or it no longer names the record's current scope fingerprint | `inapplicable-evidence` | Stop. Re-acceptance or a recorded same-meaning decision comes before any completion |
 | A closure is reopened without a correction record | `missing-authority` | Supply the correction naming why the closure was premature — see below |

@@ -31,10 +31,43 @@
   non-empty string when evidence is present, or the call is refused and nothing is recorded. Other
   outcomes and non-active tasks store `result.evidence` as sent. The built evidence entry carries
   `source: "record-result"`, the claiming `actor` and `recorded_at`, which marks it as the claiming
-  agent's own report. Leave `evidence` out to record a result that will not close the task.
+  agent's own report. Leaving `evidence` out closes the task only when an applicable evidence entry is
+  already recorded on it; otherwise the result is recorded and the task stays `active`.
 - `record-result` decides task versus item by the record's path. New records created by `capture`
   or `transition` get `task` only from the path (a `task` in the supplied metadata is dropped), and
   `revise` and `transition` patches can no longer set or change a record's `task` or `seq`.
+- `claim`, `result` and `corrections` are written only by their own commands (`claim`,
+  `record-result` and the `correction` key). A `revise` metadata edit or a `transition` change to an
+  existing record that differs from the stored value is refused as `invalid-request`, naming the
+  command to use. A value equal to the stored one is accepted, so a payload built from `show` output
+  still works.
+- `evidence` is append-only in `revise` and `transition`: the stored entries must come first,
+  unchanged and in order. Removing, editing or reordering one, or sending `null`, is refused as
+  `invalid-request`. `session-verify` still records evidence with `revise`. A new record from
+  `capture` or `transition` drops `claim`, `result`, `evidence` and `corrections`.
+- `format`, `namespace`, `seq`, `task`, `revision`, `acceptance` and `scope_checks` refuse a change
+  in a `revise` edit or a `transition` change to an existing record instead of dropping it. The
+  identity fields (`format`, `namespace`, `seq`, `task`) answer `invalid-identity` and the rest
+  `invalid-request`. A `transition` change can no longer write `acceptance` into a record.
+- `claim` is refused as `missing-authority` when the record's acceptance does not name its current
+  scope fingerprint, which includes a `captured` record. Accept the record, or record a same-meaning
+  decision, first.
+- Every argument error, such as a stray positional word, an unknown option or a missing command, now
+  answers with one JSON object on stdout (`ok: false`, `error.code` `invalid-request`) and exits with
+  code 2. `--help` and `-h` still print the usage text and exit 0.
+- A `transition` change with `new: true` now handles metadata like `capture`: the lifecycle is always
+  `captured`, and `claim`, `result`, `evidence`, `corrections`, `acceptance`, `scope_checks` and a
+  delivery receipt are dropped. A new record can no longer be written with another lifecycle, such
+  as `done`.
+- A move to `done` through `revise` or `transition` is judged by the completion gate on the record as
+  it would be written, with its new scope, delivery and evidence, not on the stored record. A `revise`
+  that changes the scope and sets `done` in one payload is refused.
+- `claim` is refused as `missing-authority` unless the record is `accepted`, `active` or `blocked`.
+  `captured`, `deferred`, `cancelled` and `done` records are refused before any write, so a stored
+  result on a closed task is never cleared.
+- An evidence entry appended through `revise` or `transition` may not carry
+  `source: "record-result"`. The marker is reserved for entries `record-result` builds, and a patch
+  that carries it is refused as `invalid-request`.
 
 ### Changes
 
@@ -182,7 +215,7 @@ skill and not a one-off script.
 - **A local transition runtime.** `scripts/session-flow.py` and the `session_flow` package
   provide `doctor`, `show`, `capture`, `revise`, `accept`, `select`, `claim`, `record-result`,
   `transition`, `render`, `import`, `reconcile`, and `backup`/`restore`. Identity is immutable,
-  scope is bound by a normalized fingerprint with an explicit `--same-meaning` decision for
+  scope is bound by a normalized fingerprint with an explicit same-meaning decision for
   reflows, the root lock is an exclusive directory creation, IDs are reserved against tombstones,
   and every mutation is a journalled prepared operation with idempotent retry and atomic replace
   writes. Reconciliation finishes a known partial application and stops on unexplained divergence

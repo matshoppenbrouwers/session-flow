@@ -89,8 +89,21 @@ def emit(command, payload, exit_code=0, diagnostic=None):
     return exit_code
 
 
+class ArgumentFailure(Exception):
+    """A command-line argument error, carried to main so it answers on the protocol."""
+
+    def __init__(self, message, usage):
+        super().__init__(message)
+        self.usage = usage
+
+
+class ProtocolArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ArgumentFailure(message, self.format_usage())
+
+
 def build_parser():
-    parser = argparse.ArgumentParser(
+    parser = ProtocolArgumentParser(
         prog="session-flow.py",
         description="Deterministic local operations on work-item records.",
         epilog="Mutations read their payload from --input <file>; no option accepts free text.",
@@ -103,6 +116,31 @@ def build_parser():
     parser.add_argument("--task", help="task identity within the work item, such as A1")
     parser.add_argument("--input", help="path to the JSON payload for a mutation")
     return parser
+
+
+def parse_arguments(arguments):
+    parser = build_parser()
+    args = parser.parse_args(arguments)
+    if args.name is not None and args.command != "schema":
+        parser.error("unrecognized argument %r: only `schema` takes a command name" % args.name)
+    return args
+
+
+VALUE_OPTIONS = ("--project-root", "--namespace", "--seq", "--task", "--input")
+
+
+def named_command(arguments):
+    """The first word that is not an option or an option's value, when it names a command."""
+    words = iter(arguments)
+    for word in words:
+        if word == "--":
+            word = next(words, None)
+            return word if word in DISPATCH else None
+        if not word.startswith("-"):
+            return word if word in DISPATCH else None
+        if "=" not in word and any(option.startswith(word) for option in VALUE_OPTIONS):
+            next(words, None)
+    return None
 
 
 def read_json(path, description):
@@ -254,12 +292,14 @@ def main(argv=None):
     if SCRIPTS_ROOT not in sys.path:
         sys.path.insert(0, SCRIPTS_ROOT)
 
-    from session_flow import SessionFlowError
+    from session_flow import InvalidRequestError, SessionFlowError
 
-    parser = build_parser()
-    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
-    if args.name is not None and args.command != "schema":
-        parser.error("unrecognized argument %r: only `schema` takes a command name" % args.name)
+    arguments = sys.argv[1:] if argv is None else argv
+    try:
+        args = parse_arguments(arguments)
+    except ArgumentFailure as failure:
+        error = InvalidRequestError("%s; run with --help for the usage" % failure).as_error()
+        return emit(named_command(arguments), {"ok": False, "error": error}, 2, failure.usage + str(failure))
     try:
         return emit(args.command, {"ok": True, "result": run(build_request(args))})
     except SessionFlowError as error:
