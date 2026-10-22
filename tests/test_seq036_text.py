@@ -79,7 +79,7 @@ def units(text: str) -> list:
 def unreleased_breaking_changes() -> str:
     text = read(CHANGELOG)
     section = re.search(
-        r"^##\s+\[?Unreleased\]?[^\n]*\n(.*?)(?=^##\s|\Z)", text, re.IGNORECASE | re.DOTALL | re.MULTILINE
+        r"^##\s+(?:\[?Unreleased\]?|3\.0\.0\b)[^\n]*\n(.*?)(?=^##\s|\Z)", text, re.IGNORECASE | re.DOTALL | re.MULTILINE
     )
     if section is None:
         return ""

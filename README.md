@@ -213,7 +213,7 @@ When an item needs a breakdown, each task is a self-contained prompt with files,
 
 ### What the Runtime Enforces
 
-The runtime checks record revisions, lifecycle transitions and claim ownership. Before assigning work, it rejects unknown, cyclic or unfinished dependencies and overlapping declared write scopes held by different actors. Completion checks reject recorded contradictions such as stale evidence, child tasks still open or deferred, or a missing receipt for required delivery.
+The runtime checks record revisions, lifecycle transitions and claim ownership. Before assigning work, it rejects unknown, cyclic or unfinished dependencies and overlapping declared write scopes held by different actors. Completion checks reject recorded contradictions such as stale evidence, child tasks still open or deferred, or a missing receipt for required delivery. Since 3.0, `claim`, `result` and `corrections` are written only by their own commands, evidence is append-only, `claim` needs applicable acceptance, and argument errors answer in JSON; the [CHANGELOG](CHANGELOG.md) lists every 3.0 contract change.
 
 These checks do not establish that a feature works. Verification still needs tests and evidence about the accepted outcome. Recording a passing task result also does not automatically close its parent item.
 

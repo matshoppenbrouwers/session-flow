@@ -44,7 +44,7 @@ def json_blocks(text: str) -> list:
 def unreleased_sections() -> dict:
     text = CHANGELOG.read_text(encoding="utf-8")
     match = re.search(
-        r"^##\s+\[?Unreleased\]?[^\n]*\n(.*?)(?=^##\s|\Z)", text, re.IGNORECASE | re.DOTALL | re.MULTILINE
+        r"^##\s+(?:\[?Unreleased\]?|3\.0\.0\b)[^\n]*\n(.*?)(?=^##\s|\Z)", text, re.IGNORECASE | re.DOTALL | re.MULTILINE
     )
     if match is None:
         return {}
