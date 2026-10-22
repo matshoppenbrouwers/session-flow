@@ -13,9 +13,9 @@ Open with one sentence saying what you are about to do and what it will produce.
 
 1. **Selection comes from `select`, never from a file.** The sequence at `paths.sequence` is generated output: read it to see the backlog, never to pick from it, and never edit it. `select` returns one candidate and the eligibility reasons for everything it considered, and it starts nothing.
 2. **Only accepted work is eligible.** `captured` work, work whose acceptance no longer names the current scope fingerprint, and work still marked `(needs breakdown)` are refused by `select` with a reason. A linked breakdown file confers no eligibility, and neither does an existing record.
-3. **Claim before executing, and execute only what the claim names.** The claim carries the identity, the expected revision, and the allowed paths. It records a bounded assignment; it does not run that assignment and does not schedule it.
-4. **Record results through `record-result` against the claimed identity.** Never write completion into the sequence view or a task view — both are derived, and the next `render` discards anything typed there.
-5. **A passing task is not a delivered outcome.** A task result never moves its parent to `done`. Parent completion needs applicable evidence for the accepted outcome, which is `/session-verify`'s judgement, not this skill's.
+3. **Claim before executing, and execute only what the claim names.** The claim carries the identity, the expected revision, and the allowed paths. It records a bounded assignment and moves an `accepted` record to `active`; it does not run that assignment and does not schedule it.
+4. **Record results through `record-result` against the claimed identity.** A `passed` result also closes a task; there is no separate `transition`. Never write completion into the sequence view or a task view — both are derived, and the next `render` discards anything typed there.
+5. **A passing task is not a delivered outcome.** A task result never moves its parent to `done`, and `record-result` on an item never changes the item's lifecycle. Parent completion needs applicable evidence for the accepted outcome, which is `/session-verify`'s judgement, not this skill's.
 6. **One bounded unit per invocation.** Finish it, report, and name the next candidate without starting it. Continuation over several units needs its own scoped invocation, or the standing policy **Continuation Over Several Units** defines — capacity, scope, and stop conditions, re-resolved before every dispatch.
 
 ## Step 0: Resolve the Runtime
@@ -47,6 +47,8 @@ When the user directly instructs you to implement a named item that is still `ca
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" accept --seq SEQ-042 --input accept.json
 ```
 
+This is the one payload example in this skill. For `claim`, `record-result` and the other payloads, run `session-flow.py schema <command>`: it prints the required and optional fields and an example.
+
 ```json
 {"expect_revision": 2, "actor": "<this session>",
  "authority": {"source": "user message: \"implement SEQ-042\"", "revision": "<approval timestamp>"},
@@ -68,27 +70,17 @@ Write the resolved unit down before going on: SEQ identity, task ID where there 
 
 ## Step 3: Claim the Resolved Identity
 
-Build the payload as a file — no option accepts free text — and claim exactly the identity Step 2 resolved:
-
-```json
-{
-  "operation": "next-<short unique id>",
-  "coordinator": "session-next",
-  "actor": "<this session>",
-  "seq": "SEQ-042",
-  "task": "A1",
-  "expect_revision": 3,
-  "allowed_paths": ["scripts/session_flow/store.py", "tests/test_store.py"]
-}
-```
+Build the payload as a file — no option accepts free text — and claim exactly the identity Step 2 resolved. The payload carries `coordinator`, `actor`, `seq`, `task` (for a task), `expect_revision` and `allowed_paths`. Run `session-flow.py schema claim` for the required and optional fields and an example.
 
 ```bash
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" claim --seq SEQ-042 --task A1 --input "$PAYLOAD"
 ```
 
+A successful `claim` on an `accepted` record also moves it to `active`. Do not send a `transition` to start the work.
+
 - `missing-authority`: another actor holds the claim. Report the holder and stop. Reassign only when the user says to, with `takeover_claim` and the authority that reassigns it.
 - `stale-revision`: the record moved since Step 2. Re-read it and rebuild the payload; never retry with the old revision.
-- An interrupted run resumes by re-sending the **same** `operation` id with the same payload: the runtime returns the prior result with `replayed: true` and the bounded assignment stands. A different payload under that id is refused — issue a new operation id instead.
+- The payload needs no `operation`: the runtime generates one and returns it under `operation`. If you may need to retry after an interruption, send your own `operation` id in the first call; then re-sending the same payload with that id returns the prior result with `replayed: true` and the bounded assignment stands. Otherwise run `show` (and `reconcile` if the runtime reports a pending operation) before re-sending, because `expect_revision` makes a blind retry fail with `stale-revision`. A different payload under that id is refused.
 
 ## Step 4: Execute the Claimed Unit
 
@@ -101,29 +93,26 @@ When the user widened the unit to several task IDs, hand them to `/session-deleg
 
 ## Step 5: Record the Result
 
-```json
-{
-  "operation": "result-<short unique id>",
-  "coordinator": "session-next",
-  "actor": "<the actor that claimed it>",
-  "seq": "SEQ-042",
-  "task": "A1",
-  "expect_revision": 4,
-  "result": {
-    "outcome": "passed",
-    "checks": [{"command": "python3 -B -m unittest -v tests.test_store", "observed": "ok"}],
-    "evidence": {"criteria": "<the criterion this proves>", "environment": "<where it ran>",
-                 "revision": "<code revision>", "limitations": ["<what it does not cover>"]}
-  }
-}
-```
+The close-out is two calls: `claim` (Step 3), then `record-result`. Build the result payload as a file; run `session-flow.py schema record-result` for the fields.
 
 ```bash
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" record-result --seq SEQ-042 --task A1 --input "$PAYLOAD"
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" render
 ```
 
-`outcome` is one of `passed`, `failed`, `blocked`, `unknown`, and it says what actually happened. A check that could not run is `unknown`, never `passed`. Only the claiming actor may record the result.
+`outcome` is one of `passed`, `failed`, `blocked`, `unknown`, and it says what actually happened. A check that could not run is `unknown`, never `passed`. Only the claiming actor may record the result. Put the criterion, environment, code revision and limitations in `result.evidence`.
+
+On a task, the outcome decides the lifecycle:
+
+- `passed` closes the task, when it is `active`: the runtime records the result, adds an evidence entry built from the result's evidence at the task's current fingerprint, and moves the task to `done` when the completion gate passes.
+- `result.not_closed` in the response: the result and evidence are recorded, but the gate refused to close the task and it stays `active`. The value gives the reason. Fix the cause: re-accept with `"lifecycle": "active"` in the accept payload (a bare `accept` fails on an active task), or record a same-meaning decision with `revise` when the meaning did not change, or add the missing evidence; then record the result again. Report it; do not treat the task as finished.
+- `blocked`: the task moves to `blocked`. To resume it, the claim holder sends a `transition` to `active`, then records the result again.
+- A task that is not `active` (for example `blocked`): the result is recorded without an evidence entry and without a lifecycle move, and a `passed` result returns `not_closed` saying so.
+- `failed` or `unknown`: the result is recorded and the task stays `active`.
+
+`result.evidence` is optional, but on a `passed` result for an `active` task its `criteria`, when evidence is present, must be a non-empty string; otherwise the call is refused and nothing is recorded. Other outcomes and tasks that are not `active` store `result.evidence` as sent. Leave `evidence` out to record a result that will not close the task. The runtime marks the entry `source: "record-result"`: it is your own report, not independent verification.
+
+On a compact item, `record-result` records the result and never changes the item's lifecycle. Completion stays with `/session-verify`.
 
 ## Step 6: Report
 
@@ -136,14 +125,12 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" render
 
 Continuation is off unless something outside this run authorizes it: an invocation that names the further units, or a `continuation` policy in `.session-flow.json`. Without one, Step 6 ends the run — name the next candidate and stop.
 
-```json
-"continuation": {
-  "authority": {"source": "maintainer-standing-policy", "revision": "2026-09-07T10:30:00Z"},
-  "capacity": {"units": 3},
-  "scope": {"seq": ["SEQ-042"], "actions": ["implement"]},
-  "stop_conditions": ["result-not-passed", "delivery-outstanding"]
-}
-```
+The `continuation` object in `.session-flow.json` has four keys:
+
+- `"authority"`: `source` (for example `maintainer-standing-policy`) and `revision` (a timestamp).
+- `"capacity"`: `units`, how many units the run may complete.
+- `"scope"`: `seq`, the identities it covers, and `actions`, such as `implement`.
+- `"stop_conditions"`: a list such as `["result-not-passed", "delivery-outstanding"]`.
 
 All four keys are required, `authority.source` is a trusted source and never `auto`, and `stop_conditions` holds only the two tokens defined here. A block missing a key, or naming a condition this skill does not define, authorizes nothing: run one unit and stop. `result-not-passed` stops on the first recorded outcome that is not `passed`. `delivery-outstanding` stops when the finished unit's parent still owes the `delivery` target its accepted scope names.
 

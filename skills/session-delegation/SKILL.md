@@ -13,8 +13,8 @@ Open with one sentence saying what you are about to do and what it will produce.
 
 1. **An invocation carries explicit task IDs.** Every dispatch names a SEQ identity and the task IDs it may run. A work item holds tasks belonging to different decisions; being able to read one grants no permission to run it.
 2. **The task set never grows during a run.** The named IDs plus their permitted prerequisite closure are the whole set. A prerequisite already `done` contributes its result and its files as context, not as work to redo, and nothing else joins the run.
-3. **Claim each task before dispatching it, and dispatch only within its `allowed_paths`.** The claim is the bounded assignment: identity, expected revision, allowed paths. It runs nothing by itself.
-4. **Record each task's outcome through `record-result` against the claimed identity.** Progress never goes into the sequence view or a task index; both are generated, and the next `render` discards anything typed there.
+3. **Claim each task before dispatching it, and dispatch only within its `allowed_paths`.** The claim is the bounded assignment: identity, expected revision, allowed paths. It runs nothing by itself, but it moves an `accepted` task to `active`.
+4. **Record each task's outcome through `record-result` against the claimed identity.** A `passed` result also closes the task. Progress never goes into the sequence view or a task index; both are generated, and the next `render` discards anything typed there.
 5. **Parallel means one message with several Task tool calls.** Not several sequential messages.
 6. **A task result is a task result.** Reaching `passed` on every named task does not complete the parent: that needs applicable evidence for the accepted outcome, which is `/session-verify`'s judgement.
 7. **The acceptance tests are written before the implementers start, by a different agent, and implementers never edit them.** `test-author` writes them from each task's accepted scope, so the tests measure the specification rather than the implementation's opinion of it. This is about who writes the oracle, not about designing through tests: the behaviour was fixed when the scope was accepted.
@@ -89,8 +89,8 @@ while a named task is not done:
   2. Group into: sequential (one ready) vs parallel (several ready)
   3. Check the group's allowed_paths do not overlap (Step 1's table)
   4. Claim each task in the group, then dispatch it (Step 4)
-  5. On completion, record-result against the claimed identity (Step 5)
-  6. Finish each recorded task as Step 5 says; it counts as finished for its dependents only once `done`
+  5. On completion, record-result against the claimed identity (Step 5); a passed result closes the task
+  6. A task counts as finished for its dependents only once `done`
   7. Repeat
 ```
 
@@ -98,19 +98,13 @@ The loop ends when the named IDs are `done`. Tasks outside the named set keep th
 
 ### Step 4: Claim, Then Dispatch
 
-Claim first. One payload per task, sent as a file:
-
-```json
-{"operation": "dispatch-<short unique id>", "coordinator": "session-delegation",
- "actor": "agent:<task ID>", "seq": "SEQ-042", "task": "A2", "expect_revision": 2,
- "allowed_paths": ["scripts/session_flow/views.py"]}
-```
+Claim first. One payload per task, sent as a file, with `seq`, `task`, `actor`, `expect_revision` and `allowed_paths`. Run `session-flow.py schema claim` for the required and optional fields and an example.
 
 ```bash
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" claim --seq SEQ-042 --task A2 --input "$PAYLOAD"
 ```
 
-A `missing-authority` answer means someone already holds that assignment: stop that task and report the holder. A `stale-revision` answer means the record moved — re-read it and rebuild. After an interruption, re-send the identical payload under the same `operation` id: the runtime returns the prior result with `replayed: true`, and the claim it recorded still stands. Never reuse that id for a different payload.
+A successful `claim` moves an `accepted` task to `active`; there is no separate `transition`. The payload needs no `operation`: the runtime generates one and returns it under `operation`. A `missing-authority` answer means someone already holds that assignment: stop that task and report the holder. A `stale-revision` answer means the record moved: re-read it and rebuild. If you may need to retry after an interruption, send your own `operation` id in the first call; then re-sending the identical payload with that id returns the prior result with `replayed: true`, and the claim it recorded still stands. Otherwise run `show` (and `reconcile` if the runtime reports a pending operation) before re-sending, because `expect_revision` makes a blind retry fail with `stale-revision`. Never reuse an id for a different payload.
 
 **Sequential task** (one ready):
 ```
@@ -134,39 +128,33 @@ Entries may be exact paths or directory globs (`src/lib/governor/**`). Pass them
 
 **House rules in the payload.** If `.session-flow.json` sets `paths.conventions` and the file exists, include it — it is designed to be short. Read `paths.lessons` as a one-line index; load nothing further unless a line bears on the task at hand. When neither key is set, dispatch without them.
 
-### Step 5: Record Each Result
+### Step 5: Record Each Result and Close Out
 
-As each task returns, record its outcome against the identity that was claimed, then refresh the views:
+As each task returns, record its outcome against the identity that was claimed. One payload, sent as a file; run `session-flow.py schema record-result` for the fields.
 
 ```json
-{"operation": "result-<short unique id>", "coordinator": "session-delegation",
- "actor": "agent:<task ID>", "seq": "SEQ-042", "task": "A2", "expect_revision": 3,
+{"coordinator": "session-delegation", "actor": "agent:<task ID>", "seq": "SEQ-042", "task": "A2", "expect_revision": 3,
  "result": {"outcome": "passed", "checks": [{"command": "...", "observed": "ok"}],
             "evidence": {"criteria": "...", "environment": "...", "revision": "...",
                          "limitations": ["..."]}}}
 ```
 
-`outcome` is `passed`, `failed`, `blocked`, or `unknown`, and it says what happened: a check that could not run is `unknown`, never `passed`. Only the actor that claimed the task records its result. Then run `render` — never write progress into a generated view.
-
-Record each result as its task returns rather than in a batch. A result does not unblock dependents: a dependent unblocks only when its prerequisite is `done`.
-
-**Close-out.** `record-result` leaves the task `accepted`. The completion gate reads the stored record, not the pending change, so the evidence must be stored before the `done` transition is sent. This close-out applies to a task whose recorded outcome is `passed`. A task recorded `failed`, `blocked`, or `unknown` is claimed again instead (a reclaim clears its result) and is never closed with a hand-written `pass` entry. In this order:
-
-1. `record-result` (above).
-2. `transition` to `active`, sent as the claim holder with `expect_revision` taken from the fresh record, whose `metadata` also carries the `evidence` entries for the task's acceptance fingerprint.
-3. A second `transition` to `done`, carrying only `"lifecycle": "done"` and a fresh `expect_revision`.
-
-```json
-{"operation": "close-<short unique id>", "coordinator": "session-delegation",
- "actor": "agent:<task ID>",
- "provenance": {"actor": "agent:<task ID>", "authority": {"source": "<the parent's acceptance>", "revision": "<its commit>"}},
- "changes": [{"seq": "SEQ-042", "task": "A2", "expect_revision": 4,
-              "metadata": {"lifecycle": "active",
-                           "evidence": [{"check": "...", "criteria": "...", "environment": "...", "result": "pass",
-                                         "fingerprint": "<the task's acceptance fingerprint>", "revision": "..."}]}}]}
+```bash
+python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" record-result --seq SEQ-042 --task A2 --input "$PAYLOAD"
 ```
 
-Send the `done` step with the new revision and `"metadata": {"lifecycle": "done"}` alone. A single `transition` to `done` that carries the evidence is refused with `inapplicable-evidence`, because the gate finds no evidence entry on the stored record.
+`outcome` is `passed`, `failed`, `blocked`, or `unknown`, and it says what happened: a check that could not run is `unknown`, never `passed`. Only the actor that claimed the task records its result. Record each result as its task returns rather than in a batch.
+
+**Close-out.** The close-out is two calls: `claim` (Step 4), then `record-result`. There is no hand-sent `transition` in between.
+
+- `passed` closes the task, when it is `active`: the runtime records the result, adds an evidence entry built from the result's evidence at the task's current fingerprint, and moves the task to `done` when the completion gate passes. A dependent unblocks only once its prerequisite is `done`.
+- `result.not_closed` in the response: the result and the evidence are recorded, but the gate refused to close the task, and the task stays `active`. The value gives the reason. Fix the cause: re-accept with `"lifecycle": "active"` in the accept payload (a bare `accept` fails on an active task), or record a same-meaning decision with `revise` when the meaning did not change, or add the missing evidence; then record the result again.
+- `blocked`: the task moves to `blocked`. To resume it, the claim holder sends a `transition` to `active`, then records the result again.
+- A task that is not `active` (for example `blocked`): the result is recorded without an evidence entry and without a lifecycle move, and a `passed` result returns `not_closed` saying so.
+- `result.evidence` is optional, but on a `passed` result for an `active` task its `criteria`, when evidence is present, must be a non-empty string; otherwise the call is refused and nothing is recorded. Other outcomes and tasks that are not `active` store `result.evidence` as sent. Leave `evidence` out to record a result that will not close the task. The runtime marks the entry `source: "record-result"`: it is the agent's own report.
+- `failed` or `unknown`: the result is recorded and the task stays `active`. Claim it again for a new attempt (a reclaim clears the result). Never close it with a hand-written `pass` entry.
+
+Then run `render`. Never write progress into a generated view.
 
 ### Step 6: Optional Quality Gates
 

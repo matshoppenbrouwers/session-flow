@@ -34,6 +34,7 @@ PLUGIN_MANIFEST = os.path.join(PACKAGE_ROOT, ".claude-plugin", "plugin.json")
 BUILTIN = "builtin"
 DISPATCH = {
     "doctor": BUILTIN,
+    "schema": BUILTIN,
     "bind-namespace": "session_flow.store:bind_namespace",
     "show": "session_flow.records:show",
     "capture": "session_flow.store:capture",
@@ -95,6 +96,7 @@ def build_parser():
         epilog="Mutations read their payload from --input <file>; no option accepts free text.",
     )
     parser.add_argument("command", choices=sorted(DISPATCH))
+    parser.add_argument("name", nargs="?", help="schema only: the command whose payload to describe")
     parser.add_argument("--project-root", default=".", help="repository whose .session-flow.json resolves the paths")
     parser.add_argument("--namespace", help="namespace UUID the addressed records must belong to")
     parser.add_argument("--seq", help="work-item identity, SEQ-NNN")
@@ -153,6 +155,7 @@ def build_request(args):
         "seq": args.seq,
         "task": args.task,
         "input": payload,
+        "name": args.name,
         "config": config,
     }
 
@@ -229,6 +232,10 @@ def run(request):
     command = request["command"]
     if command == "doctor":
         return doctor(request)
+    if command == "schema":
+        from session_flow import schema
+
+        return schema.describe(request.get("name"))
     target = DISPATCH[command]
     handler = resolve_handler(target)
     if handler is None:
@@ -249,7 +256,10 @@ def main(argv=None):
 
     from session_flow import SessionFlowError
 
-    args = build_parser().parse_args(sys.argv[1:] if argv is None else argv)
+    parser = build_parser()
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    if args.name is not None and args.command != "schema":
+        parser.error("unrecognized argument %r: only `schema` takes a command name" % args.name)
     try:
         return emit(args.command, {"ok": True, "result": run(build_request(args))})
     except SessionFlowError as error:

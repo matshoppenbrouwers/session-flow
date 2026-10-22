@@ -44,7 +44,7 @@ META_REGION = "meta"
 SCOPE_REGION = "scope"
 SUPPORTED_FORMATS = (RECORD_FORMAT_VERSION,)
 REQUIRED_FIELDS = ("format", "namespace", "seq", "revision")
-IMMUTABLE_FIELDS = ("format", "namespace", "seq")
+IMMUTABLE_FIELDS = ("format", "namespace", "seq", "task")
 INTENT_FILE = "intent.md"
 TASKS_DIRECTORY = "tasks"
 JSON_FENCE_OPEN = "```json"
@@ -263,8 +263,8 @@ def advance_revision(previous: dict, updated: dict) -> int:
         held, offered = previous["metadata"].get(field), updated["metadata"].get(field)
         if held != offered:
             raise InvalidIdentityError(
-                f"`{field}` is immutable: the record holds {held!r} and the update carries {offered!r}; "
-                "capture a new work item instead of renaming this one",
+                f"`{field}` is immutable, and identity fields cannot be edited: the record holds {held!r} "
+                f"and the update carries {offered!r}; capture a new work item or task instead of renaming this one",
                 field=field,
             )
     return revision + 1 if record_changed(previous, updated) else revision
@@ -334,10 +334,13 @@ DELIVERY_KEY = "delivery"
 DELIVERY_REQUIREMENT_KEYS = ("repository", "required", "target")
 DELIVERY_RECEIPT_KEY = "delivered_at"
 RESERVED_METADATA = (ACCEPTANCE_KEY, SCOPE_CHECKS_KEY, "format", "namespace", "seq", "revision")
+CAPTURE_RESERVED_METADATA = RESERVED_METADATA + ("task",)
 PROVENANCE_SOURCES = ("auto", "provenance", "[auto]")
 
 LIFECYCLE_CAPTURED = "captured"
 LIFECYCLE_ACCEPTED = "accepted"
+LIFECYCLE_ACTIVE = "active"
+LIFECYCLE_BLOCKED = "blocked"
 LIFECYCLE_DONE = "done"
 LIFECYCLE_CANCELLED = "cancelled"
 CLOSED_LIFECYCLES = (LIFECYCLE_DONE, LIFECYCLE_CANCELLED)
@@ -944,7 +947,7 @@ def settle_scope(current: dict, updated: dict, decision) -> dict | None:
 
 
 def show(request: dict) -> dict:
-    """Read one record and return its parsed identity, metadata, and scope."""
+    """Read one record and return its parsed content with its fingerprint and acceptance and evidence status."""
     path = resolve_record_path(request)
     record = read_record(path)
     check_namespace(record["identity"], request.get("namespace"))
@@ -953,6 +956,10 @@ def show(request: dict) -> dict:
         "identity": record["identity"],
         "metadata": record["metadata"],
         "scope": record["scope"],
+        "body": record["body"],
+        "fingerprint": scope_fingerprint(record),
+        "acceptance": acceptance_status(record),
+        "evidence": evidence_status(record),
     }
 
 
@@ -971,7 +978,7 @@ def build_capture_metadata(request: dict, payload: dict) -> dict:
     supplied = payload.get("metadata")
     if supplied is not None and not isinstance(supplied, dict):
         raise InvalidRequestError("`metadata` must be a JSON object of envelope fields")
-    metadata = {key: value for key, value in dict(supplied or {}).items() if key not in RESERVED_METADATA}
+    metadata = {key: value for key, value in dict(supplied or {}).items() if key not in CAPTURE_RESERVED_METADATA}
     provenance = dict(metadata.get("provenance") or {})
     if payload.get("auto"):
         provenance["auto"] = True

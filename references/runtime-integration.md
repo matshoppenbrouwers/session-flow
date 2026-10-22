@@ -60,8 +60,9 @@ python3 /abs/path/to/scripts/session-flow.py revise --project-root /abs/path/to/
 | `--task` | Task identity within that item, such as `A1`. |
 | `--input` | Path to the JSON payload of a mutation. |
 
-Every mutation payload carries an operation ID, the expected record revisions, the requested changes,
-and provenance. **No option accepts interpolated issue text or a shell fragment**, no argument is
+Every mutation payload carries the expected record revisions, the requested changes, and
+provenance. `transition`, `claim` and `record-result` may omit the operation ID, and the runtime
+then generates one ([Operation IDs](#operation-ids)). **No option accepts interpolated issue text or a shell fragment**, no argument is
 passed to a shell, and no record content is executed by any command. Free text reaches the runtime
 only as JSON through `--input`.
 
@@ -122,19 +123,84 @@ hand.
 | Command | Effect |
 |---------|--------|
 | `doctor` | Report runtime, protocol, storage, command availability, and error codes. Never mutates. |
-| `show` | Return one record's identity, metadata, and scope. |
+| `schema` | Print a mutating command's required fields, optional fields and an example payload. Never mutates. |
+| `show` | Return one record's identity, metadata, scope, `body`, `fingerprint`, `acceptance` and `evidence`. |
 | `capture` | Create a work item in `captured`. |
 | `revise` | Change a record under an expected revision. `--same-meaning` records both fingerprints. |
 | `accept` | Bind an acceptance record to the current fingerprint and authority. |
 | `select` | Return one candidate and its eligibility reasons. It never starts execution. |
-| `claim` | Record a bounded assignment. It does not run or schedule that assignment. |
-| `record-result` | Record a scoped task result. |
+| `claim` | Record a bounded assignment and move an `accepted` record to `active`. It does not run or schedule that assignment. |
+| `record-result` | Record a scoped result. On a task, `passed` closes it and `blocked` blocks it. |
 | `transition` | Apply a lifecycle transition. |
 | `render` | Regenerate the sequence view and task views. Output is read-only, never an authority. |
 | `import` | One-way transformation of an existing `SEQUENCE.md` into work items. There is no dual-format mutation path. |
 | `reconcile` | Finish known partial operations; stop on unexplained divergence. |
 | `backup` | Verify the configured work-root remote and push. |
 | `restore` | Check the work root out from that remote. |
+
+### Payloads: `schema`
+
+`session-flow.py schema <command>` prints a command's payload description, so a caller does not
+need a copy of it. It covers `capture`, `accept`, `revise`, `transition`, `claim` and
+`record-result`, and returns three keys: `required` (the fields the command refuses to run
+without), `optional` (the other keys it accepts) and `example` (one minimal payload the command
+accepts). An unknown command name is an error that lists the valid ones. Skills and companions
+should run `schema <command>` rather than hard-code payload shapes.
+
+### `show`
+
+`show` returns the record's identity, metadata and scope, plus four fields that callers
+otherwise had to rebuild: `body` (the record text), `fingerprint` (the current scope
+fingerprint), `acceptance` (whether the recorded acceptance still applies to that fingerprint)
+and `evidence` (the status of each evidence entry). These only add to the earlier result.
+
+### Operation IDs
+
+`transition`, `claim` and `record-result` take an optional `operation`. When the payload has none,
+the runtime generates one of the form `op-<uuid4>` and returns it under `operation` in the result.
+A call interrupted before it returns never delivers the generated id. If you may need to retry
+after an interruption, send your own `operation` id in the first call, then re-send the same payload
+with that id: the runtime replays the earlier result and marks it `replayed: true`. Without your own
+id, run `show` (and `reconcile` if the runtime reports a pending operation) before re-sending,
+because `expect_revision` makes a blind retry fail with `stale-revision`. A retry without the id is
+a new operation. An id reused with a different payload is refused.
+
+`capture`, `accept` and `revise` carry no operation id. `import` still requires one, because its
+resume path is keyed on it. `reconcile` takes none.
+
+### Claiming and results
+
+A successful `claim` on an `accepted` record also moves it to `active`, in the same operation, for
+items and tasks. The legality and claim-holder checks still apply, and a claim that fails leaves
+the record `accepted`. A direct `accepted` to `done` transition stays illegal.
+
+`record-result` on a **task** settles only when the task is `active`, and then acts on the outcome:
+
+- `passed` records the result, appends one evidence entry, and moves the task to `done` when the
+  completion check passes. The entry takes `criteria`, `revision`, `environment` and `limitations`
+  from `result.evidence`, and adds the current `fingerprint`, `result: pass`, `source:
+  "record-result"`, the claiming `actor` and `recorded_at`. `result.evidence` is optional, but when
+  it is present on a `passed` result for an `active` task its `criteria` must be a non-empty string;
+  otherwise the call is refused and nothing is recorded. Other outcomes, and tasks that are not
+  `active`, store `result.evidence` as sent. Leave `evidence` out to record a result that will not close the task.
+- If the completion check refuses, the result and the evidence entry are still recorded, the task
+  stays `active`, and the response has `result.not_closed` with the reason. Fix the cause:
+  re-accept with `"lifecycle": "active"` in the accept payload (a bare `accept` fails on an active
+  task), or record a same-meaning decision with `revise` when the meaning did not change, or add the
+  missing evidence; then record the result again.
+- `blocked` records the result and moves the task to `blocked`.
+- `failed` and `unknown` record the result and leave the lifecycle unchanged.
+- When the task is not `active` (for example `blocked` or `done`), the result is recorded without an
+  evidence entry and without a lifecycle move, and a `passed` result returns `not_closed` saying so.
+  To resume a blocked task, the claim holder sends a `transition` to `active`, then records the
+  result again.
+
+`record-result` decides task versus item by the record's path. A new record created by `capture` or
+`transition` gets `task` only from its path (a `task` in the supplied metadata is dropped), and
+`revise` and `transition` patches cannot set or change a record's `task` or `seq`.
+
+On an **item**, `record-result` never changes the lifecycle, whatever the outcome. A result does
+not close an item: item completion stays with `/session-verify` and the completion gate.
 
 ### Import surveys before namespace creation
 
@@ -289,7 +355,12 @@ holding, and what did not is stated as a limit rather than engineered around.
   filesystem.
 - **Enforcement stops at the CLI boundary.** The runtime rejects invalid calls and detects unexpected
   revisions. It cannot constrain other permitted tools. Host permissions must constrain external
-  actions; no acceptance field and no model-generated policy is a credential.
+  actions; no acceptance field and no model-generated policy is a credential. `actor` is
+  self-declared: the runtime does not authenticate it. `revise` and `transition` metadata patches can
+  still write `claim`, `evidence`, `result` and fields next to the lifecycle. The claim-holder and
+  evidence guarantees therefore hold for agents that use `claim` and `record-result`, not against a
+  hostile caller. Evidence built by `record-result` carries `source: "record-result"` and is the
+  claiming agent's own report, not independent verification.
 - **Host plugin storage is not authoritative.** Records live in the configured work root only.
   Host plugin caches and host-managed plugin data are replaceable, and a documented uninstall can
   remove the latter; never keep state there.

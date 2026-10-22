@@ -83,6 +83,8 @@ One compact record holds it: the breakdown goes in the item's own body, not in a
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" transition --input "$PAYLOAD"
 ```
 
+This is the one example shown in full; for any other payload run `python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" schema <command>` for its `required` and `optional` fields and a minimal example.
+
 `expect_revision` is the revision `show` just reported; a mismatch is refused as `stale-revision`, which is the pass finding that someone else edited the record while you were researching. Re-read it and rebuild the change. `"needs_breakdown": null` removes the field, so the rendered entry drops its `(needs breakdown)` token; carry the whole body forward, because `body` replaces rather than appends. The transition re-renders the sequence and commits the work root itself — run nothing else afterwards.
 
 The ` ⇄ <url>` annotations and the `[auto]` marker are rendered from `annotations` and `provenance.auto`, which this payload does not touch, so they survive the rewrite by construction. Do not restate them in the payload. Why they matter and what it costs to lose one: `references/sequence-grammar.md`.

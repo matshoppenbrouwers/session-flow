@@ -174,6 +174,18 @@ class StoreCase(unittest.TestCase):
         return records.read_record(store.record_path(self.root, seq, task))["metadata"]
 
 
+class OperationIdTest(unittest.TestCase):
+    def test_a_missing_operation_gets_a_fresh_generated_id(self):
+        first = store.with_operation_id({"seq": "SEQ-001"})
+        second = store.with_operation_id({"seq": "SEQ-001"})
+        self.assertRegex(first["operation"], r"^op-[0-9a-f-]{36}$")
+        self.assertNotEqual(first["operation"], second["operation"])
+
+    def test_a_supplied_operation_is_kept(self):
+        document = {"operation": "op-kept"}
+        self.assertIs(document, store.with_operation_id(document))
+
+
 class RootLockTest(StoreCase):
     """The lock is a directory created exclusively, released only by its owner."""
 
@@ -515,12 +527,14 @@ class LifecycleGuardTest(StoreCase):
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertEqual("accepted", self.record_metadata()["lifecycle"])
 
-    def test_a_claim_and_a_result_set_no_lifecycle_and_pass_the_guard(self):
+    def test_a_claim_starts_the_work_and_a_result_leaves_it_active_through_the_guard(self):
+        self.assertEqual("accepted", self.record_metadata(task="A1")["lifecycle"])
         completed, _ = self.run_cli("claim", payload("claim.json"))
         self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("active", self.record_metadata(task="A1")["lifecycle"])
         completed, _ = self.run_cli("record-result", payload("result.json"))
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertEqual("accepted", self.record_metadata(task="A1")["lifecycle"])
+        self.assertEqual("active", self.record_metadata(task="A1")["lifecycle"])
 
     def test_reopening_done_work_still_needs_a_correction(self):
         self.patch_record({"lifecycle": "done"})
@@ -1231,6 +1245,209 @@ class ClaimAndResultTest(StoreCase):
         document = payload("claim.json")
         document.update({"operation": "op-claim-0004", "task": "Z9"})
         self.assert_fails_without_writing("claim", document, "invalid-identity")
+
+
+class ResultSettlementTest(StoreCase):
+    """A result settles only an `active` task, and identity decides task versus item."""
+
+    ACTOR = "agent:store-implementer"
+    EVIDENCE = {"criteria": "one effective writer", "environment": "fixture root"}
+
+    def setUp(self):
+        super().setUp()
+        self.seed_claim(actor=self.ACTOR, task="A1")
+        self.patch_record({"lifecycle": "active"}, task="A1")
+        self.accept()
+
+    def accept(self, task="A1") -> None:
+        fingerprint = records.scope_fingerprint(records.read_record(store.record_path(self.root, "SEQ-001", task)))
+        self.patch_record(
+            {
+                "acceptance": {
+                    "actor": "user:fixture",
+                    "accepted_at": "2026-09-07T10:00:00Z",
+                    "authority": {"source": "user request", "revision": "2026-09-07T10:00:00Z"},
+                    "fingerprint": fingerprint,
+                    "scope": ["implement", "verify"],
+                }
+            },
+            task=task,
+        )
+
+    def send(self, command: str, document: dict, *arguments) -> dict:
+        completed, answer = self.run_cli(command, document, *arguments)
+        self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+        return answer["result"]
+
+    def result(self, outcome="passed", evidence="default", task="A1", actor=None) -> dict:
+        body = {"outcome": outcome}
+        if evidence == "default":
+            evidence = self.EVIDENCE
+        if evidence is not None:
+            body["evidence"] = dict(evidence) if isinstance(evidence, dict) else evidence
+        document = {
+            "coordinator": "session-delegation",
+            "actor": actor or self.ACTOR,
+            "seq": "SEQ-001",
+            "expect_revision": self.record_metadata(task=task)["revision"],
+            "result": body,
+        }
+        if task:
+            document["task"] = task
+        return document
+
+    def lifecycle(self, task="A1") -> str:
+        return self.record_metadata(task=task)["lifecycle"]
+
+    def evidence_entries(self, task="A1") -> list:
+        return self.record_metadata(task=task).get("evidence") or []
+
+    def move(self, lifecycle: str, actor=None) -> None:
+        self.send(
+            "transition",
+            {
+                "coordinator": "session-delegation",
+                "actor": actor or self.ACTOR,
+                "changes": [
+                    {
+                        "seq": "SEQ-001",
+                        "task": "A1",
+                        "expect_revision": self.record_metadata(task="A1")["revision"],
+                        "metadata": {"lifecycle": lifecycle},
+                    }
+                ],
+            },
+        )
+
+    def test_a_passed_result_on_a_blocked_task_is_recorded_and_the_task_does_not_move(self):
+        self.send("record-result", self.result("blocked", evidence=None))
+        self.assertEqual("blocked", self.lifecycle())
+        answer = self.send("record-result", self.result())
+        metadata = self.record_metadata(task="A1")
+        self.assertEqual("blocked", metadata["lifecycle"])
+        self.assertEqual("passed", metadata["result"]["outcome"])
+        self.assertEqual([], self.evidence_entries())
+        self.assertEqual(
+            "SEQ-001/A1 is `blocked`, not `active`, so the result was recorded without evidence and "
+            "the task did not move; move it to `active` (claim an accepted task again, or transition "
+            "a blocked task to `active` as the claim holder) and record the result again",
+            answer["not_closed"],
+        )
+
+    def test_a_blocked_task_moved_back_to_active_by_its_claim_holder_closes_on_passed(self):
+        self.send("record-result", self.result("blocked", evidence=None))
+        self.send("record-result", self.result())
+        self.move("active")
+        answer = self.send("record-result", self.result())
+        self.assertFalse(answer.get("not_closed"))
+        self.assertEqual("done", self.lifecycle())
+        self.assertEqual(1, len(self.evidence_entries()))
+
+    def test_a_passed_result_on_an_accepted_task_that_holds_a_claim_is_not_closed(self):
+        self.patch_record({"lifecycle": "accepted"}, task="A1")
+        answer = self.send("record-result", self.result())
+        self.assertEqual("accepted", self.lifecycle())
+        self.assertEqual([], self.evidence_entries())
+        self.assertIn("`accepted`, not `active`", answer["not_closed"])
+
+    def test_a_passed_result_on_a_done_task_adds_no_evidence_entry(self):
+        self.send("record-result", self.result())
+        self.assertEqual("done", self.lifecycle())
+        self.assertEqual(1, len(self.evidence_entries()))
+        answer = self.send("record-result", self.result())
+        self.assertEqual("done", self.lifecycle())
+        self.assertEqual(1, len(self.evidence_entries()))
+        self.assertIn("`done`, not `active`", answer["not_closed"])
+
+    def test_a_blocked_result_on_a_non_active_task_leaves_its_lifecycle(self):
+        self.patch_record({"lifecycle": "accepted"}, task="A1")
+        answer = self.send("record-result", self.result("blocked", evidence=None))
+        self.assertEqual("accepted", self.lifecycle())
+        self.assertEqual("blocked", self.record_metadata(task="A1")["result"]["outcome"])
+        self.assertFalse(answer.get("not_closed"))
+
+    def test_the_evidence_entry_names_its_source_actor_and_time(self):
+        self.send("record-result", self.result(evidence=dict(self.EVIDENCE, revision="5a1c3e9", limitations=["none"])))
+        metadata = self.record_metadata(task="A1")
+        self.assertEqual(
+            {
+                "criteria": "one effective writer",
+                "fingerprint": records.scope_fingerprint(records.read_record(store.record_path(self.root, "SEQ-001", "A1"))),
+                "revision": "5a1c3e9",
+                "environment": "fixture root",
+                "result": "pass",
+                "limitations": ["none"],
+                "source": "record-result",
+                "actor": self.ACTOR,
+                "recorded_at": metadata["result"]["recorded_at"],
+            },
+            metadata["evidence"][0],
+        )
+
+    def test_evidence_criteria_must_be_a_non_empty_string(self):
+        for criteria in (["one effective writer"], {"name": "x"}, True, 3, "", "  ", None):
+            with self.subTest(criteria=criteria):
+                error = self.assert_fails_without_writing(
+                    "record-result", self.result(evidence={"criteria": criteria}), "invalid-request"
+                )
+                self.assertIn("non-empty string", error["message"])
+                self.assertNotIn("add those fields", error["message"])
+
+    def test_evidence_with_only_criteria_is_recorded(self):
+        self.send("record-result", self.result(evidence={"criteria": "one effective writer"}))
+        self.assertEqual("done", self.lifecycle())
+        self.assertIsNone(self.evidence_entries()[0]["environment"])
+
+    def test_task_cannot_be_set_on_an_item_by_revise(self):
+        document = {"coordinator": "session-next", "expect_revision": 1, "metadata": {"task": "A1"}}
+        before = snapshot(self.root)
+        completed, answer = self.run_cli("revise", document, "--seq", "SEQ-001")
+        self.assertEqual(1, completed.returncode, completed.stdout)
+        self.assertEqual("invalid-identity", answer["error"]["code"])
+        self.assertIn("identity fields cannot be edited", answer["error"]["message"])
+        self.assertEqual(before, snapshot(self.root))
+
+    def test_task_cannot_be_changed_by_a_transition_patch(self):
+        document = {
+            "coordinator": "session-delegation",
+            "actor": self.ACTOR,
+            "changes": [
+                {
+                    "seq": "SEQ-001",
+                    "task": "A1",
+                    "expect_revision": self.record_metadata(task="A1")["revision"],
+                    "metadata": {"task": "B7"},
+                }
+            ],
+        }
+        error = self.assert_fails_without_writing("transition", document, "invalid-identity")
+        self.assertIn("identity fields cannot be edited", error["message"])
+
+    def test_a_result_on_an_item_never_closes_it_even_when_its_metadata_names_a_task(self):
+        self.patch_record({"lifecycle": "active", "task": "A1", store.CLAIM_FIELD: None})
+        self.seed_claim(actor=self.ACTOR)
+        self.accept(task=None)
+        self.patch_record({"lifecycle": "done"}, task="A1")
+        self.send("record-result", self.result(task=None))
+        metadata = self.record_metadata()
+        self.assertEqual("active", metadata["lifecycle"])
+        self.assertEqual("passed", metadata["result"]["outcome"])
+        self.assertNotIn("evidence", metadata)
+
+    def test_capture_writes_a_task_record_task_from_the_task_argument(self):
+        document = {"scope": "A new task.", "metadata": {"task": "Z9", "title": "New"}}
+        self.send("capture", document, "--namespace", NAMESPACE, "--seq", "SEQ-002", "--task", "A2")
+        self.assertEqual("A2", self.record_metadata("SEQ-002", "A2")["task"])
+        self.send("capture", {"scope": "A new item.", "metadata": {"task": "Z9"}}, "--namespace", NAMESPACE, "--seq", "SEQ-003")
+        self.assertNotIn("task", self.record_metadata("SEQ-003"))
+
+    def test_a_new_record_transition_takes_task_only_from_the_path(self):
+        change = {"new": True, "scope": "A new item.", "metadata": {"title": "t", "task": "A1"}}
+        self.send("transition", {"coordinator": "session-next", "changes": [change]})
+        self.assertNotIn("task", self.record_metadata("SEQ-003"))
+        change = {"new": True, "task": "B2", "scope": "A new task.", "metadata": {"title": "t", "task": "Z9"}}
+        self.send("transition", {"coordinator": "session-next", "changes": [change]})
+        self.assertEqual("B2", self.record_metadata("SEQ-004", "B2")["task"])
 
 
 class PrerequisiteGateTest(StoreCase):

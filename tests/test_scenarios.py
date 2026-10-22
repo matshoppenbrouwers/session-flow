@@ -493,7 +493,7 @@ class UnknownOutcomeTest(ScenarioCase):
         self.result("record-result", "--seq", "SEQ-101", "--task", "A1", payload=self.record("unknown"))
         metadata = self.metadata("SEQ-101", "A1")
         self.assertEqual("unknown", metadata["result"]["outcome"])
-        self.assertEqual("accepted", metadata["lifecycle"])
+        self.assertEqual("active", metadata["lifecycle"])
 
     def test_the_refusing_gate_is_instructed(self):
         gate = self.manifest["completion_gate"]

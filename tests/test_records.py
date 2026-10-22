@@ -32,6 +32,7 @@ COMMAND_FAMILIES = frozenset(
         "doctor",
         "bind-namespace",
         "show",
+        "schema",
         "capture",
         "revise",
         "accept",

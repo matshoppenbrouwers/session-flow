@@ -16,9 +16,40 @@
 - `accept`, `revise` and `capture` now take the work-root lock and commit their own paths. A caller
   that holds the lock elsewhere gets `root-busy` where it used to succeed. `render` and
   `bind-namespace` also take the lock, and `render` does not commit.
+- `claim` now starts work: a successful claim on an `accepted` item or task also moves it to
+  `active`. A `transition` to `active` sent after claiming is now redundant: it succeeds and changes
+  nothing.
+- `record-result` on a task can close or block it. A `passed` result adds an evidence entry and
+  moves the task to `done` when the completion gate passes, and a `blocked` result moves it to
+  `blocked`. When the gate refuses, the task stays `active` and the response has
+  `result.not_closed`. On an item, `record-result` still never changes the lifecycle.
+- `record-result` on a task settles only when the task is `active`. On a task in any other state,
+  such as `blocked` or `done`, the result is recorded without an evidence entry and without a
+  lifecycle move, and a `passed` result returns `not_closed` saying so. To resume a blocked task,
+  the claim holder sends a `transition` to `active` and records the result again.
+- `result.evidence` is optional. On a `passed` result for an `active` task, `criteria` must be a
+  non-empty string when evidence is present, or the call is refused and nothing is recorded. Other
+  outcomes and non-active tasks store `result.evidence` as sent. The built evidence entry carries
+  `source: "record-result"`, the claiming `actor` and `recorded_at`, which marks it as the claiming
+  agent's own report. Leave `evidence` out to record a result that will not close the task.
+- `record-result` decides task versus item by the record's path. New records created by `capture`
+  or `transition` get `task` only from the path (a `task` in the supplied metadata is dropped), and
+  `revise` and `transition` patches can no longer set or change a record's `task` or `seq`.
 
 ### Changes
 
+- `session-flow.py schema <command>` prints the required fields, the optional fields and an
+  example payload for `capture`, `accept`, `revise`, `transition`, `claim` and `record-result`.
+  Skills point to it instead of repeating payload shapes, and `session-delegation` and
+  `session-next` keep one example each and close a task with `claim` then `record-result`. The
+  `record-result` example includes evidence and the `capture` example includes task metadata.
+- `show` also returns the record `body`, the current `fingerprint`, the `acceptance` status and the
+  per-entry `evidence` status.
+- `transition`, `claim` and `record-result` generate an operation id (`op-<uuid4>`) when the payload
+  has none, and return it under `operation`. Re-sending the same payload with that id replays the
+  earlier result; a retry without it is a new operation. A caller that may need to retry after an
+  interruption should send its own `operation` id in the first call, because the generated id is
+  lost when the call does not return. `import` still requires an id.
 - Every operation commits only the records it wrote and the views it changed, with
   `git commit -- <paths>` and literal pathspecs. Another session's staged or unstaged changes in
   the work root are left alone. Paths that Git does not track and a `.gitignore` rule ignores are

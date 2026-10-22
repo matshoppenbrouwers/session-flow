@@ -306,37 +306,16 @@ Suggested presentation order:
 
 ### Step 7: Link, Pin, Accept
 
-Once the user approves the design:
+Once the user approves the design, continue as follows. For every payload below except the accept, ask the runtime for its fields: run `python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" schema <command>` and send the `required` fields plus the `optional` ones you need.
 
 1. Confirm what exists: the research report unless Step 2 was skipped, and whichever of `spec.md` and `plan.md` the work warranted. Nothing else.
-2. Land the item's links through `transition`, which commits the work root with those new files in it and reports the commit under `result.commit`:
+2. Land the item's links through `transition`, which commits the work root with those new files in it and reports the commit under `result.commit`. The payload is a change with `seq`, `expect_revision` and `metadata.links`, a list of `{"role", "target"}` entries for the specification, plan and research files. Run `schema transition` for the fields.
 
-```bash
-python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" transition --input links.json
-```
-
-```json
-{"operation": "<uuid4>",
- "changes": [{"seq": "SEQ-042", "expect_revision": 3,
-   "metadata": {"links": [{"role": "specification", "target": "spec.md"},
-                          {"role": "plan", "target": "plan.md"},
-                          {"role": "research", "target": "_devdocs/research/2026-09-07-topic.md"}]}}]}
-```
-
-3. Pin every behaviour or criteria document the acceptance depends on, at the commit that transition reported:
-
-```bash
-python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" revise --seq SEQ-042 --input references.json
-```
-
-```json
-{"expect_revision": 4,
- "metadata": {"references": [{"path": "spec.md", "commit": "<work-root commit>", "role": "specification"}]}}
-```
+3. Pin every behaviour or criteria document the acceptance depends on, at the commit that transition reported, with `revise --seq SEQ-042 --input references.json`. The payload carries `expect_revision` and `metadata.references`, a list of `{"path", "commit", "role"}` entries. Run `schema revise` for the exact shape.
 
    When `result.commit.committed` is false the work root is unversioned: say so, list nothing under `references`, and state plainly that acceptance then covers the scope text alone. Do not invent a commit.
 
-4. Ask the user to accept, and accept only what they said. Name the actor and the authority their decision rests on -- the direction doc at its commit, or their approval and when it was given. Approving a design is not acceptance until this runs, and no file you wrote is acceptance:
+4. Ask the user to accept, and accept only what they said. Name the actor and the authority their decision rests on -- the direction doc at its commit, or their approval and when it was given. Approving a design is not acceptance until this runs, and no file you wrote is acceptance. This is the one payload shown in full, because its shape rules are the ones that get refused:
 
 ```bash
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" accept --seq SEQ-042 --input accept.json

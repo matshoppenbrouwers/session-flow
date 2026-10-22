@@ -70,14 +70,7 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" --namespace "$NAMESPACE"
   capture --seq SEQ-042 --task A2 --input task-a2.json
 ```
 
-```json
-{"metadata": {"title": "Add crash reconciliation", "parent": "SEQ-042", "priority": "P1", "order": 20,
-   "depends_on": ["SEQ-042/A1"],
-   "allowed_paths": ["scripts/session_flow/store.py", "tests/test_store.py"],
-   "repositories": [{"name": "session-flow", "path": "."}]},
- "scope": "<observable criteria: what proves this task done>",
- "body": "## Instructions\n\n- Read <reference> first\n- Step 1 (action verb)\n\n## Test\n\n`<exact command>`\n"}
-```
+The payload has `metadata` (`title`, `parent`, `priority`, `order`, `depends_on`, `allowed_paths`, `repositories`), a `scope` string with the observable criteria, and a `body` with `## Instructions` and `## Test`. Run `python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" schema capture` to get the required and optional fields and an example that shows those metadata keys, and run `schema <command>` the same way for `accept`, `claim` and `record-result`.
 
 | Field | What it carries |
 |-------|-----------------|

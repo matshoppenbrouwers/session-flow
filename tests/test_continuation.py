@@ -7,9 +7,9 @@ records where the loop stopped and why. Each scenario's `scenario.json` names th
 outcomes to record, the units that should run, and the stop the run should reach,
 so a runner that continues past a bound disagrees with the manifest.
 
-A task with a recorded result is finished as far as continuation is concerned:
-`record-result` writes the result, and moving the record to `done` is a separate
-transition the coordinator makes later.
+A task with a recorded result is finished as far as continuation is concerned.
+These units record results without evidence, so `record-result` writes the result
+and leaves each task `active`; a result that carries evidence would also close it.
 
 The contract checks read the stop table out of `/session-next` and the
 continuation rules out of `/session-delegation`. Those stops are decided by the

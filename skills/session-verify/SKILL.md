@@ -209,6 +209,10 @@ fingerprint it was gathered at:
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" revise --seq SEQ-042 --input "$PAYLOAD"
 ```
 
+For the fields of this and every other payload, run `python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" schema <command>`; the example above is the only one shown here.
+
+Evidence entries with `source: "record-result"` are the implementing agent's own report. Reproduce or independently check them; do not count them as independent evidence.
+
 The response reports each entry's `applies`. An entry that does not apply is not evidence about this
 outcome, whatever its `result` says. `metadata.evidence` replaces the whole list: send the existing
 entries followed by the new one, or the earlier entries are dropped. For each `criteria` value only

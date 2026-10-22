@@ -26,6 +26,7 @@ from pathlib import Path
 
 from session_flow import (
     RECORD_FORMAT_VERSION,
+    InapplicableEvidenceError,
     InvalidIdentityError,
     InvalidRequestError,
     MissingAuthorityError,
@@ -50,6 +51,7 @@ DEFAULT_COORDINATOR = "session-flow"
 IMPORT_COMMAND = "import"
 CLAIM_FIELD = "claim"
 RESULT_FIELD = "result"
+RESULT_COMMAND = "record-result"
 DEPENDS_FIELD = "depends_on"
 ALLOWED_PATHS_FIELD = "allowed_paths"
 TAKEOVER_FIELD = "takeover_claim"
@@ -523,7 +525,7 @@ def require_payload(request: dict) -> dict:
     if not isinstance(payload, dict):
         raise InvalidRequestError(
             f"the {request['command']} command needs --input <file> holding a JSON object with "
-            "`operation` and its requested changes",
+            "the fields it reads; run `schema <command>` to list them for the commands it covers",
             command=request["command"],
         )
     return payload
@@ -576,13 +578,23 @@ def change_authority(payload: dict, command: str) -> dict:
     }
 
 
-def check_lifecycle_authority(work_root: Path, current: dict, patch, authority: dict) -> None:
+def planned_holder(current: dict, patch: dict, authority: dict) -> dict:
+    """The record as the claim-holder check sees it: a `claim` command's own claim already placed."""
+    if authority["command"] != "claim":
+        return current
+    return dict(current, metadata=patch_metadata(current["metadata"], {CLAIM_FIELD: patch.get(CLAIM_FIELD)}))
+
+
+def check_lifecycle_authority(
+    work_root: Path, current: dict, patch, authority: dict, judged: dict | None = None
+) -> None:
     """Refuse a lifecycle change the contract forbids, one no claim covers, or an unearned `done`.
 
     Every planned existing-record mutation passes here, so the
     transition table in `records` governs `transition` as it already governs `revise`.
     A patch that sets no `lifecycle` moves nothing, and `captured` to `accepted` is the
-    one state change that legitimately precedes a claim.
+    one state change that legitimately precedes a claim. `done` is judged on the stored
+    record unless the caller passes the `judged` record its own change would produce.
     """
     if not isinstance(patch, dict) or "lifecycle" not in patch:
         return
@@ -596,9 +608,9 @@ def check_lifecycle_authority(work_root: Path, current: dict, patch, authority: 
             seq=current["identity"]["seq"],
             **illegal.detail,
         ) from illegal
-    records.require_claim_holder(current, target, authority)
+    records.require_claim_holder(planned_holder(current, patch, authority), target, authority)
     if target != held and target == records.LIFECYCLE_DONE:
-        records.check_completion(work_root, current)
+        records.check_completion(work_root, judged or current)
 
 
 def record_correction(metadata: dict, correction) -> dict:
@@ -607,6 +619,91 @@ def record_correction(metadata: dict, correction) -> dict:
         return metadata
     metadata["corrections"] = list(metadata.get("corrections") or []) + [correction]
     return metadata
+
+
+def updated_record(current: dict, change: dict, patch, authority: dict) -> dict:
+    updated = {
+        "metadata": record_correction(patch_metadata(current["metadata"], patch), authority["correction"]),
+        "scope": change.get("scope", current["scope"]),
+        "body": change.get("body", current["body"]),
+    }
+    updated["metadata"]["revision"] = records.advance_revision(current, updated)
+    return updated
+
+
+def planned_record(current: dict, change: dict, patch, authority: dict) -> dict:
+    """The record a change would leave behind, parsed from the text that would be written."""
+    updated = updated_record(current, change, patch, authority)
+    return records.parse_record(records.render_record(updated["metadata"], updated["scope"], updated["body"]))
+
+
+def result_evidence_entry(current: dict, evidence, actor: str, recorded_at: str) -> dict:
+    """The self-attested evidence entry a passing result stands for, bound to the current scope fingerprint."""
+    criteria = evidence.get("criteria") if isinstance(evidence, dict) else None
+    if not isinstance(criteria, str) or not criteria.strip():
+        raise InvalidRequestError(
+            "`result.evidence` must be an object whose `criteria` is a non-empty string naming what "
+            "it supports; `revision`, `environment` and `limitations` are recorded when given. "
+            "Add `criteria` or leave `evidence` out"
+        )
+    return {
+        "criteria": criteria,
+        "fingerprint": records.scope_fingerprint(current),
+        "revision": evidence.get("revision"),
+        "environment": evidence.get("environment"),
+        "result": "pass",
+        "limitations": evidence.get("limitations"),
+        "source": RESULT_COMMAND,
+        "actor": actor,
+        "recorded_at": recorded_at,
+    }
+
+
+def with_result_evidence(current: dict, patch: dict, actor: str) -> dict:
+    """The patch with its result's evidence appended to the entries already recorded."""
+    result = patch[RESULT_FIELD]
+    if result.get("evidence") is None:
+        return patch
+    entry = result_evidence_entry(current, result["evidence"], actor, result["recorded_at"])
+    held = list(current["metadata"].get(records.EVIDENCE_KEY) or [])
+    return dict(patch, **{records.EVIDENCE_KEY: held + [entry]})
+
+
+def not_active_reason(identity: dict, lifecycle: str) -> str:
+    return (
+        f"{records.record_name(identity)} is `{lifecycle}`, not `active`, so the result was recorded "
+        "without evidence and the task did not move; move it to `active` (claim an accepted task "
+        "again, or transition a blocked task to `active` as the claim holder) and record the "
+        "result again"
+    )
+
+
+def settled_patch(work_root: Path, current: dict, change: dict, authority: dict) -> tuple[dict, str | None]:
+    """The metadata a recorded result leaves, and why a passing task was not closed.
+
+    Only an `active` task moves, and a record is a task by the path it was addressed
+    through, never by its metadata: `passed` closes it when its planned record passes the
+    completion gate, `blocked` blocks it, and every other outcome leaves its lifecycle
+    alone. A result on any other lifecycle is recorded without evidence and moves nothing.
+    """
+    patch = change["metadata"]
+    if not change.get("task"):
+        return patch, None
+    outcome = patch[RESULT_FIELD]["outcome"]
+    lifecycle = records.lifecycle_of(current)
+    if lifecycle != records.LIFECYCLE_ACTIVE:
+        return patch, not_active_reason(current["identity"], lifecycle) if outcome == "passed" else None
+    if outcome == "blocked":
+        return dict(patch, lifecycle=records.LIFECYCLE_BLOCKED), None
+    if outcome != "passed":
+        return patch, None
+    patch = with_result_evidence(current, patch, authority["actor"])
+    closing = dict(patch, lifecycle=records.LIFECYCLE_DONE)
+    try:
+        records.check_completion(work_root, planned_record(current, change, closing, authority))
+    except InapplicableEvidenceError as refusal:
+        return patch, str(refusal)
+    return closing, None
 
 
 def plan_existing_record(work_root: Path, namespace: dict, change: dict, authority: dict) -> dict:
@@ -624,17 +721,14 @@ def plan_existing_record(work_root: Path, namespace: dict, change: dict, authori
             held=held,
             expected=expected,
         )
-    check_lifecycle_authority(work_root, current, change.get("metadata"), authority)
-    updated = {
-        "metadata": record_correction(
-            patch_metadata(current["metadata"], change.get("metadata")), authority["correction"]
-        ),
-        "scope": change.get("scope", current["scope"]),
-        "body": change.get("body", current["body"]),
-    }
-    updated["metadata"]["revision"] = records.advance_revision(current, updated)
+    patch, not_closed, judged = change.get("metadata"), None, None
+    if authority["command"] == RESULT_COMMAND:
+        patch, not_closed = settled_patch(work_root, current, change, authority)
+        judged = planned_record(current, change, patch, authority)
+    check_lifecycle_authority(work_root, current, patch, authority, judged)
+    updated = updated_record(current, change, patch, authority)
     text = records.render_record(updated["metadata"], updated["scope"], updated["body"])
-    return {
+    planned = {
         "seq": seq,
         "task": change.get("task"),
         "path": path,
@@ -643,6 +737,7 @@ def plan_existing_record(work_root: Path, namespace: dict, change: dict, authori
         "after": records.digest(text),
         "content": text,
     }
+    return dict(planned, not_closed=not_closed) if not_closed else planned
 
 
 def plan_new_record(work_root: Path, namespace: dict, change: dict, operation_id: str) -> dict:
@@ -650,7 +745,10 @@ def plan_new_record(work_root: Path, namespace: dict, change: dict, operation_id
     if not isinstance(scope, str) or not scope.strip():
         raise InvalidRequestError("a new record needs non-empty `scope` text to bind acceptance to")
     seq = reserve_item_id(work_root, operation_id)
+    task = change.get("task")
+    path = record_path(work_root, seq, task)
     metadata = patch_metadata({}, change.get("metadata"))
+    metadata.pop("task", None)
     metadata.update(
         {
             "format": RECORD_FORMAT_VERSION,
@@ -659,7 +757,8 @@ def plan_new_record(work_root: Path, namespace: dict, change: dict, operation_id
             "revision": 1,
         }
     )
-    path = record_path(work_root, seq, change.get("task"))
+    if task:
+        metadata["task"] = task
     if path.exists():
         raise InvalidIdentityError(
             f"{path} already exists although {seq} was just reserved; reconcile the work root",
@@ -701,7 +800,7 @@ def plan_changes(work_root: Path, namespace: dict, changes, operation_id: str, a
 
 
 def journal_entry(entry: dict) -> dict:
-    return {
+    journaled = {
         "seq": entry["seq"],
         "task": entry["task"],
         "path": str(entry["path"]),
@@ -710,6 +809,7 @@ def journal_entry(entry: dict) -> dict:
         "after": entry["after"],
         "content": entry["content"],
     }
+    return dict(journaled, not_closed=entry["not_closed"]) if entry.get("not_closed") else journaled
 
 
 def write_prepared_operation(work_root, command, operation_id, fingerprint, payload, ownership, plan):
@@ -735,8 +835,14 @@ def apply_planned_changes(plan: list) -> None:
         write_atomic(Path(entry["path"]), entry["content"])
 
 
+def with_not_closed(result: dict, entries: list) -> dict:
+    """The result carrying why a passing task stayed open, when one change says so."""
+    reasons = [entry["not_closed"] for entry in entries if entry.get("not_closed")]
+    return dict(result, not_closed=reasons[0]) if reasons else result
+
+
 def operation_result(operation_id: str, namespace: dict, plan: list) -> dict:
-    return {
+    result = {
         "operation": operation_id,
         "state": APPLIED,
         "replayed": False,
@@ -754,6 +860,7 @@ def operation_result(operation_id: str, namespace: dict, plan: list) -> dict:
             for entry in plan
         ],
     }
+    return with_not_closed(result, plan)
 
 
 def mark_operation_applied(work_root: Path, document: dict, result: dict) -> dict:
@@ -1000,10 +1107,18 @@ CLAIM_KEYS = ASSIGNMENT_KEYS | frozenset({ALLOWED_PATHS_FIELD, "claimed_at", TAK
 RESULT_KEYS = ASSIGNMENT_KEYS | frozenset({"result"})
 
 
+def with_operation_id(payload: dict) -> dict:
+    """The payload with a generated `op-<uuid4>` identity when it names none."""
+    if "operation" in payload:
+        return payload
+    return dict(payload, operation=f"op-{uuid.uuid4()}")
+
+
 def require_command_payload(request: dict, valid: frozenset[str]) -> dict:
+    """Validate the payload's keys, then fix its operation identity before any digest is taken."""
     payload = require_payload(request)
     records.check_payload_keys(payload, request["command"], valid)
-    return payload
+    return with_operation_id(payload)
 
 
 def transition(request: dict) -> dict:
@@ -1273,13 +1388,18 @@ def claim_change(work_root: Path, current: dict, payload: dict, target: dict, co
         claim["reassigned_from"] = held.get("actor") if isinstance(held, dict) else None
         claim[TAKEOVER_RECORD_FIELD] = takeover
     patch = {CLAIM_FIELD: claim}
+    if records.lifecycle_of(current) == records.LIFECYCLE_ACCEPTED:
+        patch["lifecycle"] = records.LIFECYCLE_ACTIVE
     if current["metadata"].get(RESULT_FIELD) is not None:
         patch[RESULT_FIELD] = None
     return dict(target, expect_revision=payload.get("expect_revision"), metadata=patch)
 
 
 def claim(request: dict) -> dict:
-    """Record a bounded assignment. It starts nothing and schedules nothing.
+    """Record a bounded assignment and start the work: an `accepted` record becomes `active`.
+
+    A record that is already `active` keeps its lifecycle. The claim and the move to
+    `active` are one operation, and nothing is scheduled.
 
     The operation identity is judged first: an assignment this operation already made
     is returned rather than validated again, and reusing its identity for another one
@@ -1311,7 +1431,14 @@ def validate_outcome(result) -> dict:
 
 
 def record_result(request: dict) -> dict:
-    """Record a claimed task's own result. Judging its evidence is not this command's work."""
+    """Record a claimed task's own result, and settle the task from it in the same operation.
+
+    On a task, `passed` appends an evidence entry built from `result.evidence` and moves it
+    to `done` when the planned record passes the completion gate; a refusal still records
+    the result and evidence, leaves the task `active`, and returns the reason as
+    `not_closed`. `blocked` moves the task to `blocked`; `failed` and `unknown` leave its
+    lifecycle alone. A result recorded on an item never changes its lifecycle.
+    """
     payload = require_command_payload(request, RESULT_KEYS)
     work_root = resolved_work_root(request)
     target = record_target(request, payload)
@@ -1335,7 +1462,7 @@ def record_result(request: dict) -> dict:
         expect_revision=payload.get("expect_revision"),
         metadata={RESULT_FIELD: validate_outcome(payload.get("result"))},
     )
-    return apply_operation(request, payload, "record-result", [change])
+    return apply_operation(request, payload, RESULT_COMMAND, [change])
 
 
 def current_digest(path) -> str | None:
@@ -1459,7 +1586,7 @@ def finish_change(change: dict) -> None:
 
 def recovered_result(document: dict, namespace: dict) -> dict:
     changes = document.get("changes") or []
-    return {
+    result = {
         "operation": document.get("operation"),
         "state": APPLIED,
         "replayed": False,
@@ -1471,6 +1598,7 @@ def recovered_result(document: dict, namespace: dict) -> dict:
             for change in changes
         ],
     }
+    return with_not_closed(result, changes)
 
 
 def reconcile_operation(work_root: Path, namespace: dict, document: dict) -> dict:

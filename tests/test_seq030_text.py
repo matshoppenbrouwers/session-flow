@@ -88,7 +88,7 @@ class A6DelegationTest(TextCase):
         self.assertIsNotNone(start, "no close-out section")
         self.assertRegex(
             text[start.start() : start.start() + 3000],
-            r"(?is)record-result.*?transition.*?`?active`?.*?evidence.*?transition.*?`?done`?",
+            r"(?is)`?claim`?.*?`?record-result`?",
         )
 
 

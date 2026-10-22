@@ -70,8 +70,8 @@ ACCEPTANCE_PAYLOAD = {
     "scope": ["implement", "record"],
     "decided_at": "2026-09-07T12:30:00Z",
 }
-# A lifecycle change needs the claim that covers it, so the fixture run takes the
-# assignment before moving the item. `claimed_at` is literal because a defaulted
+# Claiming an accepted item also starts it, so the fixture run claims the item and then
+# changes its priority. `claimed_at` is literal because a defaulted
 # timestamp differs between the three layout runs and they must reproduce each other.
 CLAIM_PAYLOAD = {
     "operation": "op-installed-claim",
@@ -86,7 +86,7 @@ TRANSITION_PAYLOAD = {
     "operation": "op-installed-layout",
     "coordinator": "tests.test_installation",
     "provenance": {"actor": "maintainer", "source": "fixture run"},
-    "changes": [{"seq": CORE_ITEM, "expect_revision": 3, "metadata": {"lifecycle": "active"}}],
+    "changes": [{"seq": CORE_ITEM, "expect_revision": 3, "metadata": {"priority": "P0"}}],
 }
 PENDING_OPERATION = {
     "format": 1,
