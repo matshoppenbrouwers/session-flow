@@ -992,7 +992,7 @@ def build_capture_metadata(request: dict, payload: dict) -> dict:
     return metadata
 
 
-CAPTURE_KEYS = frozenset({"scope", "body", "metadata", "auto"})
+CAPTURE_KEYS = frozenset({"scope", "body", "metadata", "auto", "coordinator", "takeover"})
 
 
 def capture(request: dict) -> dict:
@@ -1016,6 +1016,7 @@ def capture(request: dict) -> dict:
     return {
         "path": str(path),
         "identity": record["identity"],
+        "digest": digest(text),
         "lifecycle": lifecycle_of(record),
         "fingerprint": scope_fingerprint(record),
         "acceptance": acceptance_status(record),
@@ -1053,7 +1054,9 @@ def load_for_mutation(request: dict, command: str, valid: frozenset[str]) -> tup
     return path, current, payload
 
 
-REVISION_KEYS = frozenset({"expect_revision", "expected_revision", "actor", "coordinator", "correction"})
+REVISION_KEYS = frozenset(
+    {"expect_revision", "expected_revision", "actor", "coordinator", "correction", "takeover"}
+)
 REVISE_KEYS = REVISION_KEYS | frozenset({"metadata", "scope", "body", *SCOPE_DECISIONS})
 
 
@@ -1071,6 +1074,7 @@ def revise(request: dict) -> dict:
     return {
         "path": str(path),
         "identity": written["identity"],
+        "digest": digest(text),
         "previous_fingerprint": scope_fingerprint(current),
         "fingerprint": scope_fingerprint(written),
         "lifecycle": lifecycle_of(written),
@@ -1117,6 +1121,7 @@ def accept(request: dict) -> dict:
     return {
         "path": str(path),
         "identity": written["identity"],
+        "digest": digest(text),
         "lifecycle": lifecycle_of(written),
         "acceptance": acceptance_status(written),
         "evidence": evidence_status(written),

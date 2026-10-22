@@ -13,9 +13,32 @@
   fingerprint, refuses a latest `fail` entry for any criterion, and requires acceptance that still
   applies. An applicable entry's `result` must be `pass`, `fail`, `waived` or `unverified`; a
   missing or other value is refused. Waived and unverified entries still count as recorded evidence.
+- `accept`, `revise` and `capture` now take the work-root lock and commit their own paths. A caller
+  that holds the lock elsewhere gets `root-busy` where it used to succeed. `render` and
+  `bind-namespace` also take the lock, and `render` does not commit.
 
 ### Changes
 
+- Every operation commits only the records it wrote and the views it changed, with
+  `git commit -- <paths>` and literal pathspecs. Another session's staged or unstaged changes in
+  the work root are left alone. Paths that Git does not track and a `.gitignore` rule ignores are
+  left out of the commit. A file changed between the write and the commit stops the commit, and the
+  result names it under `changed`. A failed commit returns `committed: false` with `reason`, `paths`
+  and a `command` that commits exactly those paths; the records stay written. Do not run `command`
+  without review when the result has a `changed` key, because it commits the files as they are now.
+  A held `index.lock` is retried three times first.
+- `capture`, `revise` and `accept` accept `coordinator` and `takeover` like the other locked
+  commands, and payload keys are validated before the lock is taken.
+- Operations re-render the sequence and only the task views of the items they touched, and skip
+  views whose text is unchanged. `render` still re-renders every view, now serialized under the
+  root lock, so `/session-task-planning` no longer asks for it after `capture`, `revise` or
+  `accept`.
+- `doctor` reports `storage.commit_readiness`: whether the work root is versioned, its Git
+  directory and whether that is writable, the hooks path, and hook files that are not executable.
+  Git skips such a hook and the commit succeeds, so the checks it was meant to run silently do not.
+- `references/runtime-integration.md` states the supported setup, several sessions on one machine
+  sharing one work root, and lists several machines, network-synchronized work roots and records
+  edited outside the runtime as unsupported.
 - `expect_revision` is the one revision key. The records layer still accepts `expected_revision` as
   a deprecated alias for one release, and refuses a payload that carries both with different
   values. `claim` and `record-result` accept only `expect_revision`.

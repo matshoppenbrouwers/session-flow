@@ -218,6 +218,28 @@ class RoundTrip(unittest.TestCase):
         self.assertNotIn("SEQ-105", Path(self.request["sequence_path"]).read_text(encoding="utf-8"))
 
 
+class GeneratedViewRewrite(unittest.TestCase):
+    def setUp(self):
+        directory = Path(tempfile.mkdtemp(prefix="session-flow-view-rewrite-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        self.path = directory / "view.md"
+
+    def test_a_view_holding_invalid_utf8_is_rewritten_and_reported(self):
+        self.path.write_bytes(b"caf\xe9\n")
+        self.assertTrue(views.write_generated(self.path, "cafe\n"))
+        self.assertEqual(b"cafe\n", self.path.read_bytes())
+        self.assertEqual(store.current_digest(self.path), records.digest("cafe\n"))
+
+    def test_a_view_that_already_holds_the_text_is_left_alone(self):
+        self.path.write_bytes("caf\u00e9\n".encode("utf-8"))
+        self.assertFalse(views.write_generated(self.path, "caf\u00e9\n"))
+
+    def test_a_view_that_differs_only_in_line_endings_is_rewritten(self):
+        self.path.write_bytes(b"one\r\ntwo\r\n")
+        self.assertTrue(views.write_generated(self.path, "one\ntwo\n"))
+        self.assertEqual(b"one\ntwo\n", self.path.read_bytes())
+
+
 class GeneratedSequence(unittest.TestCase):
     def setUp(self):
         self.project_root = Path(tempfile.mkdtemp(prefix="session-flow-open-sequence-"))

@@ -164,7 +164,60 @@ and import have separate commits. This is skill orchestration using existing com
 runtime command or automatic setup inside `import`.
 
 `backup` and `restore` are thin wrappers over Git and define no archive format. The work root is an
-ordinary Git repository: it owns history, and each applied transition ends in a commit there.
+ordinary Git repository: it owns history, and each mutation ends in a commit there.
+
+### Locking and commits
+
+Every command that writes under the work root takes the work-root lock: `capture`, `revise`,
+`accept`, `transition`, `claim`, `record-result`, `reconcile`, `import` with `apply: true`,
+`bind-namespace` and `render`. `render` takes the lock so that it does not race a write, but it does
+not commit. While another holder has the lock, the command is refused with `root-busy`.
+
+The locked commands accept `coordinator` (the name recorded as the lock owner) and `takeover` (an
+object with a `reason`, to take over a lock whose owner process is gone). This holds for `capture`,
+`revise` and `accept` as for the others. `bind-namespace` accepts `coordinator` only. Commands that
+check payload keys (`capture`, `revise`, `accept`, `transition`, `claim`, `record-result`) do so
+before the lock is taken, so an unknown key is refused without touching the lock.
+
+Each operation commits only its own paths: the records it wrote and the generated views it changed
+inside the work root. It runs `git add -- <paths>` and then `git commit -m <message> -- <paths>`,
+with literal pathspecs, so a path is never read as a glob or magic pathspec. Another session's
+staged or unstaged changes in the work root are not committed, and a staged change stays staged.
+New records and views are part of the commit. Two kinds of path are left out: paths outside the
+work root and `.state/`, and paths that Git does not track and a `.gitignore` rule ignores, because
+`git add` refuses them. If every path is left out, nothing is committed and the result says so. If a
+file in the set no longer holds what the operation wrote when the commit runs, nothing is committed
+and the result names the file.
+
+After a write, the runtime renders the sequence view and the task views of the items the operation
+touched. A view whose text is unchanged is not rewritten. `render` still re-renders every view.
+
+A commit that fails does not undo the write. The records and views stay on disk, and the result
+carries `committed: false` and a `reason`. When Git rejects the add or the commit, or a file changed,
+it also carries `paths` and `command`. This is the result when `intent.md` was edited after the
+operation wrote it:
+
+```json
+{
+  "committed": false,
+  "reason": "these files changed after the operation wrote them, so nothing was committed; review the changed files, then run the command to commit all of the operation's files as they are now",
+  "paths": ["seq-042/intent.md", "seq-042/tasks/A1.md"],
+  "command": "git -C /abs/work-root --literal-pathspecs add -- seq-042/intent.md seq-042/tasks/A1.md && git -C /abs/work-root --literal-pathspecs commit -m 'session-flow: transition op-1' -- seq-042/intent.md seq-042/tasks/A1.md",
+  "changed": ["seq-042/intent.md"]
+}
+```
+
+`paths` and `command` cover all of the operation's files, not only the ones that changed. `command`
+commits exactly `paths` and nothing else. Run it once the cause is cleared. A held `index.lock` is
+retried after 0.2, 0.5 and 1 second before it is reported.
+
+Other `reason` texts name the cause, such as `git commit failed: <first line of Git's error>`. A
+work root that is not versioned, or an operation with nothing to commit, returns `committed: false`
+and a `reason` without `paths` or `command`.
+
+When the result has a `changed` key, an agent must not run `command` without review. A file was
+edited after the operation wrote it, and `command` commits the files as they are now. Read the
+changed files first.
 
 A command whose handler has not landed in this build is still reachable and answers
 `not-implemented` naming its handler. `doctor`'s `commands` map reports each family's handler and
@@ -176,7 +229,7 @@ whether it is available, so a consumer can check before invoking rather than aft
 |------|---------|
 | `unsupported-format` | Envelope missing, duplicated, malformed, or of an unknown format version. |
 | `stale-revision` | The expected record revision does not match the stored one. |
-| `root-busy` | The work root is locked by another coordinator or needs reconciliation. |
+| `root-busy` | The work root is locked by another writer or needs reconciliation. |
 | `invalid-identity` | Identity, immutable field, illegal transition, or resolved path is not valid. |
 | `missing-authority` | The requested change needs authority that was not supplied. |
 | `inapplicable-evidence` | The evidence does not apply to the accepted scope revision. |
@@ -185,7 +238,8 @@ whether it is available, so a consumer can check before invoking rather than aft
 | `invalid-request` | The request itself is malformed: unknown option, unreadable input file. |
 | `internal` | Unexpected failure; the diagnostic on stderr carries the traceback. |
 
-Every rejection happens before any file is written. Dispatch on `error.code`, never on the message
+Every rejection happens before any file is written. A failed commit is not a rejection: it is a
+result with `committed: false`, and the write stands. Dispatch on `error.code`, never on the message
 text, which is written for a person and may be reworded.
 
 ## `doctor`
@@ -196,7 +250,8 @@ text, which is written for a person and may be reworded.
 - `plugin_version` — the semantic release, for reporting only.
 - `record_format` — the record format version this build reads.
 - `runtime` — `python`, `minimum_python`, `executable`, `package_root`, `install_instruction`.
-- `storage` — `work_root`, `work_root_present`, `sequence_path`, and `limitations`.
+- `storage` — `work_root`, `work_root_present`, `sequence_path`, `commit_readiness`, and
+  `limitations`.
 - `commands` — per family, its handler and whether it is available.
 - `errors` — the code-to-description map above.
 
@@ -204,6 +259,14 @@ The runtime floor is **Python 3.9 with the standard library only**. Below it, `d
 `unsupported-runtime` with an explicit install instruction rather than a traceback. Machines without
 Python — chiefly native Windows outside WSL — cannot run the plugin, and that is the whole
 compatibility story.
+
+`storage.commit_readiness` reports what the runtime observes about committing, and predicts nothing
+about sandboxes or approvals: `versioned`, `git_dir`, `git_dir_writable`, `hooks_path` (the
+effective hooks directory, after `core.hooksPath`), and `non_executable_hooks` (hook files without
+the executable bit, ignoring `*.sample`). Git skips a non-executable hook, so a commit still
+succeeds, and any check the user expects from that hook silently does not run. `doctor` lists such
+hooks for that reason. Only a Git directory the runtime cannot write, or an executable hook that
+fails, makes a commit fail, so check `git_dir_writable` when a result says `committed: false`.
 
 An unversioned work root appears in `storage.limitations` as a named limitation stating that backup
 and restore are unavailable.
@@ -234,14 +297,21 @@ holding, and what did not is stated as a limit rather than engineered around.
   instruction to repeat its effects. `reconcile` stops on unexplained divergence instead of
   overwriting it, and never performs an external side effect.
 
+### Supported setup
+
+Several sessions on one machine may share one work root. Every write is serialized by the root
+lock, including `render`, and each operation commits only its own paths, so sessions do not commit
+each other's work. A second session that finds the lock held gets `root-busy` and retries later.
+
 ### Unsupported configurations
 
 Outside the coordination guarantee. These are documented as **unsupported** rather than defended
 against, and a report from one of them is not a defect:
 
+- Several machines using one work root.
 - Network or cloud-synchronized work roots.
+- Records edited outside the runtime, by hand or by another tool.
 - Simultaneous editing of one work root from another operating system.
-- Mutation of one work root from more than one host.
 - More than one coordinator at a time. Several agents may execute independent tasks, but state
   transitions are serialized through the root lock.
 

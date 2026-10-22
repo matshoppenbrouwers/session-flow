@@ -591,32 +591,57 @@ def render_task_view(item: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_generated(path: Path, text: str) -> str:
+def holds_text(path: Path, text: str) -> bool:
+    try:
+        return path.read_bytes() == text.encode("utf-8")
+    except OSError:
+        return False
+
+
+def write_generated(path: Path, text: str) -> bool:
+    """Write the generated text atomically unless the file already holds it. True when written.
+
+    The comparison is on bytes, so a view that cannot be decoded or read is rewritten, not trusted.
+    """
+    if holds_text(path, text):
+        return False
     path.parent.mkdir(parents=True, exist_ok=True)
     handle = tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=str(path.parent), prefix=".session-flow-view-", delete=False
+        "w", encoding="utf-8", newline="\n", dir=str(path.parent), prefix=".session-flow-view-", delete=False
     )
     with handle:
         handle.write(text)
     os.replace(handle.name, str(path))
-    return str(path)
+    return True
 
 
-def render(request: dict) -> dict:
-    """Write the sequence view of open items and one task view per item with tasks.
+def render(request: dict, touched: set | None = None) -> dict:
+    """Write the sequence view of open items and the task views of the touched items.
 
     Done, deferred and cancelled items leave the sequence but keep their records.
     The import round trip still sees them by re-deriving every entry through `render_sequence`.
+    `touched` names the `SEQ` identities whose task views to render; `None` renders every item's.
+    A view whose text is unchanged is left alone and absent from `written`.
     """
     items = load_items(request)
     listed = [item for item in items if item["lifecycle"] in OPEN_STATES]
-    written = [write_generated(Path(request["sequence_path"]), render_sequence(listed))]
+    targets = [(Path(request["sequence_path"]), render_sequence(listed))]
     for item in items:
-        if not item["tasks"]:
+        if not item["tasks"] or (touched is not None and item["seq"] not in touched):
             continue
         path = Path(item["directory"]) / TASKS_DIRECTORY / TASK_VIEW_FILE
-        written.append(write_generated(path, render_task_view(item)))
-    return {"sequence": str(request["sequence_path"]), "generated": written, "items": len(items)}
+        targets.append((path, render_task_view(item)))
+    written = [
+        {"path": str(path), "digest": digest(text)}
+        for path, text in targets
+        if write_generated(path, text)
+    ]
+    return {
+        "sequence": str(request["sequence_path"]),
+        "generated": [str(path) for path, _ in targets],
+        "items": len(items),
+        "written": written,
+    }
 
 
 def acceptance_reason(status: dict) -> str | None:

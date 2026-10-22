@@ -197,7 +197,7 @@ Do not append to `SEQUENCE.md` and do not offer to register anything in it. The 
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" render
 ```
 
-Every applied transition re-renders both views, so an explicit `render` is only needed after a plain `capture`, `revise`, or `accept`. An entry typed into `SEQUENCE.md` or `tasks/_index.md` is not registration — it is lost at the next render.
+Every mutation re-renders the views it touched, so no explicit `render` is needed after `capture`, `revise`, `accept`, or a transition. An entry typed into `SEQUENCE.md` or `tasks/_index.md` is not registration — it is lost at the next render.
 
 For a one-off follow-up that does not warrant breaking an item down, point the user to `/session-add-task` instead.
 

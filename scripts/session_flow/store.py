@@ -14,9 +14,11 @@ import json
 import os
 import posixpath
 import re
+import shlex
 import socket
 import subprocess
 import tempfile
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -62,6 +64,8 @@ DIVERGED = "diverged"
 RESOLVED = "resolved"
 BLOCKED = "blocked"
 GIT_TIMEOUT = 60
+LITERAL_PATHSPECS = "--literal-pathspecs"
+INDEX_LOCK_RETRY_DELAYS = (0.2, 0.5, 1.0)
 DEFAULT_REMOTE = "origin"
 REMOTE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 REVISION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@^~-]{0,199}$")
@@ -127,8 +131,12 @@ def write_atomic(path: Path, text: str) -> None:
     sync_directory(directory)
 
 
+def json_text(document: dict) -> str:
+    return json.dumps(document, indent=2, sort_keys=True) + "\n"
+
+
 def write_json(path: Path, document: dict) -> None:
-    write_atomic(path, json.dumps(document, indent=2, sort_keys=True) + "\n")
+    write_atomic(path, json_text(document))
 
 
 def read_json(path: Path, description: str, error=InvalidRequestError) -> dict:
@@ -631,7 +639,7 @@ def plan_existing_record(work_root: Path, namespace: dict, change: dict, authori
         "task": change.get("task"),
         "path": path,
         "revision": updated["metadata"]["revision"],
-        "before": records.digest(Path(path).read_text(encoding="utf-8")),
+        "before": current_digest(path),
         "after": records.digest(text),
         "content": text,
     }
@@ -756,7 +764,7 @@ def mark_operation_applied(work_root: Path, document: dict, result: dict) -> dic
     return document
 
 
-def regenerate_views(request: dict) -> dict:
+def regenerate_views(request: dict, touched: set | None = None) -> dict:
     """Refresh generated views. They are replaceable output, never an authority."""
     try:
         from session_flow import views
@@ -766,7 +774,7 @@ def regenerate_views(request: dict) -> dict:
     if render is None:
         return {"refreshed": False, "reason": "the views module provides no render handler"}
     try:
-        return {"refreshed": True, "render": render(request)}
+        return {"refreshed": True, "render": render(request, touched)}
     except SessionFlowError as failure:
         return {"refreshed": False, "reason": str(failure), "error": failure.as_error()}
 
@@ -790,29 +798,137 @@ def git_failure(reason: str) -> dict:
     return {"committed": False, "reason": reason}
 
 
-def commit_work_root(work_root: Path, message: str) -> dict:
-    """Commit the work root's own paths. History belongs to Git, not to this runtime."""
+def recovery_command(work_root: Path, message: str, paths: list) -> str:
+    base = ["git", "-C", str(work_root), LITERAL_PATHSPECS]
+    return (
+        shlex.join(base + ["add", "--", *paths])
+        + " && "
+        + shlex.join(base + ["commit", "-m", message, "--", *paths])
+    )
+
+
+def commit_failure(work_root: Path, message: str, paths: list, reason: str) -> dict:
+    return dict(
+        git_failure(reason), paths=paths, command=recovery_command(work_root, message, paths)
+    )
+
+
+def own_paths(work_root: Path, expected: dict) -> dict:
+    """Map each expected path inside the work root to its path relative to it, in Git's form.
+
+    Local state under `.state/` is ignored by Git and never committed, so it is dropped too.
+    """
+    root = work_root.resolve()
+    inside = {}
+    for path, digest in expected.items():
+        candidate = Path(path)
+        absolute = candidate if candidate.is_absolute() else root / candidate
+        try:
+            relative = absolute.parent.resolve().joinpath(absolute.name).relative_to(root)
+        except ValueError:
+            continue
+        if relative.parts[:1] == (STATE_DIRECTORY,):
+            continue
+        inside[relative.as_posix()] = (absolute, digest)
+    return inside
+
+
+def run_git_retrying(work_root: Path, arguments: list):
+    """Run git, retrying a few times while another process holds `index.lock`."""
+    completed = run_git(work_root, arguments)
+    for delay in INDEX_LOCK_RETRY_DELAYS:
+        if completed is None or completed.returncode == 0 or "index.lock" not in (completed.stderr or ""):
+            break
+        time.sleep(delay)
+        completed = run_git(work_root, arguments)
+    return completed
+
+
+def commit_expected(work_root: Path, message: str, paths: list) -> dict:
+    def failed(reason: str) -> dict:
+        return commit_failure(work_root, message, paths, reason)
+
+    staged = run_git_retrying(work_root, [LITERAL_PATHSPECS, "add", "--", *paths])
+    if staged is None or staged.returncode != 0:
+        return failed("git add failed: " + first_line(staged))
+    staged_diff = run_git(work_root, [LITERAL_PATHSPECS, "diff", "--cached", "--quiet", "--", *paths])
+    if staged_diff is None:
+        return failed("git diff failed: " + first_line(staged_diff))
+    if staged_diff.returncode == 0:
+        return git_failure("the applied records match the committed ones, so there was nothing to commit")
+    arguments = [LITERAL_PATHSPECS, "-c", "commit.gpgsign=false", "commit", "-m", message, "--", *paths]
+    committed = run_git_retrying(work_root, arguments)
+    if committed is None or committed.returncode != 0:
+        return failed("git commit failed: " + first_line(committed))
+    head = run_git(work_root, ["rev-parse", "HEAD"])
+    return {"committed": True, "commit": head.stdout.strip() if head else None}
+
+
+def untracked_ignored(work_root: Path, paths: list) -> set | None:
+    """The paths Git neither tracks nor accepts for `add` because a .gitignore rule matches them."""
+    listed = run_git(
+        work_root,
+        [LITERAL_PATHSPECS, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--", *paths],
+    )
+    if listed is None or listed.returncode != 0:
+        return None
+    return set(filter(None, listed.stdout.split("\0")))
+
+
+def commit_work_root(work_root: Path, message: str, expected: dict) -> dict:
+    """Commit exactly the expected paths inside the work root, and only while they hold what was written.
+
+    `expected` maps an absolute path to the digest of the content the operation wrote there.
+    Paths outside the work root are dropped, and so are untracked paths a .gitignore rule
+    matches, which `git add` refuses. History belongs to Git, not to this runtime.
+    """
     reason = unversioned_reason(work_root, git_toplevel(work_root))
     if reason is not None:
         return git_failure(
             f"the work root {reason}, so this transition is not versioned and backup and "
             "restore are unavailable"
         )
-    # A glob prefix avoids Git rejecting an explicitly named ignored directory.
-    paths = [".", ":(exclude,glob)[.]state/**"]
-    staged = run_git(work_root, ["add", "-A", "--", *paths])
-    if staged is None or staged.returncode != 0:
-        return git_failure("git add failed: " + first_line(staged))
-    staged_diff = run_git(work_root, ["diff", "--cached", "--quiet", "--", *paths])
-    if staged_diff is None:
-        return git_failure("git diff failed: " + first_line(staged_diff))
-    if staged_diff.returncode == 0:
-        return git_failure("the applied records match the committed ones, so there was nothing to commit")
-    committed = run_git(work_root, ["-c", "commit.gpgsign=false", "commit", "-m", message, "--", *paths])
-    if committed is None or committed.returncode != 0:
-        return git_failure("git commit failed: " + first_line(committed))
-    head = run_git(work_root, ["rev-parse", "HEAD"])
-    return {"committed": True, "commit": head.stdout.strip() if head else None}
+    owned = own_paths(work_root, expected)
+    if not owned:
+        return git_failure(
+            "the operation wrote no path inside the work root, so there was nothing to commit"
+        )
+    ignored = untracked_ignored(work_root, sorted(owned))
+    if ignored is None:
+        return git_failure("git ls-files failed, so no path was staged; check the repository and re-run")
+    paths = sorted(set(owned) - ignored)
+    if not paths:
+        return git_failure(
+            "every path the operation wrote is untracked and ignored by Git, so there was nothing left to commit"
+        )
+    changed = [path for path in paths if current_digest(owned[path][0]) != owned[path][1]]
+    if changed:
+        return dict(
+            commit_failure(
+                work_root,
+                message,
+                paths,
+                "these files changed after the operation wrote them, so nothing was committed; "
+                "review the changed files, then run the command to commit all of the operation's "
+                "files as they are now",
+            ),
+            changed=changed,
+        )
+    return commit_expected(work_root, message, paths)
+
+
+def change_digests(entries: list) -> dict:
+    """The path and written digest of each plan or journal entry."""
+    return {str(entry["path"]): entry["after"] for entry in entries}
+
+
+def written_views(views_result: dict) -> dict:
+    render = views_result.get("render") or {}
+    return {entry["path"]: entry["digest"] for entry in render.get("written", [])}
+
+
+def touched_items(entries: list) -> set:
+    return {entry["seq"] for entry in entries}
 
 
 def first_line(completed) -> str:
@@ -828,8 +944,9 @@ def commit_operation(request, work_root: Path, namespace: dict, command: str, do
     apply_planned_changes(plan)
     result = operation_result(operation_id, namespace, plan)
     mark_operation_applied(work_root, document, result)
-    result["views"] = regenerate_views(request)
-    result["commit"] = commit_work_root(work_root, f"session-flow: {command} {operation_id}")
+    result["views"] = regenerate_views(request, touched_items(plan))
+    expected = {**change_digests(plan), **written_views(result["views"])}
+    result["commit"] = commit_work_root(work_root, f"session-flow: {command} {operation_id}", expected)
     document["views"], document["commit"] = result["views"], result["commit"]
     write_json(operation_path(work_root, operation_id), document)
     return result
@@ -1225,16 +1342,96 @@ def current_digest(path) -> str | None:
     candidate = Path(path)
     if not candidate.is_file():
         return None
+    with candidate.open(encoding="utf-8", newline="") as handle:
+        return records.digest(handle.read())
+
+
+RECORD_WRITE_KEYS = {
+    "capture": records.CAPTURE_KEYS,
+    "revise": records.REVISE_KEYS,
+    "accept": records.ACCEPT_KEYS,
+}
+UNREADABLE_FILE = (OSError, UnicodeDecodeError)
+
+
+def refresh_written_views(request: dict, seq: str) -> dict:
+    try:
+        return regenerate_views(request, {seq})
+    except UNREADABLE_FILE as failure:
+        return {
+            "refreshed": False,
+            "reason": f"the record was written but its views could not be refreshed ({failure}); "
+            "fix the unreadable file and run render",
+        }
+
+
+def commit_written_record(work_root: Path, message: str, expected: dict) -> dict:
+    try:
+        return commit_work_root(work_root, message, expected)
+    except UNREADABLE_FILE as failure:
+        return git_failure(
+            f"the record was written but a file could not be read for the commit ({failure}); "
+            "fix the unreadable file and commit the record by hand"
+        )
+
+
+def locked_record_write(request: dict, handler) -> dict:
+    """Run a records handler under the root lock, then render and commit its record and views."""
+    command = request["command"]
+    payload = records.require_payload(request, command)
+    records.check_payload_keys(payload, command, RECORD_WRITE_KEYS[command])
+    work_root = resolved_work_root(request)
+    with root_lock(work_root, coordinator_name(payload), requested_takeover(payload)):
+        result = handler(request)
+        identity = result["identity"]
+        result["views"] = refresh_written_views(request, identity["seq"])
+        expected = {result["path"]: result["digest"], **written_views(result["views"])}
+        message = f"session-flow: {command} {records.record_name(identity)}"
+        result["commit"] = commit_written_record(work_root, message, expected)
+    return result
+
+
+def render(request: dict) -> dict:
+    """Write the generated views under the root lock, so a render never races a mutation."""
+    from session_flow import views
+
+    payload = request.get("input") if isinstance(request.get("input"), dict) else {}
+    work_root = resolved_work_root(request)
+    with root_lock(work_root, coordinator_name(payload), requested_takeover(payload)):
+        return views.render(request)
+
+
+def capture(request: dict) -> dict:
+    return locked_record_write(request, records.capture)
+
+
+def revise(request: dict) -> dict:
+    return locked_record_write(request, records.revise)
+
+
+def accept(request: dict) -> dict:
+    return locked_record_write(request, records.accept)
+
+
+def newline_normalised_digest(path) -> str | None:
+    """The digest of the file's text with line endings translated, as older journals recorded it."""
+    candidate = Path(path)
+    if not candidate.is_file():
+        return None
     return records.digest(candidate.read_text(encoding="utf-8"))
 
 
 def change_state(change: dict) -> dict:
-    """Classify one journalled change against the file that is on disk now."""
+    """Classify one journalled change against the file that is on disk now.
+
+    A journal from an older version holds the digest of the newline-translated text, so either form matches.
+    """
     held = current_digest(change.get("path"))
+    held_forms = {held, newline_normalised_digest(change.get("path"))}
     report = {"path": change.get("path"), "seq": change.get("seq"), "task": change.get("task")}
-    if held == change.get("after"):
+    if change.get("after") in held_forms:
         return dict(report, state=APPLIED)
-    if held != change.get("before"):
+    if change.get("before") not in held_forms:
         return dict(
             report,
             state=DIVERGED,
@@ -1314,19 +1511,22 @@ def reconcile(request: dict) -> dict:
     validate_bindings(work_root, namespace["repositories"])
     takeover = requested_takeover(payload) or {"reason": "recovering prepared operations"}
     with root_lock(work_root, coordinator_name(payload), takeover, allow_pending=True):
-        operations = [
-            reconcile_operation(work_root, namespace, document)
-            for document in pending_operations(work_root)
-        ]
+        documents = pending_operations(work_root)
+        operations = [reconcile_operation(work_root, namespace, document) for document in documents]
         blocked = [entry["operation"] for entry in operations if entry["state"] == BLOCKED]
-        views = regenerate_views(request)
+        changes = [change for document in documents for change in document.get("changes") or []]
+        views = regenerate_views(request, touched_items(changes))
         commit = (
             git_failure(
                 "reconciliation is blocked on unexplained divergence, so nothing was committed; "
                 "resolve the named files and run reconcile again"
             )
             if blocked
-            else commit_work_root(work_root, f"session-flow: reconcile {len(operations)} operation(s)")
+            else commit_work_root(
+                work_root,
+                f"session-flow: reconcile {len(operations)} operation(s)",
+                {**change_digests(changes), **written_views(views)},
+            )
         )
         return {
             "state": BLOCKED if blocked else RESOLVED,
@@ -1682,8 +1882,12 @@ def resume_operation(request: dict, work_root: Path, namespace: dict, document: 
             changes=resumed["changes"],
         )
     result = dict(resumed["result"], resumed=True, changed=True)
-    result["views"] = regenerate_views(request)
-    result["commit"] = commit_work_root(work_root, f"session-flow: {IMPORT_COMMAND} {operation_id}")
+    changes = document.get("changes") or []
+    result["views"] = regenerate_views(request, touched_items(changes))
+    expected = {**change_digests(changes), **written_views(result["views"])}
+    result["commit"] = commit_work_root(
+        work_root, f"session-flow: {IMPORT_COMMAND} {operation_id}", expected
+    )
     return result
 
 
@@ -1763,18 +1967,28 @@ def bound_repositories(existing: list, binding) -> list:
     return existing + [binding]
 
 
-def ignore_local_state(work_root: Path) -> bool:
-    """Keep persistent local journals out of Git status as well as commits."""
+def ignore_local_state(work_root: Path) -> dict:
+    """Keep persistent local journals out of Git status as well as commits.
+
+    Returns the digest of the .gitignore text written, keyed by its path, or nothing when no write was needed.
+    """
     if unversioned_reason(work_root, git_toplevel(work_root)) is not None:
-        return False
+        return {}
     path = ensure_plain_path(work_root, work_root / ".gitignore")
     existing = path.read_text(encoding="utf-8") if path.exists() else ""
     rule = f"/{STATE_DIRECTORY}/"
     if rule in existing.splitlines():
-        return False
+        return {}
     separator = "\n" if existing and not existing.endswith("\n") else ""
-    write_atomic(path, existing + separator + rule + "\n")
-    return True
+    text = existing + separator + rule + "\n"
+    write_atomic(path, text)
+    return {str(path): records.digest(text)}
+
+
+def write_namespace(work_root: Path, document: dict) -> dict:
+    text = json_text(document)
+    write_atomic(namespace_path(work_root), text)
+    return {str(namespace_path(work_root)): records.digest(text)}
 
 
 def bind_namespace(request: dict) -> dict:
@@ -1808,17 +2022,17 @@ def bind_namespace(request: dict) -> dict:
         repositories = validate_bindings(work_root, bound_repositories(document["repositories"], binding))
         changed = created or repositories != document["repositories"]
         document["repositories"] = repositories
-        ignored = ignore_local_state(work_root)
+        written = ignore_local_state(work_root)
         if changed:
-            write_json(namespace_path(work_root), document)
-        changed = ignored or changed
+            written.update(write_namespace(work_root, document))
+        changed = bool(written)
         return dict(
             document,
             created=created,
             changed=changed,
             path=str(namespace_path(work_root)),
             commit=(
-                commit_work_root(work_root, "session-flow: bind namespace")
+                commit_work_root(work_root, "session-flow: bind namespace", written)
                 if changed
                 else git_failure("the namespace was already bound, so there was nothing to commit")
             ),
@@ -1903,6 +2117,41 @@ def versioning_report(work_root: Path) -> dict:
     return report
 
 
+def non_executable_hooks(hooks_path: Path) -> list:
+    if not hooks_path.is_dir():
+        return []
+    return sorted(
+        entry.name
+        for entry in hooks_path.iterdir()
+        if entry.is_file() and not entry.name.endswith(".sample") and not os.access(entry, os.X_OK)
+    )
+
+
+def commit_readiness(work_root: Path) -> dict:
+    """What a commit in the work root would meet: Git directory access and the hooks Git would run."""
+    unversioned = {
+        "versioned": False,
+        "git_dir": None,
+        "git_dir_writable": None,
+        "hooks_path": None,
+        "non_executable_hooks": [],
+    }
+    if not work_root.is_dir() or unversioned_reason(work_root, git_toplevel(work_root)) is not None:
+        return unversioned
+    git_dir = git_value(work_root, ["rev-parse", "--absolute-git-dir"])
+    hooks = git_value(work_root, ["rev-parse", "--git-path", "hooks"])
+    if git_dir is None or hooks is None:
+        return unversioned
+    hooks_path = work_root / hooks
+    return {
+        "versioned": True,
+        "git_dir": git_dir,
+        "git_dir_writable": os.access(git_dir, os.W_OK),
+        "hooks_path": str(hooks_path),
+        "non_executable_hooks": non_executable_hooks(hooks_path),
+    }
+
+
 def namespace_bootstrap(work_root: Path) -> dict:
     """Only an absent or empty store can receive a new identity during repair."""
     if work_root.is_symlink():
@@ -1933,12 +2182,17 @@ def work_root_report(request: dict) -> dict:
             "pending_operations": [],
             "reserved": [],
             "versioned": False,
+            "commit_readiness": commit_readiness(work_root),
             "limitations": [
                 f"no work directory at {work_root}: use /session-repair for a legacy backlog, "
                 "or /session-init for a new project; a non-directory path must be corrected first"
             ],
         }
-    report = {"locked": lock_directory(work_root).is_dir(), "bootstrap": bootstrap}
+    report = {
+        "locked": lock_directory(work_root).is_dir(),
+        "bootstrap": bootstrap,
+        "commit_readiness": commit_readiness(work_root),
+    }
     limitations = []
     for section in (namespace_report(work_root), journal_report(work_root), versioning_report(work_root)):
         limitations.extend(section.pop("limitations", []))

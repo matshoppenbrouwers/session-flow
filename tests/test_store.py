@@ -864,11 +864,239 @@ class WorkRootVersioningTest(StoreCase):
         self.assertEqual("2", self.git("rev-list", "--count", "HEAD").stdout.strip())
         self.assertIn('"lifecycle": "active"', self.git("show", "HEAD:seq-001/intent.md").stdout)
 
+    def test_a_commit_with_no_paths_of_its_own_leaves_a_staged_change_staged(self):
+        self.initialize_repository()
+        other = self.root / "seq-001" / "intent.md"
+        other.write_text(other.read_text(encoding="utf-8") + "\nStaged by another session.\n", encoding="utf-8")
+        self.git("add", "--", "seq-001/intent.md")
+        commit = store.commit_work_root(self.root, "session-flow: nothing", {})
+        self.assertFalse(commit["committed"], commit)
+        self.assertIn("nothing to commit", commit["reason"])
+        self.assertEqual("1", self.git("rev-list", "--count", "HEAD").stdout.strip())
+        self.assertEqual("seq-001/intent.md", self.git("diff", "--cached", "--name-only").stdout.strip())
+
     def test_an_unversioned_root_reports_that_it_was_not_committed(self):
         _, answer = self.run_cli("transition", payload("lifecycle-change.json"))
         commit = answer["result"]["commit"]
         self.assertFalse(commit["committed"])
         self.assertIn("backup and restore are unavailable", commit["reason"])
+
+
+CAPTURE_PAYLOAD = {
+    "scope": "A captured item whose record the commit must still find as written.",
+    "body": "## Original request\n\nCapture it.",
+    "metadata": {"title": "Capture under the commit guard"},
+}
+
+
+@unittest.skipUnless(GIT_AVAILABLE, NEEDS_GIT)
+class CommitOwnershipTest(StoreCase):
+    """The commit holds an operation's own paths, as written, and says how to finish it when it cannot."""
+
+    def setUp(self):
+        super().setUp()
+        (self.root / ".gitignore").write_text(".state/\nscratch/\n", encoding="utf-8")
+        initialize_repository(self.root)
+
+    def intent(self, seq="SEQ-001", task=None) -> Path:
+        return store.record_path(self.root, seq, task)
+
+    def append(self, path: Path, text: str) -> str:
+        path.write_text(path.read_text(encoding="utf-8") + text, encoding="utf-8")
+        return path.read_text(encoding="utf-8")
+
+    def head_paths(self) -> set:
+        return set(git(self.root, "show", "--name-only", "--format=", "HEAD").stdout.split())
+
+    def commit_count(self) -> str:
+        return git(self.root, "rev-list", "--count", "HEAD").stdout.strip()
+
+    def expected_for(self, *paths: Path) -> dict:
+        return {str(path): records.digest(path.read_text(encoding="utf-8")) for path in paths}
+
+    def run_recovery(self, commit: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(commit["command"], shell=True, capture_output=True, text=True, check=False)
+
+    def test_a_digest_mismatch_offers_a_command_for_every_path_of_the_operation(self):
+        intent, task = self.intent(), self.intent(task="A1")
+        self.append(intent, "\nWritten by the operation.\n")
+        self.append(task, "\nAlso written by the operation.\n")
+        expected = self.expected_for(intent, task)
+        self.append(task, "\nChanged by someone else afterwards.\n")
+        commit = store.commit_work_root(self.root, "session-flow: both", expected)
+        self.assertFalse(commit["committed"], commit)
+        self.assertEqual(["seq-001/tasks/A1.md"], commit["changed"])
+        self.assertEqual(["seq-001/intent.md", "seq-001/tasks/A1.md"], commit["paths"])
+        self.assertIn("review the changed files", commit["reason"])
+        self.assertEqual("1", self.commit_count())
+        recovered = self.run_recovery(commit)
+        self.assertEqual(0, recovered.returncode, recovered.stderr)
+        self.assertEqual({"seq-001/intent.md", "seq-001/tasks/A1.md"}, self.head_paths())
+
+    def test_a_new_path_that_gitignore_matches_is_left_out_and_the_rest_commits(self):
+        intent = self.intent()
+        self.append(intent, "\nWritten by the operation.\n")
+        ignored = self.root / "scratch" / "tasks-index.md"
+        ignored.parent.mkdir()
+        ignored.write_text("generated\n", encoding="utf-8")
+        commit = store.commit_work_root(self.root, "session-flow: one", self.expected_for(intent, ignored))
+        self.assertTrue(commit["committed"], commit)
+        self.assertEqual({"seq-001/intent.md"}, self.head_paths())
+
+    def test_an_operation_whose_every_path_is_ignored_fails_plainly_and_stages_nothing(self):
+        ignored = self.root / "scratch" / "tasks-index.md"
+        ignored.parent.mkdir()
+        ignored.write_text("generated\n", encoding="utf-8")
+        commit = store.commit_work_root(self.root, "session-flow: none", self.expected_for(ignored))
+        self.assertEqual(
+            {
+                "committed": False,
+                "reason": "every path the operation wrote is untracked and ignored by Git, "
+                "so there was nothing left to commit",
+            },
+            commit,
+        )
+        self.assertEqual("1", self.commit_count())
+        self.assertEqual("", git(self.root, "diff", "--cached", "--name-only").stdout)
+
+    def test_nothing_to_commit_carries_no_recovery_command(self):
+        intent = self.intent()
+        commit = store.commit_work_root(self.root, "session-flow: same", self.expected_for(intent))
+        self.assertFalse(commit["committed"], commit)
+        self.assertIn("nothing to commit", commit["reason"])
+        self.assertEqual({"committed", "reason"}, set(commit))
+
+    def test_a_non_ascii_path_that_gitignore_matches_is_left_out(self):
+        ignored = self.root / "scratch" / "r\u00e9sum\u00e9.md"
+        ignored.parent.mkdir()
+        ignored.write_text("generated\n", encoding="utf-8")
+        self.assertEqual(
+            {"scratch/r\u00e9sum\u00e9.md"}, store.untracked_ignored(self.root, ["scratch/r\u00e9sum\u00e9.md"])
+        )
+
+    def test_a_path_with_glob_characters_is_committed_alone_and_recovered_alone(self):
+        bracketed = self.root / "seq-001" / "notes[1].md"
+        lookalike = self.root / "seq-001" / "notes1.md"
+        bracketed.write_text("the operation's file\n", encoding="utf-8")
+        lookalike.write_text("someone else's file\n", encoding="utf-8")
+        expected = self.expected_for(bracketed)
+        committed = store.commit_work_root(self.root, "session-flow: bracket", expected)
+        self.assertTrue(committed["committed"], committed)
+        self.assertEqual({"seq-001/notes[1].md"}, self.head_paths())
+        self.assertIn("?? seq-001/notes1.md", git(self.root, "status", "--porcelain").stdout)
+
+        self.append(bracketed, "more\n")
+        expected = self.expected_for(bracketed)
+        self.append(bracketed, "and more\n")
+        failed = store.commit_work_root(self.root, "session-flow: again", expected)
+        self.assertFalse(failed["committed"], failed)
+        self.assertEqual(["seq-001/notes[1].md"], failed["paths"])
+        self.assertIn("--literal-pathspecs add", failed["command"])
+        self.assertIn("--literal-pathspecs commit", failed["command"])
+        self.assertEqual(0, self.run_recovery(failed).returncode)
+        self.assertEqual({"seq-001/notes[1].md"}, self.head_paths())
+
+    def request_for(self, command: str) -> dict:
+        document, seq = {
+            "capture": (CAPTURE_PAYLOAD, "SEQ-004"),
+            "revise": ({"expect_revision": 1, "metadata": {"priority": "P0"}}, "SEQ-001"),
+            "accept": (
+                dict(payload("acceptance.json"), actor=FIXTURE_COORDINATOR, expect_revision=1),
+                "SEQ-001",
+            ),
+        }[command]
+        return dict(self.request(command, document, seq=seq), namespace=NAMESPACE)
+
+    def assert_change_between_write_and_commit_is_caught(self, command: str) -> None:
+        request = self.request_for(command)
+        regenerate_views = store.regenerate_views
+        edited = []
+
+        def interfere(*arguments, **options):
+            record = self.intent(request["seq"])
+            edited.append(self.append(record, "\nAnother session edited this record.\n"))
+            return regenerate_views(*arguments, **options)
+
+        with mock.patch.object(store, "regenerate_views", side_effect=interfere):
+            result = getattr(store, command)(request)
+        self.assertFalse(result["commit"]["committed"], result["commit"])
+        self.assertIn("changed", result["commit"])
+        self.assertEqual(edited[0], self.intent(request["seq"]).read_text(encoding="utf-8"))
+        self.assertEqual("1", self.commit_count())
+
+    def test_a_capture_edited_after_it_was_written_is_not_committed(self):
+        self.assert_change_between_write_and_commit_is_caught("capture")
+
+    def test_a_revise_edited_after_it_was_written_is_not_committed(self):
+        self.assert_change_between_write_and_commit_is_caught("revise")
+
+    def test_an_accept_edited_after_it_was_written_is_not_committed(self):
+        self.assert_change_between_write_and_commit_is_caught("accept")
+
+    def test_a_record_write_returns_the_digest_of_the_text_it_wrote(self):
+        result = records.revise(self.request_for("revise"))
+        self.assertEqual(
+            records.digest(self.intent().read_text(encoding="utf-8")), result["digest"]
+        )
+
+    def test_a_render_failure_after_the_record_write_still_returns_the_record(self):
+        request = self.request_for("revise")
+        with mock.patch.object(store, "regenerate_views", side_effect=OSError(5, "I/O error")):
+            result = store.revise(request)
+        self.assertFalse(result["views"]["refreshed"])
+        self.assertIn("run render", result["views"]["reason"])
+        self.assertEqual("SEQ-001", result["identity"]["seq"])
+        self.assertEqual("P0", self.record_metadata()["priority"])
+
+    def test_an_unreadable_file_during_the_commit_is_reported_with_the_record(self):
+        request = self.request_for("revise")
+        failure = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+        with mock.patch.object(store, "commit_work_root", side_effect=failure):
+            result = store.revise(request)
+        self.assertFalse(result["commit"]["committed"])
+        self.assertIn("could not be read", result["commit"]["reason"])
+        self.assertEqual("SEQ-001", result["identity"]["seq"])
+
+
+class RecordWriteValidationTest(StoreCase):
+    """A request the handler would refuse never takes the root lock, not even over a dead owner."""
+
+    def test_an_unknown_key_is_refused_before_a_takeover_happens(self):
+        held = self.install_owner("gone-owner.json", host=store.current_host())
+        document = dict(CAPTURE_PAYLOAD, scrope="a misspelt key", takeover={"reason": "owner is gone"})
+        request = dict(self.request("capture", document, seq="SEQ-004"), namespace=NAMESPACE)
+        with self.assertRaises(InvalidRequestError) as raised:
+            store.capture(request)
+        self.assertIn("scrope", str(raised.exception))
+        self.assertEqual(held["token"], store.read_owner(self.root)["token"])
+
+    def test_a_valid_request_may_take_over_a_dead_owners_lock(self):
+        self.install_owner("gone-owner.json", host=store.current_host())
+        document = dict(CAPTURE_PAYLOAD, takeover={"reason": "owner is gone"})
+        request = dict(self.request("capture", document, seq="SEQ-004"), namespace=NAMESPACE)
+        result = store.capture(request)
+        self.assertEqual("SEQ-004", result["identity"]["seq"])
+        self.assertFalse(store.lock_directory(self.root).exists())
+
+
+class RenderCommandTest(StoreCase):
+    """`render` writes views under the root lock like every other writing command."""
+
+    def test_render_is_refused_while_another_holder_has_the_root_lock(self):
+        ownership = store.acquire_lock(self.root, "session-delegation")
+        self.addCleanup(store.release_lock, self.root, ownership)
+        before = snapshot(self.root)
+        completed, answer = self.run_cli("render")
+        self.assertEqual(1, completed.returncode, completed.stdout)
+        self.assertEqual("root-busy", answer["error"]["code"])
+        self.assertEqual(before, snapshot(self.root))
+
+    def test_render_works_without_a_state_directory_and_releases_the_lock(self):
+        shutil.rmtree(store.state_directory(self.root))
+        completed, answer = self.run_cli("render")
+        self.assertEqual(0, completed.returncode, answer)
+        self.assertTrue((self.project / "_devdocs" / "SEQUENCE.md").is_file())
+        self.assertFalse(store.lock_directory(self.root).exists())
 
 
 class StrictPayloadTest(StoreCase):
@@ -1278,6 +1506,27 @@ class InterruptedOperationTest(RecoveryCase):
         self.assertTrue(journal["result"]["recovered"])
         self.assertEqual([], temporary_files(self.root))
 
+    def test_reconcile_finishes_an_operation_on_a_record_saved_with_crlf_endings(self):
+        intent = self.root / "seq-001" / "intent.md"
+        intent.write_bytes(intent.read_bytes().replace(b"\n", b"\r\n"))
+        self.crash_during("apply_planned_changes", payload("lifecycle-change.json"))
+        journal = store.load_operation(self.root, "op-lifecycle-0001")
+        self.assertEqual(store.current_digest(intent), journal["changes"][0]["before"])
+        self.assertEqual(1, self.revision())
+        answer = self.reconcile()
+        self.assertEqual("resolved", answer["state"], answer)
+        self.assertEqual(2, self.revision())
+        self.assertEqual("active", self.record_metadata()["lifecycle"])
+
+    def test_a_journal_that_recorded_a_newline_translated_digest_still_matches(self):
+        intent = self.root / "seq-001" / "intent.md"
+        intent.write_bytes(intent.read_bytes().replace(b"\n", b"\r\n"))
+        change = {"path": str(intent), "before": records.digest(intent.read_text(encoding="utf-8"))}
+        self.assertEqual(store.APPLIED, store.change_state(dict(change, after=change["before"]))["state"])
+        self.assertEqual(
+            store.DIVERGED, store.change_state(dict(change, before="sha256:0", after="sha256:1"))["state"]
+        )
+
     def test_reconcile_finishes_a_partially_applied_operation(self):
         self.apply_only_the_first_change(payload("two-record-change.json"))
         self.assertEqual(2, self.revision())
@@ -1636,7 +1885,7 @@ class VersioningReportTest(StoreCase):
 
     def test_a_transition_on_an_ignored_nested_root_names_the_unversioned_reason(self):
         self.enclosing_repository_with_a_remote()
-        commit = store.commit_work_root(self.root, "session-flow: transition")
+        commit = store.commit_work_root(self.root, "session-flow: transition", {})
         self.assertFalse(commit["committed"])
         self.assertIn("ignored by the enclosing repository", commit["reason"])
 
