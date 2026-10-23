@@ -1,6 +1,6 @@
 ---
 name: session-post-implementation
-description: Post-implementation refinement workflow. Use after completing a major feature or plan implementation to simplify, review, and document the code. Triggers on "/session-post-implementation" or when user says "run the iteration workflow" or "polish this implementation".
+description: Post-implementation refinement workflow. Use after completing a major feature or plan implementation to review, test, and document the code. Simplifying is an opt-in add-on. Triggers on "/session-post-implementation" or when user says "run the iteration workflow" or "polish this implementation".
 ---
 
 # Post-Implementation Refinement
@@ -20,9 +20,9 @@ Use AskUserQuestion:
 - header: "Scope"
 - multiSelect: false
 - options:
-  - A) label: "Full pipeline (Recommended)", description: "All steps: simplify, review, security & liability audit, test suite, architecture docs, and manual test plan. Best after completing a major feature."
-  - B) label: "Standard", description: "Simplify, review, test suite, and commit. Skips security audit, architecture docs, and manual test plan."
-  - C) label: "Quick", description: "Simplify, review, and commit only. Fastest option for minor changes."
+  - A) label: "Full pipeline (Recommended)", description: "Review, security & liability audit, test suite, architecture docs, and manual test plan. Best after completing a major feature."
+  - B) label: "Standard", description: "Review, test suite, and commit. Skips security audit, architecture docs, and manual test plan."
+  - C) label: "Quick", description: "Review and commit only. Fastest option for minor changes."
 
 **Recommend by consequence, not size.** Read the work item's accepted scope first, then name one
 recommended preset and the reason for it in the same message as the question. A change is
@@ -38,7 +38,7 @@ resolved.
 
 | Step | Full | Standard | Quick |
 |------|------|----------|-------|
-| 1. Simplify | yes | yes | yes |
+| 1. Simplify | - | - | - |
 | 2. Review | yes | yes | yes |
 | 3. Security & Liability Audit | yes | - | - |
 | 4. Commit checkpoint | yes | yes | yes |
@@ -47,10 +47,12 @@ resolved.
 | 7. Manual test plan | yes | - | - |
 | 8. Final commit | yes | yes | - |
 
+Simplify is off in every preset. The user adds it as an add-on (Question 2).
+
 Verification (`/session-verify`) is never part of the step set. Step 7.5 offers it on its own
 criteria.
 
-**Question 2: Add-ons** (only ask if user chose Standard or Quick)
+**Question 2: Add-ons** (ask for every preset, because Simplify is off in all of them)
 
 Show the steps NOT included in their chosen scope as add-on options.
 
@@ -59,8 +61,9 @@ Use AskUserQuestion:
 - header: "Add-ons"
 - multiSelect: true
 - options (pick from the table above — only show steps marked "-" for the chosen scope, max 4):
-  - If **Standard**: "Security & Liability Audit", "Architecture docs", "Manual test plan"
-  - If **Quick**: "Security & Liability Audit", "Test suite", "Architecture docs", "Manual test plan"
+  - If **Full**: "Simplify", "None"
+  - If **Standard**: "Simplify", "Security & Liability Audit", "Architecture docs", "Manual test plan"
+  - If **Quick**: "Simplify", "Security & Liability Audit", "Test suite", "Architecture docs" (the manual test plan is available through "Other")
 
 The user can select multiple, or choose "Other" and type "none" to proceed without extras.
 
@@ -160,6 +163,8 @@ here is one input to it.
 
 ### Step 1: Simplify
 
+**Run when:** 1 is in the resolved step set, which only happens when the user chose Simplify in Question 2.
+
 Run the code-simplifier agent to elegantly simplify the implementation without losing functionality.
 
 Try dispatching code-simplifier in this order:
@@ -181,7 +186,7 @@ Run the code-reviewer agent to identify issues.
 
 ```
 Task tool: subagent_type="code-reviewer"
-prompt: "Review the recent code changes for bugs, logic errors, security vulnerabilities, and code quality issues. Do not run the full test suite at this stage"
+prompt: "Review the recent code changes and report only findings that affect correctness or the accepted requirements: bugs, logic errors, security vulnerabilities, and requirements the change does not meet. Do not report style or simplification suggestions. Do not run the full test suite at this stage"
 ```
 
 If issues are found:
@@ -236,13 +241,13 @@ If findings are reported:
 
 ### Step 4: Commit (Checkpoint)
 
-Commit the simplified and reviewed code, following the staging rule with the authorized paths the
-snapshot and Steps 1-3 produced:
+Commit the reviewed code (including the simplified code, if Step 1 ran), following the staging rule
+with the authorized paths the snapshot and Steps 1-3 produced:
 
 ```bash
 git add -- <authorized paths>
 git diff --cached --name-only
-git commit --only -- <authorized paths> -m "refactor: simplify and address review feedback"
+git commit --only -- <authorized paths> -m "fix: address review feedback"
 ```
 
 This creates a checkpoint before the test suite and documentation steps.
@@ -264,6 +269,8 @@ Detect and use the project's test runner:
 3. Do NOT proceed to documentation until tests are green
 
 **Phase exit criterion:** full test suite returns zero failures. The exact command + pass/fail counts must be captured in the final commit message or a note to the user. "Tests probably pass" is not acceptable — show the output.
+
+**Record the run as evidence.** Record the suite run as an evidence entry on the item (`revise`, appending after the stored entries). The entry carries the `criteria` it covers, the item's current `fingerprint` from `show`, the `result` (`pass` or `fail`), the exact `command`, the `environment` (interpreter, lockfile, variables that matter) and the code `revision`. Run `session-flow.py schema revise` for the payload fields. `/session-verify` can then reuse a passing entry through `reused_from` while it still applies to the current fingerprint and the tested paths are unchanged.
 
 ### Step 6: Update Architecture Docs
 

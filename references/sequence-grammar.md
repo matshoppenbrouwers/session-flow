@@ -24,6 +24,7 @@ The sequence is a flat list of one-line entries in stored display order, one per
 | `SEQ-NNN` | The record's immutable `seq` |
 | `P1`/`P2`/`P3` | Its `priority`; entries sort by `order`, then identity |
 | `[auto]` (after the priority) | `provenance.auto` — a skill enqueued it, not the user |
+| ` (acceptance stale)` (after the title, before any ` ⇄ `) | Lifecycle `accepted` or `active`, with an acceptance block that no longer names the current scope fingerprint |
 | ` ⇄ <url>` (before the trailing token) | One `annotations` entry: this item and that external item are the same work |
 | ` → <link>` (trailing) | `links.breakdown`, plus `#anchor` when the link carries one. Whatever the record holds: the item's own task view, or a historical path preserved by import |
 | `(needs breakdown)` (trailing) | `needs_breakdown`, when no breakdown link exists |
@@ -56,6 +57,21 @@ Position is load-bearing in both directions: an annotation after the link would 
 unresolvable, and an annotation after the trailing token would be unfindable. Both resolve to one
 rule the renderer follows — annotations go immediately before the trailing token, or at end of line
 when the entry has neither.
+
+## The ` (acceptance stale)` marker
+
+` (acceptance stale)` says an `accepted` or `active` item was accepted for a scope it no longer has,
+so dependent work is blocked until it is accepted again. It follows the title:
+
+```
+- [ ] SEQ-012 P2 [auto]: Rename the export flag (acceptance stale) ⇄ https://github.com/o/r/issues/9 → work/seq-012/tasks/_index.md
+```
+
+It is not a trailing token. It sits before any annotations and the trailing token, so the
+one-trailing-token rule above is unchanged and a reader that strips one trailing token and reads the
+annotations from the tail still parses the line. The marker is absent when acceptance applies, when
+the record carries no acceptance block, and for every other lifecycle. The task view marks the same
+state in the lifecycle cell as `accepted (stale)` or `active (stale)`.
 
 ## The ` ⇄ <url>` source key
 

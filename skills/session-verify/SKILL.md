@@ -5,7 +5,7 @@ description: Evidence-based verification workflow for completed features and pla
 
 # Session Verify
 
-Produce evidence-based proof that a completed implementation matches its design and plan, or a falsification artifact identifying gaps. This is a heavy skill — expect hours, not minutes.
+Produce evidence-based proof that a completed implementation matches its design and plan, or a falsification artifact identifying gaps. A full run is heavy, but existing applicable evidence shortens it.
 
 Open with one sentence saying what you are about to do and what it will produce.
 
@@ -62,18 +62,27 @@ Required inputs:
 - **Work item identity** — `SEQ-NNN`, resolved in Step 0. Everything else hangs off it.
 - **Scope label** — kebab-case, used for artifact naming (e.g. `banner-redesign`, `hybrid-search`).
 - **Memory source (optional)** — claude-mem MCP, session transcripts, or PR list that captures implementation history and any flagged defects.
-- **Verification ambition** — multiple choice: (A) structural-only, (B) structural + functional, (C) exhaustive (structural + functional + integration + spec-vs-reality gap). Default C unless the user picks otherwise.
 
 Confirm these inputs before proceeding. Do not guess.
 
+**Assess before running.** Verification follows one procedure, whatever the size of the item:
+
+1. List the accepted criteria from the scope region (Step 0).
+2. Map existing applicable evidence to each criterion: the record's `metadata.evidence`, delegation's recorded suite run, and earlier logs under `_verification/`. Evidence applies only when it names the current fingerprint and its code revision still matches.
+3. Run only the checks that are missing, failing or stale. Steps 4 to 8 are the checks to choose from. Skip any that existing evidence already covers, and say which.
+4. Run the full suite only when no applicable passing full-suite result exists, recorded or reused (see *Reusing a result*).
+5. Record the verdict, with one evidence entry per criterion.
+
+An explicit request for exhaustive verification overrides this procedure: run everything and ignore existing evidence.
+
 ### Step 2: Scope Matrix
 
-Produce and confirm with the user a 6-row matrix that defines what "working" means for this verification. Present as a table. Adjust rows to match the ambition chosen in the Scope step.
+Produce and confirm with the user a 6-row matrix that defines what "working" means for this verification. Present as a table. A row that existing evidence already covers cites that evidence instead of a new run.
 
 | Row | Dimension | What must be true |
 |-----|-----------|-------------------|
 | 1 | **Structural** | Every module, class, and symbol in the plan exists with the documented signature |
-| 2 | **Functional** | The full test suite passes; claimed test counts are present; migrations apply cleanly |
+| 2 | **Functional** | One applicable passing full-suite result exists, run now or reused; claimed test counts are present; migrations apply cleanly |
 | 3 | **Defect regression** | Every defect flagged in prior reviews or memories is verified fixed — not claimed fixed |
 | 4 | **Integration** | End-to-end flows (IPC, RPC, UI↔backend) complete without silent failures |
 | 5 | **Frontend / UX** | New UI surface compiles, lints, and is actually reachable (not dead code) |
@@ -92,6 +101,8 @@ Before running anything, read:
 5. Any testing guide (`TESTING.md`, `_devdocs/guides/TESTING.md`) — **note if it is stale**; outdated testing docs are themselves a finding
 6. If memory source provided: query for relevant observations and extract any pre-flagged defects
 
+An item that carries `provenance.imported_from` is assessed from that import provenance and its breakdown link, both read as history. Rerun whatever that history does not show. A historical completion is never recorded as a fresh pass.
+
 Produce a written **hypothesis list** — one falsifiable hypothesis per non-trivial claim in the plan. Example: *"H1: The SQL wildcard injection flagged in review is still present because commit X did not touch history.py."* Hypotheses should be specific enough that you can design a single probe to kill each.
 
 **Phase exit criterion**: hypothesis list exists, written down, shared with the user.
@@ -109,7 +120,7 @@ Walk the claimed module surface with `Grep` and `Read`. For each claimed symbol,
 
 ### Step 5: Functional Test Execution
 
-Detect the project's test runner:
+Skip the full suite when step 4 of the procedure finds an applicable passing result: cite it and do not rerun. Otherwise detect the project's test runner:
 - Check `CLAUDE.md` / `AGENTS.md` for test instructions
 - Look for `scripts/run_tests.sh`, `scripts/run_tests_wsl.sh`, `Makefile` targets
 - Fall back to: `pytest` / `npm test` / `cargo test` / `go test` / `mvn test` as appropriate
@@ -123,9 +134,15 @@ Run:
 
 If a test fails, **do not fix it**. Record the failure, its symptom, and your root-cause hypothesis. Fixing is the user's call, not yours.
 
+Then compare the failing test ids with the project's known-failure baseline, `{paths.testing}/known-failures.md`, a table of test id, reason, owner and review date (format in `references/work-item-contract.md`):
+
+- A failure not in the baseline file is a `fail` entry and blocks completion.
+- A baseline test that now passes is reported for removal, and an entry past its review date is reported.
+- The evidence entry cites the file as `baseline: {path, commit}`. A baseline is never recorded as `waived`, and it never authorizes shipping a blocker: a listed test that fails against the accepted outcome stays `fail`.
+
 **Environment reality**: If the project has a WSL/Windows or Linux/macOS split, and a test cannot run in your current environment, mark it `DEFERRED-TO-{target}` and prepare an executable command for the user to run themselves. Do not silently skip.
 
-**Phase exit criterion**: test log captured, test-count delta reported, all failures enumerated with root-cause hypotheses.
+**Phase exit criterion**: test log captured or applicable result cited, test-count delta reported, all failures enumerated with root-cause hypotheses and compared with the baseline.
 
 ### Step 6: Defect Regression Probes
 
@@ -209,7 +226,9 @@ fingerprint it was gathered at:
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" revise --seq SEQ-042 --input "$PAYLOAD"
 ```
 
-For the fields of this and every other payload, run `python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" schema <command>`; the example above is the only one shown here.
+For the fields of this and every other payload, run `python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" schema <command>`; the example above is the only one shown here. The entry fields, including the optional `reused_from` and `baseline`, are tabulated in `references/work-item-contract.md`.
+
+**Reusing a result.** An entry that cites an earlier result instead of rerunning it carries `reused_from`: the commit the result ran at, a statement that the tested paths were clean (`git status --porcelain -- <paths>` printed nothing), the command, the interpreter and lockfile hash, and the environment variables that matter. Only passing results are reused. A failing or unverified result is rerun. The gate is unchanged and checks only that the entry applies, so the reuse decision is stated in the entry.
 
 Evidence entries with `source: "record-result"` are the implementing agent's own report. Reproduce or independently check them; do not count them as independent evidence. The entries you append must not carry `source: "record-result"`, because the runtime reserves that marker for itself and refuses the patch. Moving the item to `done` is judged by the gate on the record as written, with the new evidence and any scope change in the same payload, not on the stored record.
 
@@ -230,7 +249,7 @@ checked first.
 
 | Completion is refused when | Named error | What to do |
 |----------------------------|-------------|------------|
-| The accepted scope names a required delivery target that is not delivered — however many tasks passed | `inapplicable-evidence` | Leave the item `active`, name the target and what is missing, and say which authority the delivery needs. Merging is a separate action from implementing |
+| The accepted scope names a required delivery target that is not delivered — however many tasks passed | `inapplicable-evidence` | Leave the item `active`, name the target and what is missing, and say which authority the delivery needs. Merging is a separate action from implementing. For how delivery is done and receipted, see session-next, section "When the user asks to commit, push or deploy" |
 | Stale evidence: the latest entry for a criterion names a fingerprint the record no longer carries | `inapplicable-evidence` | Re-run that check against the current fingerprint and append a new entry for it after the stored ones. A same-meaning decision rebinds acceptance only and never re-binds an evidence entry. A stored verdict is evidence about the revision it was recorded against |
 | No evidence entry applies to the current fingerprint, including a record with no evidence at all | `inapplicable-evidence` | Run the verification and append an entry for the current fingerprint after the stored ones. A `waived` or `unverified` result counts as recorded, so state honestly what was not checked |
 | The latest applicable entry for a criterion has `result: fail` | `inapplicable-evidence` | Fix the cause, re-run the check and append the new result after the stored entries, or record a waiver |
@@ -286,7 +305,7 @@ Row 1..6 from the Scope Matrix with PASS/FAIL/N/A + one-line justification.
 Inventory table from the Structural Audit.
 
 ## Test Results
-- Full suite: pass/fail counts, duration, command
+- Full suite: pass/fail counts, duration, command, and whether run now or reused (`reused_from`)
 - Targeted subsets: same
 - Test-count delta (if applicable)
 - Migration replay (if applicable)
@@ -330,7 +349,7 @@ You are done when **all** are true:
 1. Artifact at `_verification/{date}-{label}-verification.md` exists and follows the contract exactly.
 2. Every row in the Hypotheses table has PASS or FAIL with cited evidence.
 3. All defect probes have been run; raw output is captured in Appendix A.
-4. The full test suite has been executed at least once with complete output preserved.
+4. One applicable passing full-suite result exists: run now with complete output preserved, or reused through `reused_from`.
 5. At least one integration probe has executed, **or** each skipped probe has a cited reason and a user-executable alternative.
 6. The verdict line is one of the three allowed values and is consistent with the Findings Ledger (a FAIL ledger with PASS verdict is not allowed).
 7. Each surviving check is recorded as an evidence entry against the current fingerprint, and the response confirms it applies.
@@ -339,7 +358,7 @@ You are done when **all** are true:
 
 ## Performance Budget
 
-This is a heavy skill. Expected cost: hours, not minutes. Not appropriate for:
+A full run is hours, not minutes; assessing first cuts that when evidence exists. Not appropriate for:
 
 - Bug fixes (just run the tests)
 - Single-file refactors

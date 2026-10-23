@@ -648,5 +648,141 @@ class ImportBoundary(LegacyImport):
         self.assertEqual(self.item_directories(), [seq.lower() for seq in IMPORTED])
 
 
+STALE_TOKEN = " (acceptance stale)"
+ANNOTATION_URL = "https://github.com/example/demo/issues/33"
+BREAKDOWN = "work/seq-501/tasks/_index.md"
+ACCEPTED_SCOPE = "Scope as accepted."
+REWRITTEN_SCOPE = "Scope rewritten after acceptance."
+
+
+def accepted_metadata(seq, lifecycle, scope, task=None, accepted=True, **extra):
+    """Metadata whose acceptance names the fingerprint of `scope`, as `accept` would record it."""
+    metadata = {
+        "format": 1, "namespace": NAMESPACE, "seq": seq, "revision": 1, "title": f"Title {seq}",
+        "lifecycle": lifecycle, "order": 1, "priority": "P2", "provenance": {"auto": False},
+    }
+    if task is not None:
+        metadata.update(task=task, parent=seq)
+    metadata.update(extra)
+    if accepted:
+        record = {"metadata": metadata, "scope": scope, "body": ""}
+        metadata["acceptance"] = {
+            "accepted_at": "2026-10-22T13:00:00Z",
+            "actor": "user:fixture",
+            "authority": {"revision": "9d2c1a4", "source": "the user accepted the scope"},
+            "fingerprint": records.scope_fingerprint(record),
+            "scope": ["implement"],
+        }
+    return metadata
+
+
+def write_accepted(work, seq, lifecycle, accepted_scope, current_scope, accepted=True, **extra):
+    """Write an item and its task A1, accepted for `accepted_scope` and then holding `current_scope`."""
+    directory = work / seq.lower()
+    (directory / "tasks").mkdir(parents=True, exist_ok=True)
+    item = accepted_metadata(seq, lifecycle, accepted_scope, accepted=accepted, **extra)
+    task = accepted_metadata(seq, lifecycle, accepted_scope, task="A1", accepted=accepted, **extra)
+    (directory / "intent.md").write_text(records.render_record(item, current_scope, ""), encoding="utf-8")
+    (directory / "tasks" / "A1.md").write_text(records.render_record(task, current_scope, ""), encoding="utf-8")
+
+
+class StaleAcceptanceViews(unittest.TestCase):
+    """SEQ-033/A1: an accepted or active item whose acceptance no longer applies says so in both views."""
+
+    def setUp(self):
+        self.project_root = Path(tempfile.mkdtemp(prefix="session-flow-stale-"))
+        self.addCleanup(shutil.rmtree, self.project_root, True)
+        self.request = request_for(self.project_root)
+        self.work = Path(self.request["work_root"])
+        write_accepted(
+            self.work, "SEQ-501", "accepted", ACCEPTED_SCOPE, REWRITTEN_SCOPE,
+            order=1, annotations=[ANNOTATION_URL], provenance={"auto": True}, links={"breakdown": BREAKDOWN},
+        )
+        write_accepted(self.work, "SEQ-502", "active", ACCEPTED_SCOPE, REWRITTEN_SCOPE, order=2)
+        write_accepted(self.work, "SEQ-503", "accepted", ACCEPTED_SCOPE, ACCEPTED_SCOPE, order=3)
+        write_accepted(self.work, "SEQ-504", "active", ACCEPTED_SCOPE, ACCEPTED_SCOPE, order=4)
+        write_accepted(self.work, "SEQ-505", "blocked", ACCEPTED_SCOPE, REWRITTEN_SCOPE, order=5)
+        write_accepted(self.work, "SEQ-506", "accepted", ACCEPTED_SCOPE, ACCEPTED_SCOPE, accepted=False, order=6)
+        views.render(self.request)
+        self.generated = Path(self.request["sequence_path"]).read_text(encoding="utf-8")
+
+    def line(self, seq):
+        found = [line for line in self.generated.splitlines() if line.startswith("- [") and f" {seq} " in line]
+        self.assertEqual(len(found), 1, f"{seq} should have one row in:\n{self.generated}")
+        return found[0]
+
+    def lifecycle_cell(self, seq):
+        view = (self.work / seq.lower() / "tasks" / "_index.md").read_text(encoding="utf-8")
+        rows = [row for row in view.splitlines() if f"{seq}/A1" in row]
+        self.assertEqual(len(rows), 1, view)
+        return rows[0].split("|")[3].strip()
+
+    def test_a_precondition_the_scope_really_changed_after_acceptance(self):
+        for seq, applies in (("SEQ-501", False), ("SEQ-502", False), ("SEQ-503", True), ("SEQ-504", True)):
+            record = records.read_record(self.work / seq.lower() / "intent.md")
+            self.assertEqual(records.acceptance_status(record)["applies"], applies, seq)
+
+    def test_an_accepted_item_with_a_changed_scope_renders_the_stale_token(self):
+        self.assertIn(STALE_TOKEN, self.line("SEQ-501"))
+
+    def test_an_active_item_with_a_changed_scope_renders_the_stale_token(self):
+        self.assertIn(STALE_TOKEN, self.line("SEQ-502"))
+
+    def test_the_token_follows_auto_and_precedes_the_annotation(self):
+        line = self.line("SEQ-501")
+        self.assertIn("[auto]", line)
+        self.assertIn(" \u21c4 " + ANNOTATION_URL, line)
+        self.assertEqual(line.count(STALE_TOKEN), 1, line)
+        self.assertLess(line.index("[auto]"), line.index(STALE_TOKEN), line)
+        self.assertLess(line.index(STALE_TOKEN), line.index(" \u21c4 "), line)
+
+    def test_the_token_is_not_the_trailing_token(self):
+        line = self.line("SEQ-501")
+        self.assertIn(STALE_TOKEN, line)
+        self.assertIn(" \u2192 ", line)
+        self.assertLess(line.index(STALE_TOKEN), line.index(" \u2192 "), line)
+        self.assertTrue(line.endswith(" \u2192 " + BREAKDOWN), line)
+
+    def test_a_stale_accepted_task_shows_accepted_stale(self):
+        self.assertEqual(self.lifecycle_cell("SEQ-501"), "accepted (stale)")
+
+    def test_a_stale_active_task_shows_active_stale(self):
+        self.assertEqual(self.lifecycle_cell("SEQ-502"), "active (stale)")
+
+    def test_an_item_whose_acceptance_applies_shows_neither_marker(self):
+        for seq, state in (("SEQ-503", "accepted"), ("SEQ-504", "active")):
+            with self.subTest(seq=seq):
+                self.assertNotIn("stale", self.line(seq))
+                self.assertEqual(self.lifecycle_cell(seq), state)
+
+    def test_other_lifecycles_show_neither_marker_even_when_the_scope_changed(self):
+        self.assertNotIn("stale", self.line("SEQ-505"))
+        self.assertEqual(self.lifecycle_cell("SEQ-505"), "blocked")
+
+    def test_a_record_carrying_no_acceptance_shows_neither_marker(self):
+        self.assertNotIn("stale", self.line("SEQ-506"))
+        self.assertEqual(self.lifecycle_cell("SEQ-506"), "accepted")
+
+
+class StaleAcceptanceImport(unittest.TestCase):
+    """SEQ-033/A1: imported records carry no acceptance, so an import round-trip never shows the token."""
+
+    def test_an_import_round_trip_shows_neither_marker(self):
+        project_root = Path(tempfile.mkdtemp(prefix="session-flow-stale-import-"))
+        self.addCleanup(shutil.rmtree, project_root, True)
+        shutil.copy(FIXTURES / "sequence-mixed.md", project_root / "sequence-mixed.md")
+        request = request_for(project_root, "sequence-mixed.md")
+        for item in views.import_sequence(request)["items"]:
+            path = Path(request["work_root"]) / item["path"]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(item["text"], encoding="utf-8")
+        views.render(request)
+        generated = Path(request["sequence_path"]).read_text(encoding="utf-8")
+        self.assertIn("SEQ-103", generated)
+        self.assertNotIn("stale", generated)
+        for index in Path(request["work_root"]).glob("seq-*/tasks/_index.md"):
+            self.assertNotIn("(stale)", index.read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

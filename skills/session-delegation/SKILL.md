@@ -18,6 +18,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 5. **Parallel means one message with several Task tool calls.** Not several sequential messages.
 6. **A task result is a task result.** Reaching `passed` on every named task does not complete the parent: that needs applicable evidence for the accepted outcome, which is `/session-verify`'s judgement.
 7. **The acceptance tests are written before the implementers start, by a different agent, and implementers never edit them.** `test-author` writes them from each task's accepted scope, so the tests measure the specification rather than the implementation's opinion of it. This is about who writes the oracle, not about designing through tests: the behaviour was fixed when the scope was accepted.
+8. **One actor per task, and one mutating call per record at a time.** Name each task's actor `agent:<task ID>`, and never reuse one actor across tasks. Never send two mutating runtime calls for the same record at once: a `claim`, `revise`, `record-result` or `transition` on a record finishes before the next one for that record starts, because each is checked against the revision the previous one wrote. Calls for different records may run in parallel.
 
 ## Prerequisites
 
@@ -98,7 +99,7 @@ The loop ends when the named IDs are `done`. Tasks outside the named set keep th
 
 ### Step 4: Claim, Then Dispatch
 
-Claim first. One payload per task, sent as a file, with `seq`, `task`, `actor`, `expect_revision` and `allowed_paths`. Run `session-flow.py schema claim` for the required and optional fields and an example.
+Claim first. One payload per task, sent as a file, with `seq`, `task`, `actor` (`agent:<task ID>`, as in Non-Negotiable 8), `expect_revision` and `allowed_paths`. Run `session-flow.py schema claim` for the required and optional fields and an example.
 
 ```bash
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" claim --seq SEQ-042 --task A2 --input "$PAYLOAD"
@@ -121,6 +122,14 @@ Task tool:
 You may only create or modify these paths: {allowed_paths}
 If the task requires touching anything else, stop and report — do not proceed.
 ```
+
+**Widening the boundary.** When an agent stops because the task needs a path outside `allowed_paths`, widen the boundary only with the user's approval, in this order:
+
+1. Ask the user and quote their approval, in their words, as the provenance for the change.
+2. Send `revise` with `expect_revision`, the full new list under `metadata.allowed_paths`, and the user's approval, in their words, in the `correction` field. Acceptance stays valid, because `allowed_paths` is outside the scope fingerprint.
+3. The same actor re-claims the task and sends the full new list. A claim replaces the previous claim's paths, so a list holding only the added path would drop the original ones.
+
+Run the Step 1 overlap check again before re-dispatching. Do not widen on your own, and do not hand the task to a different actor to get around the boundary.
 
 This is a prompt-level constraint, not a security boundary — nothing enforces it at the tool layer. Its value is that an agent which wanders stops and reports instead of writing, and violations become visible. It does **not** make wrongly parallelized tasks safe: disjoint write sets do not remove semantic dependencies, so the dependency analysis keeps its full weight.
 
@@ -167,7 +176,7 @@ For consequential tasks (P1, several files), optionally run after completion:
 Two records, kept apart. A task's result says its own checks passed. The item's aggregate acceptance says the accepted outcome holds, and only `/session-verify` establishes that.
 
 The run ends when every named task ID is `done`, or stops on one that cannot be closed (it is reported, not forced). Then:
-1. Run the project's full test suite and the accepted scope's own checks.
+1. Run the project's full test suite and the accepted scope's own checks. Record the suite run as an evidence entry on the item (`revise`, appending after the stored entries), with the exact `command`, the `environment` (interpreter, lockfile, variables that matter), the code `revision`, the `criteria` it covers, the item's current `fingerprint` from `show`, and the `result` (`pass` or `fail`). An entry without the current `fingerprint` never applies, and one without `result` fails the completion gate. `/session-verify` can then reuse a passing entry through `reused_from` instead of running the suite again, as long as it still applies to the current fingerprint and the tested paths are unchanged.
 2. Report the aggregate verdict separately from the per-task results. On failure, say the item is integration-failed, name the failing checks, and leave the task results as they are — they are still true.
 3. Report: the SEQ identity, the task IDs run, files changed, and any task of the same item left untouched.
 4. Say what the parent still needs — the tasks of the item outside the named set that are not yet `done`, and the `delivery` target the accepted scope requires — and suggest `/session-post-implementation` for refinement, then `/session-verify` for the outcome.

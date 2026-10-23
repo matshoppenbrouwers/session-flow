@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+### Changes
+
+- `/session-verify` has no modes, assesses first by mapping existing applicable evidence to each
+  accepted criterion, and reuses applicable results: it runs only the checks that are missing,
+  failing or stale. An evidence entry can carry `reused_from`, and a passing full-suite result is
+  reused instead of rerun when it still applies to the current fingerprint and the tested paths are
+  clean. An explicit request for exhaustive verification still runs everything.
+  `/session-delegation` records its suite run as an evidence entry so verify can reuse it.
+- The known-failure baseline is one project file, `{paths.testing}/known-failures.md`, a table of
+  test id, reason, owner and review date. `/session-verify` compares failing tests with it: a
+  failure not listed is a `fail` entry, a listed test that now passes is reported for removal, and
+  the evidence entry cites the file as `baseline`. A baseline is never recorded as `waived`.
+- `/session-post-implementation` no longer simplifies by default. Simplify is an add-on in every
+  preset, and the add-on question is asked for every preset. The checkpoint commit message is now
+  `fix: address review feedback`.
+- The reviewer's `Note` severity is removed from `code-reviewer`, and the verdict counts only
+  critical and warning findings. `/session-post-implementation` asks the reviewer to report only
+  findings that affect correctness or the accepted requirements.
+- The sequence marks an `accepted` or `active` item whose acceptance no longer names the current
+  scope fingerprint with ` (acceptance stale)` after the title. The task view shows the same state
+  as `accepted (stale)` or `active (stale)`. The marker is not a trailing token.
+- The `paths.runbook` key in the project config is optional. It points at the file that says how
+  the project commits, pushes and deploys. `/session-next` has a section for when the user asks to
+  commit, push or deploy: it finds the runbook, commits only the item's paths, checks the hooks,
+  pushes, checks the deployed revision and its health, and records `delivery.receipt`.
+- `/session-delegation` and `/session-next` state the widening sequence for `allowed_paths`: with
+  the user's approval quoted as provenance, `revise` changes the list and the same actor re-claims
+  with the full new list. Each task has its own actor, `agent:<task ID>`, and no two mutating
+  calls for the same record run at once.
+- `/session-task-planning` searches for the tests, schema baselines and docs that reference each
+  changed symbol and lists the ones a task edits in its `allowed_paths`. A file shared by every
+  item stays out of every task's `allowed_paths`.
+
 ## 3.0.0 (2026-10-22)
 
 ### Breaking changes

@@ -219,6 +219,31 @@ integration or delivery: completing every task does not by itself move the paren
 also needs applicable evidence and any required delivery. A record that is itself a task, and an
 item with no `tasks/` directory, owns no tasks and passes that clause.
 
+## Evidence entries
+
+Each entry in `metadata.evidence` is an open object. The completion gate reads only `criteria`, `result` and `fingerprint`; the other fields record what the check ran against and whether its result was reused.
+
+| Field | Rule |
+|-------|------|
+| `criteria` | The accepted criterion the entry covers. Only the latest entry per value counts. |
+| `fingerprint` | The record's `scope_fingerprint` when the check ran. An entry for any other fingerprint does not apply. |
+| `result` | `pass`, `fail`, `waived` or `unverified`. |
+| `revision` | The code or artifact revision the check ran against. |
+| `environment` | Where it ran. |
+| `limitations` | A list of what the check does not cover. |
+| `reused_from` | Optional, and only on a `pass` entry that cites an earlier result instead of rerunning it. An object with the `commit` the result ran at, a statement that the tested paths were clean (`git status --porcelain -- <paths>` printed nothing), the `command`, the interpreter and lockfile hash, and the environment variables that matter. |
+| `baseline` | Optional. `{path, commit}` of the known-failure file the failing test ids were compared with. A baseline is never recorded as `waived` and never authorizes shipping a blocker. |
+
+**The known-failure baseline** is one project file, `{paths.testing}/known-failures.md`. The project owns it; session-flow ships only this format: a Markdown file with one table, the review date in ISO form (`YYYY-MM-DD`).
+
+```markdown
+| Test id | Reason | Owner | Review date |
+|---------|--------|-------|-------------|
+| tests/test_export.py::test_large_file | Times out on the CI runner | @platform-team | 2026-12-01 |
+```
+
+A failing test that is not listed is a `fail` entry. A listed test that now passes, and an entry past its review date, are reported for removal or review.
+
 ## Acceptance and fingerprints
 
 Acceptance binds to a normalized fingerprint of what was accepted, not to a file name and not to a

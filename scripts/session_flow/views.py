@@ -55,6 +55,9 @@ ANNOTATION_RE = re.compile(r" ⇄ (?P<url>\S+)$")
 LOOKS_LIKE_ENTRY_RE = re.compile(r"^\s*[-*] \[")
 COMMENT_RE = re.compile(r"^\s*<!--.*-->\s*$")
 NEEDS_BREAKDOWN = " (needs breakdown)"
+STALE_ACCEPTANCE = " (acceptance stale)"
+STALE_LIFECYCLE_SUFFIX = " (stale)"
+STALE_LIFECYCLES = frozenset({"accepted", "active"})
 LINK_TOKEN = " → "
 ANNOTATION_TOKEN = " ⇄ "
 
@@ -500,9 +503,20 @@ def view_fields(metadata: dict, seq: str) -> dict:
     }
 
 
+def acceptance_is_stale(lifecycle: str, acceptance: dict | None) -> bool:
+    """True when an accepted or active record holds an acceptance that names an older fingerprint."""
+    return (
+        lifecycle in STALE_LIFECYCLES
+        and bool(acceptance)
+        and acceptance["accepted"]
+        and not acceptance["applies"]
+    )
+
+
 def render_entry(item: dict) -> str:
-    """Render one entry line: marker, identity, priority, provenance, annotations, one token."""
+    """Render one entry line: marker, identity, priority, provenance, stale mark, annotations, one token."""
     auto = " [auto]" if item["auto"] else ""
+    stale = STALE_ACCEPTANCE if acceptance_is_stale(item["lifecycle"], item.get("acceptance")) else ""
     annotations = "".join(ANNOTATION_TOKEN + url for url in item["annotations"])
     trailing = ""
     if item["links"].get("breakdown"):
@@ -513,7 +527,7 @@ def render_entry(item: dict) -> str:
     marker = STATE_MARKERS[item["lifecycle"]]
     return (
         f"- {marker} {item['seq']} {item['priority']}{auto}: "
-        f"{item['title']}{annotations}{trailing}"
+        f"{item['title']}{stale}{annotations}{trailing}"
     )
 
 
@@ -537,6 +551,7 @@ def task_records(directory: Path) -> list[dict]:
                 "task": record["identity"].get("task", path.stem),
                 "index": index,
                 "lifecycle": lifecycle_of(record),
+                "acceptance": acceptance_status(record),
                 "path": str(path),
             }
         )
@@ -585,8 +600,9 @@ def render_task_view(item: dict) -> str:
         "|---|---|---|",
     ]
     for task in item["tasks"]:
+        stale = STALE_LIFECYCLE_SUFFIX if acceptance_is_stale(task["lifecycle"], task.get("acceptance")) else ""
         lines.append(
-            f"| {task['index']} | {item['seq']}/{task['task']} | {task['lifecycle']} |"
+            f"| {task['index']} | {item['seq']}/{task['task']} | {task['lifecycle']}{stale} |"
         )
     return "\n".join(lines) + "\n"
 

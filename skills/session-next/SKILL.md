@@ -17,6 +17,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 4. **Record results through `record-result` against the claimed identity.** A `passed` result also closes a task; there is no separate `transition`. Never write completion into the sequence view or a task view — both are derived, and the next `render` discards anything typed there.
 5. **A passing task is not a delivered outcome.** A task result never moves its parent to `done`, and `record-result` on an item never changes the item's lifecycle. Parent completion needs applicable evidence for the accepted outcome, which is `/session-verify`'s judgement, not this skill's.
 6. **One bounded unit per invocation.** Finish it, report, and name the next candidate without starting it. Continuation over several units needs its own scoped invocation, or the standing policy **Continuation Over Several Units** defines — capacity, scope, and stop conditions, re-resolved before every dispatch.
+7. **One mutation per record at a time.** Never send two mutating runtime calls for the same record at once. Wait for each call's result and re-read the record before the next, because every write moves `revision` and the second call would fail as `stale-revision` or overwrite the first.
 
 ## Step 0: Resolve the Runtime
 
@@ -85,7 +86,7 @@ A successful `claim` on an `accepted` record also moves it to `active`. Do not s
 ## Step 4: Execute the Claimed Unit
 
 1. Read the record's scope region and every file it names before changing anything.
-2. Implement inside `allowed_paths` only. If the work needs a path outside them, stop and report: the scope is wrong, and widening it is a decision, not a detail.
+2. Implement inside `allowed_paths` only. If the work needs a path outside them, stop and report: the scope is wrong, and widening it is a decision, not a detail. When the user approves the widening, follow the widening sequence in `/session-delegation`: `revise` changes `allowed_paths` with the approval quoted in its `correction` field, then the same actor re-claims with the full new list, because a claim replaces the previous claim's paths.
 3. Add the regression test that pins the accepted criterion — one focused test, in the existing test module where one exists, covering the decision logic rather than the framework. Where the project's own CLAUDE.md states a testing rule, that rule wins.
 4. Run the record's named Test command and keep its output; Step 5 records it.
 
@@ -120,6 +121,19 @@ On a compact item, `record-result` records the result and never changes the item
 2. The checks behind that outcome, with their output.
 3. What the parent still needs: the tasks not yet `done`, and the `delivery` target the accepted scope requires. Say plainly that a passing task is progress, and that `/session-verify` decides whether the outcome is delivered.
 4. The next candidate from a fresh `select` — named, not started.
+
+## When the user asks to commit, push or deploy
+
+Delivery is a separate action from the unit's result, and it gets its own receipt. Delivery authority exists only where the user granted it: a passing task, an accepted item or a standing continuation policy does not grant it. Do each step in order and stop at the first one that fails.
+
+1. **Find the runbook.** Use `paths.runbook` in `.session-flow.json`. When it is absent, look for the runbook in the project's CLAUDE.md or AGENTS.md. When neither names one, ask the user, and offer to record the answer in `paths.runbook` so the next delivery does not ask.
+2. **Commit only the item's paths.** Stage by name the item's files and the tests written for the item, which sit outside `allowed_paths` on purpose. For an item with tasks, the item's files are the union of its tasks' `allowed_paths`, because `allowed_paths` lives on task records. For a compact item, they are its own `allowed_paths` or claim paths. Leave unrelated changes in the working tree alone.
+3. **Check the hooks.** Confirm the repository's hooks are present and executable before pushing. A hook that is missing or not executable is a failure to report, not something to skip.
+4. **Push** to the branch and remote the runbook names.
+5. **Check the deployed revision and its health.** Confirm the target runs the revision you pushed, then run the runbook's health check against it. Report a mismatch or a failing check as it is.
+6. **Record `delivery.receipt`** on the item through `revise`, with the revision, the target and the health result. A `revise` patch replaces the whole `delivery` object, so resend the stored `required`, `target` and `repository` keys unchanged and add the receipt; dropping them changes the fingerprint and makes acceptance stale. Set `delivered_at` inside `delivery`, the key the completion gate reads, only when the push and the health check both succeeded. When a step failed, stop, record `delivery.receipt` with what you observed, leave out `delivered_at`, and report. A receipt records what the checks showed: a failed health check is recorded as failed, and it is not a delivery.
+
+Verification the user already authorized continues as separate work and is never cancelled silently. If delivery would change what that verification tests, say so and ask. `/session-verify` points here for how delivery is done.
 
 ## Continuation Over Several Units
 

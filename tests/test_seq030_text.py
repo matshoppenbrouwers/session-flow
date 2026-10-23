@@ -128,7 +128,7 @@ class A6PostImplementationTest(TextCase):
 
 def unreleased_sections() -> dict:
     text = CHANGELOG.read_text(encoding="utf-8")
-    match = re.search(r"^##\s+(?:\[?Unreleased\]?|3\.0\.0\b)[^\n]*\n(.*?)(?=^##\s|\Z)", text, re.IGNORECASE | re.DOTALL | re.MULTILINE)
+    match = re.search(r"^##\s+3\.0\.0\b[^\n]*\n(.*?)(?=^##\s|\Z)", text, re.IGNORECASE | re.DOTALL | re.MULTILINE)
     if match is None:
         return {}
     parts = re.split(r"^###\s+", match.group(1), flags=re.MULTILINE)[1:]

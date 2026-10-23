@@ -87,6 +87,10 @@ The payload has `metadata` (`title`, `parent`, `priority`, `order`, `depends_on`
 
 It is the **dispatch write boundary**: `/session-delegation` injects it into every agent payload as "you may only create or modify these paths", and overlapping boundaries stop dependent dispatch. An incomplete list means an agent stops mid-task and reports instead of doing the work, so list everything the task must touch. It is a prompt-level constraint the runtime checks between tasks, not an enforced sandbox — host permissions are what constrain an agent's actions.
 
+**Find what each change touches.** For each symbol a task changes (a function, a field, a command, a schema key), search the repository for the tests, schema baselines and docs that reference it, using `grep` or the host's search. List the ones the task must edit in its `allowed_paths`, so the boundary covers the real footprint and not only the file the symbol lives in. Acceptance tests are the exception: they go to the test author, who is dispatched separately, and stay out of every implementer's boundary.
+
+**Shared files stay out of write scopes.** A file that every item touches, such as a shared manual-checks list, is not put in any task's `allowed_paths`; two tasks that both list it overlap and stop dispatch. Put the per-item content in the item's own record, and let whoever owns the shared file merge it afterwards.
+
 Capture writes each record in `captured`. Creating it grants no execution permission, and neither does listing it under the parent.
 
 ### Priority Levels
@@ -201,6 +205,8 @@ Before finalizing, verify each task:
 - [ ] Has `allowed_paths`, Instructions, a scope region, and a Test
 - [ ] Instructions use action verbs ("Create", "Add", "Move", not "Consider")
 - [ ] `allowed_paths` are explicit paths or directory globs, not "relevant files"
+- [ ] The tests, schema baselines and docs that reference each changed symbol were searched for, and the ones the task edits are listed in `allowed_paths`
+- [ ] No shared file is in any `allowed_paths`; per-item content sits in the item's own record
 - [ ] The scope region is observable, not "code is clean"
 - [ ] Test command is exact and runnable
 - [ ] `depends_on` names full task identities, and no two parallel tasks share a path

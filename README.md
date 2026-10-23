@@ -22,9 +22,9 @@ Linux, WSL and macOS are the supported platforms. Use WSL on Windows; native Win
 
 ```
 session-init ──> gatekeeper ──> research-design ──> task-planning ──> delegation ──> post-impl ──> verify ──> release
- (one-time)       (triage          (collaborative      (break into       (dispatch      (simplify,     (evidence-   (version bump,
-                   intake)          brainstorming)      session tasks)    agents)        review,        based proof) package, verify)
-                                                                                         audit, test)
+ (one-time)       (triage          (collaborative      (break into       (dispatch      (review,       (evidence-   (version bump,
+                   intake)          brainstorming)      session tasks)    agents)        audit,         based proof) package, verify)
+                                                                                         test)
                                                                                             │
                                                                                       update-architecture
 
@@ -110,7 +110,7 @@ You don't have to start at step 1:
 | A vague idea | `/session-research-design` - collaborative brainstorming refines it |
 | A plan or spec attached to an accepted work item | `/session-task-planning` - break it into session-sized tasks |
 | Accepted tasks with explicit identities | `/session-delegation` - dispatch agents for the named set |
-| Working code that needs polish | `/session-post-implementation` - simplify, review, audit, test |
+| Working code that needs polish | `/session-post-implementation` - review, audit, test |
 | A completed feature/plan that needs proof it works | `/session-verify` - falsification-based evidence artifact |
 | Tested code ready to ship | `/session-release` - bump version, package, verify |
 | A specific security concern | `/security-liability-audit` - standalone security + liability scan |
@@ -142,7 +142,7 @@ Claude: Checks the named tasks' dependencies -> dispatches test-author for their
         identity → regenerates the sequence → reports progress
 
 You: /session-post-implementation
-Claude: Simplifies code and removes leftovers → reviews for bugs →
+Claude: Reviews for bugs and requirement gaps →
         runs full test suite → updates architecture docs →
         generates manual test plan
 
@@ -245,7 +245,7 @@ It triages only - it never implements, and it treats issue text as untrusted dat
 
 | Step | Full | Standard | Quick |
 |------|------|----------|-------|
-| 1. Simplify | yes | yes | yes |
+| 1. Simplify | - | - | - |
 | 2. Code review | yes | yes | yes |
 | 3. Security & liability audit | yes | - | - |
 | 4. Commit checkpoint | yes | yes | yes |
@@ -254,7 +254,7 @@ It triages only - it never implements, and it treats issue text as untrusted dat
 | 7. Manual test plan | yes | - | - |
 | 8. Final commit | yes | yes | - |
 
-Standard and Quick scopes can add individual steps as extras (e.g., Quick + architecture docs). Verification (`/session-verify`) is a separate workflow outside these presets. Releasing a feature with a design document requires a PASS artifact covering the candidate, or an explicit decision to reuse earlier evidence. Accepted caveats are permitted; bugfix/refactor releases without a design document do not have this prerequisite.
+Simplify is off in every scope. Every scope can add individual steps as extras (e.g., Quick + architecture docs, or Full + simplify). Verification (`/session-verify`) is a separate workflow outside these presets. Releasing a feature with a design document requires a PASS artifact covering the candidate, or an explicit decision to reuse earlier evidence. Accepted caveats are permitted; bugfix/refactor releases without a design document do not have this prerequisite.
 
 When the security audit is included, you choose how it runs:
 
@@ -278,15 +278,15 @@ The audit can also run standalone via `/security-liability-audit`.
 | **codebase-researcher** | research-design (research + design phases) | Answer one question about the existing code, with file:line citations. Read-only |
 | **external-researcher** | research-design (research phase) | Research docs, specs, and prior art outside the repo, with source validation. No repo access |
 | **test-author** | delegation (once for the named multi-task set, before implementers) | Write acceptance tests for the selected work |
-| **code-simplifier** | post-impl step 1 | Simplify recently changed code and remove what the implementation left behind |
-| **code-reviewer** | post-impl step 2 | Find bugs, security issues, convention violations |
+| **code-simplifier** | post-impl step 1 (opt-in add-on) | Simplify recently changed code and remove what the implementation left behind |
+| **code-reviewer** | post-impl step 2 | Find bugs, security issues, and requirement gaps |
 | **security-auditor** | post-impl step 3 | Technical security + legal liability audit |
 
 Four bundled Claude Code agents declare `model: inherit`; `codebase-researcher` and `external-researcher` declare `model: sonnet`. Override agents with your own versions in `.claude/agents/`. A Codex adaptation needs its own mapping of these agent settings.
 
 `external-researcher` declares only `WebSearch` and `WebFetch` tools, with no repository-reading tool. Compact work through `/session-next` does not require a separate test-author dispatch.
 
-If you have the marketplace `code-simplifier:code-simplifier` plugin installed, session-post-implementation uses it automatically instead of the bundled agent.
+If you have the marketplace `code-simplifier:code-simplifier` plugin installed, session-post-implementation uses it automatically instead of the bundled agent when you add the Simplify step.
 
 ## Customization
 

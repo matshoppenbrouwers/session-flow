@@ -206,6 +206,8 @@ This config file allows all other session-flow skills to auto-discover the docum
 
 `paths.conventions` and `paths.lessons` are optional file paths, defaulting to `<chosen-root>/conventions.md` and `<chosen-root>/lessons.md`. Write them whether or not the files exist yet -- their consumers (`session-research-design`, `session-delegation`, `code-reviewer`) check for the file and say so when it is missing. Point either key at the user's existing file instead if they have one. Drop the key entirely only if the user asks you to.
 
+`paths.runbook` is optional, and the config block above does not write it. It points at the file that says how this project commits, pushes and deploys. `/session-next` reads it when the user asks to deliver, and offers to record it when the user supplies the answer. Add it only when the project has such a file.
+
 ### Step 5a: Bind the Namespace
 
 The work root carries `namespace.json`: format version, namespace UUID, and repository bindings. It is coordination configuration created with the root, not a second status registry, and every record's identity depends on it. Its contract is `references/work-item-contract.md`.
