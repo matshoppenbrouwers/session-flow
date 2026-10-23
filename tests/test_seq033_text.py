@@ -519,7 +519,7 @@ class A6ChangelogTest(TextCase):
         return read(CHANGELOG)
 
     def unreleased(self) -> str:
-        return section(self.text(), r"Unreleased")
+        return section(self.text(), r"(?:\[?Unreleased\]?|3\.1\.0\b)")
 
     def bullets(self) -> list:
         return [flat(part) for part in re.split(r"\n\s*[-*]\s+", self.unreleased())[1:]]
@@ -531,7 +531,7 @@ class A6ChangelogTest(TextCase):
         )
 
     def test_a6_unreleased_sits_above_the_3_0_0_entry(self):
-        unreleased = re.search(r"(?m)^##\s+\[?Unreleased\]?", self.text())
+        unreleased = re.search(r"(?m)^##\s+(?:\[?Unreleased\]?|3\.1\.0\b)", self.text())
         released = re.search(r"(?m)^##\s+\[?3\.0\.0\b", self.text())
         self.assertIsNotNone(unreleased, "no `## Unreleased` section")
         self.assertIsNotNone(released)

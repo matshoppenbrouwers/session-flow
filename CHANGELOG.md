@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 3.1.0 (2026-10-23)
 
 ### Changes
 
@@ -26,11 +26,15 @@
 - The `paths.runbook` key in the project config is optional. It points at the file that says how
   the project commits, pushes and deploys. `/session-next` has a section for when the user asks to
   commit, push or deploy: it finds the runbook, commits only the item's paths, checks the hooks,
-  pushes, checks the deployed revision and its health, and records `delivery.receipt`.
+  pushes, checks the deployed revision and its health, and records a receipt of the revision,
+  target and health result. An item that stores a `delivery` requirement keeps it in
+  `delivery.receipt`, with the stored keys resent unchanged. An item with no `delivery`
+  requirement gets a `Delivery receipt` evidence entry instead, so its acceptance stays current.
 - `/session-delegation` and `/session-next` state the widening sequence for `allowed_paths`: with
   the user's approval quoted as provenance, `revise` changes the list and the same actor re-claims
   with the full new list. Each task has its own actor, `agent:<task ID>`, and no two mutating
-  calls for the same record run at once.
+  calls for the same record run at once. Mutating calls for different records also run one at a
+  time, because the runtime refuses a second writer on the work root with `root-busy`.
 - `/session-task-planning` searches for the tests, schema baselines and docs that reference each
   changed symbol and lists the ones a task edits in its `allowed_paths`. A file shared by every
   item stays out of every task's `allowed_paths`.

@@ -22,12 +22,13 @@ Session-flow reads `.session-flow.json` from your project root. This file is cre
     "architecture": "_devdocs/architecture",
     "direction": "_devdocs/PRD.md",
     "conventions": "_devdocs/conventions.md",
-    "lessons": "_devdocs/lessons.md"
+    "lessons": "_devdocs/lessons.md",
+    "runbook": "_devdocs/runbook.md"
   }
 }
 ```
 
-All paths are relative to the project root and live under the nested `paths` object. `paths.sequence`, `paths.direction`, `paths.conventions`, and `paths.lessons` point at files; the rest are directories. Auto-detection covers a missing documentation directory, but not the two the runtime needs: `paths.work` and `paths.sequence` fall back to `_devdocs/work` and `_devdocs/SEQUENCE.md`, so set them explicitly whenever the docs root is not `_devdocs`.
+All paths are relative to the project root and live under the nested `paths` object. `paths.sequence`, `paths.direction`, `paths.conventions`, `paths.lessons`, and `paths.runbook` point at files; the rest are directories. Auto-detection covers a missing documentation directory, but not the two the runtime needs: `paths.work` and `paths.sequence` fall back to `_devdocs/work` and `_devdocs/SEQUENCE.md`, so set them explicitly whenever the docs root is not `_devdocs`.
 
 | Key | Purpose |
 |-----|---------|
@@ -36,6 +37,7 @@ All paths are relative to the project root and live under the nested `paths` obj
 | `direction` | Product-direction doc grounding `/session-gatekeeper` triage |
 | `conventions` | House rules read by `session-research-design` at design time and enforced by `code-reviewer` |
 | `lessons` | Conclusions from past work, read as a one-line index by `session-research-design` and `session-delegation` |
+| `runbook` | Optional. The file that says how the project commits, pushes and deploys, read by `session-next` when the user asks to deliver. `/session-init` does not write it |
 
 `todo` and `tasks` are not written for a new project. A repository that used the earlier layout keeps them, pointing at its existing `todo/` directory so those historical files stay findable; nothing new is written there.
 

@@ -321,6 +321,8 @@ Repository methods return domain objects, never ORM rows - keeps persistence swa
 
 **Conventions** are house rules: `/session-research-design` loads them at design time and `code-reviewer` enforces them alongside `CLAUDE.md`. **Lessons** are conclusions drawn after the fact, read as a one-line index by research-design and delegation. Both are kept out of `CLAUDE.md` on purpose - that file costs tokens on every turn of every session, while these matter only at design and review time. If a rule doesn't fit on one line it's an architecture decision, and `/update-architecture` owns those. When a key is unset or the file is missing, the consuming skills say so and fall back to `CLAUDE.md` plus observed patterns rather than inventing a house style.
 
+`paths.runbook` is optional and `/session-init` does not write it. It points at the file that says how the project commits, pushes and deploys, and `/session-next` reads it when you ask it to deliver. When the key is unset, `/session-next` looks in `CLAUDE.md` or `AGENTS.md`, then asks, and offers to record your answer here.
+
 Override agents by placing custom versions at `~/.claude/agents/` (user) or `.claude/agents/` (project). See [references/customization-guide.md](references/customization-guide.md) for details.
 
 ## Context Usage
