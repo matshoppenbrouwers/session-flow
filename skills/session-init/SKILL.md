@@ -67,6 +67,7 @@ Ask: "Does this repo share a work root with a parent folder? If so, give the pat
 
 When the answer is yes:
 - Set `paths.work` and `paths.sequence` in Step 5 to the shared locations, written as `../` paths relative to the repo root. Leave the other keys pointing inside this repo.
+- Verify the shared owner's canonical runtime project root, physical work root and namespace. A copied config or record directory in a task worktree is not a new live backlog. Use [Task workspaces and Git handoff](../../references/git-workflow.md#resolve-the-session-context) for every session's source/runtime context.
 - Create no second work root and no second namespace. In Step 5a, bind this repository into the shared root instead: `bind-namespace` adds it under `repositories` and leaves the root's `format` and `namespace` untouched.
 - Skip Step 2b: the shared root's owner already answered the visibility question for it.
 - Use the shared sequence path when you substitute into the CLAUDE.md block in Step 5b, so the wired instruction names the file that will actually be read.
@@ -85,7 +86,7 @@ gh repo view --json isPrivate --jq .isPrivate
 
 | Answer | Setup you run | Consequence you state |
 |--------|---------------|-----------------------|
-| Repository is private -- the default when the command reports `true` | Track the work root in this repository. If `.gitignore` matches it, remove that line and only that line. | History, backup and restore come from the existing remote, and hosted ops can read the backlog. No extra configuration. |
+| Repository is private -- the default when the command reports `true` | Track the work root in this repository. If `.gitignore` matches it, remove that line and only that line. | History uses the enclosing repository and reaches its remote through owned integration and authorized publication. Restore can use that published history; hosted ops can read the committed backlog. |
 | Repository is public, work docs stay private | Keep the work root ignored by the outer repository and give it its own private repository, with the setup below. | Hosted ops cannot see this backlog and execution stays local: both ops workflow templates hardcode `OPS_TODO` and `OPS_SEQUENCE`, and a GitHub Actions job can only read committed files. |
 | Repository is public, work docs public too | Track it in this repository, as for a private repository. | Same mechanics; the records are published. |
 
@@ -100,6 +101,30 @@ gh repo create "$REPO_NAME-devdocs" --private --source="$WORK_ROOT" --push
 ```
 
 A Git repository inside an ignored directory is invisible to the outer one, so there is no submodule interaction.
+
+Visibility and history placement are separate choices. An own-repository work root can separate
+runtime commits from application history for either visibility choice. Preserve the answer above:
+inspect hosted ops consumers before moving their records or views, and agree a deliberate snapshot
+publication path if they still need committed access. Existing tracked records require a reviewed
+migration that preserves namespace, history, bindings and pinned references, not re-initialization.
+
+Use [Canonical state, views and backup](../../references/runtime-integration.md#canonical-state-views-and-backup)
+to record the layout in the project runbook: canonical runtime project root, physical state root,
+clean integration checkout, generated sequence location, visibility/publication owner, and backup
+repository, remote/branch, owner and cadence. A sequence outside the work root is written by
+`render` but excluded from runtime commits; keep it out of the clean integration checkout and
+account for its publication separately. Records in an enclosing source repository advance that
+branch, so their publication must use the owned integration path.
+
+Automatic local commits are not remote backup. A no-remote root needs an agreed destination and
+push authority; do not create or publish a remote merely because `doctor` reports one missing.
+Routine post-handoff `backup` applies only to a work root with its own state repository, after
+confirming `storage.own_repository` and the intended state branch/remote. The command pushes the
+containing repository's current branch; never use it to publish the coordination checkout's
+enclosing application branch. Hand that state history to the integration owner for canonical
+publication and report anything still awaiting publication. Backup reports incomplete coverage
+and omits application worktrees, ignored journals, other branches and uncommitted views outside
+the root. Record these limits and who handles them; do not describe it as a whole-workspace snapshot.
 
 Declining every option is allowed. Leave the work root unversioned and say plainly that backup and restore are unavailable, that applied transitions keep no history and will report there was nothing to commit, and that hosted ops cannot see the backlog. Take that from Step 5c's `doctor` rather than asserting it: `storage.versioned` is false for a root ignored by the enclosing repository, `storage.enclosing_repository` names that repository, and `storage.own_repository` separates a root with its own repository from one the enclosing repository tracks.
 

@@ -18,12 +18,13 @@ Open with one sentence saying what you are about to do and what it will produce.
 5. **Parallel means one message with several Task tool calls.** Not several sequential messages.
 6. **A task result is a task result.** Reaching `passed` on every named task does not complete the parent: that needs applicable evidence for the accepted outcome, which is `/session-verify`'s judgement.
 7. **The acceptance tests are written before the implementers start, by a different agent, and implementers never edit them.** `test-author` writes them from each task's accepted scope, so the tests measure the specification rather than the implementation's opinion of it. This is about who writes the oracle, not about designing through tests: the behaviour was fixed when the scope was accepted.
-8. **One actor per task, and one mutating call per record at a time.** Name each task's actor `agent:<task ID>`, and never reuse one actor across tasks. Never send two mutating runtime calls for the same record at once: a `claim`, `revise`, `record-result` or `transition` on a record finishes before the next one for that record starts, because each is checked against the revision the previous one wrote. Mutating calls for different records also run one at a time: the runtime holds one lock on the work root and refuses a second writer with `root-busy`. Agents work in parallel, but their runtime calls do not.
+8. **One actor per task, and one mutating call per record at a time.** Name each task's actor from `agent:<task ID>`, qualified by SEQ identity and a unique session suffix, and never reuse one actor across tasks or independent sessions. Preserve the recorded actor on resume. Never send two mutating runtime calls for the same record at once: a `claim`, `revise`, `record-result` or `transition` on a record finishes before the next one for that record starts, because each is checked against the revision the previous one wrote. Mutating calls for different records also run one at a time: the runtime holds one lock on the work root and refuses a second writer with `root-busy`. Agents work in parallel, but their runtime calls do not.
 
 ## Prerequisites
 
 - Task records under `<work root>/seq-NNN/tasks/`, written by `/session-task-planning`.
 - A resolved runtime. Resolve it as `references/runtime-integration.md` describes and confirm it with `doctor` before reading any record; when it cannot answer, report what is missing and stop.
+- Resolve the canonical runtime project root and session identity through [Task workspaces and Git handoff](../../references/git-workflow.md#resolve-the-session-context). Use that root as `$PROJECT_ROOT` on every runtime call, independently of the source checkout.
 - An explicit target scope: the SEQ identity and the task IDs to run. `/session-next` supplies both. A direct invocation must name the IDs; when the user asks for an item by name, list its `accepted` task IDs and have them confirm the set before Step 1.
 
 **Invoked by session-next:** report the two results separately — each task's own result, and the item's aggregate acceptance — and leave the parent's completion to `/session-verify`.
@@ -77,6 +78,11 @@ Task tool:
 
 Record the returned test paths per task — they go into each implementer's payload as its oracle. If a task comes back with no test path, say so when you dispatch it; do not invent one.
 
+Pin each returned oracle by source revision or content digests. Before dispatch, the coordinator
+follows [Materialize acceptance tests in the assigned workspace](../../references/git-workflow.md#materialize-acceptance-tests-in-the-assigned-workspace)
+to transfer it unchanged and verify the test command targets that writer's checkout. Passing an
+original absolute path does not establish which source tree a test inspects.
+
 **Expected failures.** These tests fail, and some will not collect until the tasks they depend on land. That is the expected state before implementation, not a blocking failure — do not treat a red oracle as a reason to pause, and do not ask an implementer to "fix" it. The only failures that stop the run are the ones Step 1 and Error Handling name.
 
 **Small units routed from `/session-next`:** a single-record backlog item keeps that skill's self-written-test rule. Do not dispatch `test-author` for a 20-minute change; this step applies when several tasks are named.
@@ -106,6 +112,11 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" claim --seq SEQ-042 --ta
 ```
 
 A successful `claim` moves an `accepted` task to `active`; there is no separate `transition`. The payload needs no `operation`: the runtime generates one and returns it under `operation`. A `missing-authority` answer means someone already holds that assignment: stop that task and report the holder. A `stale-revision` answer means the record moved: re-read it and rebuild. If you may need to retry after an interruption, send your own `operation` id in the first call; then re-sending the identical payload with that id returns the prior result with `replayed: true`, and the claim it recorded still stands. Otherwise run `show` (and `reconcile` if the runtime reports a pending operation) before re-sending, because `expect_revision` makes a blind retry fail with `stale-revision`. Never reuse an id for a different payload.
+
+Before dispatch, follow [Start or resume a source workspace](../../references/git-workflow.md#start-or-resume-a-source-workspace)
+for each writer and record its assignment through `revise`. Pass the recorded source and runtime
+context in the payload. Workers report to the claiming coordinator; independently started sessions
+claim and report for themselves. Isolated checkouts preserve all existing overlap restrictions.
 
 **Sequential task** (one ready):
 ```
@@ -154,6 +165,10 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" record-result --seq SEQ-
 
 `outcome` is `passed`, `failed`, `blocked`, or `unknown`, and it says what happened: a check that could not run is `unknown`, never `passed`. Only the actor that claimed the task records its result. Record each result as its task returns rather than in a batch.
 
+For source work, validate the worker's [exact-commit handoff](../../references/git-workflow.md#record-an-exact-commit-handoff)
+before recording readiness for integration. The coordinator records the tested SHA and assignment
+in the existing result fields under the claim actor. A local pass alone is not readiness.
+
 **Close-out.** The close-out is two calls: `claim` (Step 4), then `record-result`. There is no hand-sent `transition` in between.
 
 - `passed` closes the task, when it is `active`: the runtime records the result, adds an evidence entry built from the result's evidence at the task's current fingerprint, and moves the task to `done` when the completion gate passes. A dependent unblocks only once its prerequisite is `done`.
@@ -199,6 +214,13 @@ You are implementing task {SEQ-NNN}/{TASK-ID}.
 **Work item**: {SEQ-NNN} — accepted outcome at {absolute path to intent.md}
 **Allowed paths**: [allowed_paths]
 
+**Source context**: [repository, remote/default branch, absolute task checkout, branch, base SHA]
+**Runtime context**: [canonical project root, physical work root, namespace, recorded claim actor]
+**Worker identity**: [unique session identity; report to the claiming coordinator]
+
+Use the assigned source checkout. Preserve it on resume and report any identity mismatch before
+edits. The coordinator owns runtime writes and records the exact-commit handoff from your report.
+
 You may only create or modify these paths. If the task requires touching
 anything else, stop and report — do not proceed.
 
@@ -207,11 +229,14 @@ anything else, stop and report — do not proceed.
 **Instructions**:
 [the task record's instructions]
 
-**Acceptance oracle**: the tests at [test paths from test-author] were written
-for this task before implementation. Make them pass. Never modify a test file.
+**Acceptance oracle**: [materialized test paths, pinned revision or digests, required fixtures]
+were written for this task before implementation and placed by the coordinator outside your
+write boundary. Make them pass. Never modify or replace an oracle file.
 If a test looks wrong, stop and report it — do not edit around it.
 
-**Test command**: [the task's test command]
+**Test command**: [the task's test command, working directory and validated source checkout]
+The coordinator has verified discovery/import paths, including any root derived from __file__,
+resolve to this source checkout. Report a changed oracle or mismatched target before proceeding.
 
 ## Workflow
 1. Read all referenced files first

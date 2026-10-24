@@ -69,6 +69,66 @@ only as JSON through `--input`.
 Paths resolve from `.session-flow.json`: `paths.work` (default `_devdocs/work`) and `paths.sequence`
 (default `_devdocs/SEQUENCE.md`).
 
+## Canonical state, views and backup
+
+Use [Task workspaces and Git handoff](git-workflow.md) for source workspaces, session identities
+and integration ownership. The project runbook names one canonical runtime project root and its
+physical work root. Pass that project root explicitly on every runtime call, even from a task
+worktree. Compare `doctor`'s resolved work root and namespace with the runbook. A copied config or
+record directory is not a second live root: matching namespaces alone do not establish identity.
+Refuse writes to a copied root and resolve the intended location before continuing.
+
+Independent sessions claim and report through this same root under distinct actors. Delegated
+workers report to their claim holder. Serialize runtime mutations; the short root lock does not
+own source checkouts or integration Git operations.
+
+Choose the state layout before moving records or generated views:
+
+| Layout | History and publication behavior |
+| --- | --- |
+| Work root with its own Git repository | Runtime commits advance only state history. Keep its coordination home separate from the clean application integration checkout. Choose its visibility and backup destination explicitly. |
+| Records tracked in an enclosing source repository | Runtime commits advance that repository's current branch. Keep the live coordination checkout distinct from integration and bring publishable state history through the owned integration path. `backup` would push the containing source branch, not a records-only branch. |
+| Generated sequence outside the work root | `render` writes `paths.sequence`, but operation commits exclude paths outside the work root, even when an enclosing repository tracks them. Give that view an explicit home and publication owner; it must not dirty the clean integration checkout. |
+
+Task views are generated inside the work root. Prefer local sequence views alongside the state
+repository when no hosted consumer needs them. If hosted ops needs committed records or views,
+inspect its actual paths and visibility requirements before choosing a private or relocated root.
+Define a deliberate snapshot publication path through normal integration, with its source state
+revision and owner. A published snapshot is read-only output, not another live backlog. Do not
+silently remove hosted access or add a competing synchronization path.
+
+Migration needs a reviewed inventory of current physical paths, Git history, namespace and
+repository bindings, pinned references, generated outputs and their consumers. Coordinate a pause
+with active writers, preserve unfinished files and existing history, and verify that pinned
+commit/path references still resolve in the destination. Copying current Markdown or initializing
+a fresh namespace is not a history-preserving migration. Keep old locations recoverable until
+the new canonical context and view routes are verified; do not let both copies accept writes.
+
+Record the backup repository, remote URL/branch, owner, cadence and applicable push authority in
+the runbook. An own-repository work root separates state history; it does not configure backup.
+A root without a remote has local history only. Resolve the intended destination and authority
+before configuring or publishing it; a missing remote is no permission to create one automatically.
+
+For a work root with its own state repository, the named owner runs authorized `backup` after a
+completed session and integration handoff. First confirm `storage.own_repository` is true and the
+reported repository, branch and remote match the agreed state destination. The command pushes the
+containing repository's current branch, without fetching, merging or resolving divergence. Inspect
+`pushed`, `complete`, `reason` and `uncommitted`: a successful push can still report incomplete
+backup. Report failures and the remaining action, never fall back to a force push.
+
+For records tracked in an enclosing application repository, do not run routine `backup` from the
+coordination checkout: it would push that source branch and bypass canonical integration. Hand off
+the publishable state history to the integration owner, who uses the live integration claim,
+history checks and authorized publication path in [Task workspaces and Git handoff](git-workflow.md).
+Record state history still awaiting integration or publication as outstanding backup coverage.
+The runtime's ability to push an enclosing branch does not grant an alternate publication route.
+
+`complete` covers only the command's check for uncommitted paths under the work root. It does not
+mean a whole-workspace snapshot: application worktrees, ignored journals and other ignored files,
+uncommitted views outside the work root, and commits on other branches are not included. A view
+outside the root is carried only if already committed on the branch being pushed. List these
+omissions in the backup receipt and account separately for any preservation the project requires.
+
 ## Request and response protocol
 
 stdout carries exactly one JSON object; diagnostics go to stderr. Parse stdout, never stderr. The one exception is `--help` (or `-h`), which prints usage text and exits 0.
@@ -406,8 +466,9 @@ against, and a report from one of them is not a defect:
 - Network or cloud-synchronized work roots.
 - Records edited outside the runtime, by hand or by another tool.
 - Simultaneous editing of one work root from another operating system.
-- More than one coordinator at a time. Several agents may execute independent tasks, but state
-  transitions are serialized through the root lock.
+- Concurrent runtime mutations rather than serialized calls through the root lock. Independent
+  sessions may share the canonical root and report their own tasks; a caller receiving `root-busy`
+  must wait or follow the documented recovery path, never bypass the lock.
 
 Linux/WSL and macOS are the tested runtimes. Native Windows is out of scope while Python is a hard
 requirement.

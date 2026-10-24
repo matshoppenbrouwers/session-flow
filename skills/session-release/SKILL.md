@@ -18,6 +18,7 @@ Open with one sentence saying what you are about to do and what it will produce.
 5. **Never skip the satellite scan.** The whole point of this skill is to catch the docs site, marketing page, and download modal that still say the old version.
 6. **Never accept a verification verdict without comparing its recorded commit range against the candidate revision.** A PASS is evidence about the revision it was recorded against. When they differ, the user decides reuse or rerun explicitly.
 7. **Each release action is authorized on its own.** Bumping, packaging, and committing are this skill's work. Tagging, pushing, publishing, deploying, and announcing are separate actions with their own authority, and a release run never performs one because the previous step succeeded.
+8. **Integration has one recorded owner.** Follow [Task workspaces and Git handoff](../../references/git-workflow.md#claim-integration-ownership). Every release path holds a live bounded integration-task claim over the same canonical integration directory through its authorized effects and receipts. A clean clone does not bypass ownership. Builds use the recorded canonical SHA.
 
 ## Core Principle
 
@@ -30,7 +31,7 @@ A release is more than a version bump. Code ships alongside documentation, websi
 ## Prerequisites
 
 - All tests pass (run `/session-post-implementation` or the test suite first)
-- Working tree is clean or changes are committed
+- The canonical integration checkout is clean, with no unexplained in-progress Git operation
 - User knows the target version (or will provide it)
 - If this release ships a feature with a design doc, a PASS verification artifact exists (run `/session-verify` first) and its recorded commit range covers the release candidate, or the user has recorded a reuse decision. Not required for bugfix/refactor releases.
 
@@ -40,7 +41,8 @@ A release is more than a version bump. Code ships alongside documentation, websi
 
 Verify readiness:
 
-1. **Git status**: Check for uncommitted changes. Warn if dirty.
+0. **Integration assignment**: Resolve the canonical runtime and source context, then [claim integration ownership](../../references/git-workflow.md#claim-integration-ownership) before any integration Git mutation or release edits. Use the accepted bounded release/integration task and its unique actor. If no such assignment exists, obtain it first. Follow the shared preflight and handoff checks; keep the claim live while preparing the release and recording receipts.
+1. **Git status**: Check for uncommitted changes and in-progress Git operations in the canonical integration checkout. Stop on unexplained dirty or interrupted state and preserve it for the recorded owner. Integrate only checked inputs using [Validate and integrate submitted work](../../references/git-workflow.md#validate-and-integrate-submitted-work).
 2. **Test status**: Ask the user to confirm tests pass (or offer to run them).
 3. **Target version**: If not provided as argument, ask the user. Validate semver format.
 4. **Verification status**: If this release ships a feature that had a design doc (check `.session-flow.json.paths.plans`, else a detected `plans/`), look for a corresponding `_verification/{date}-{label}-verification.md` artifact with `Verdict: PASS` (or `PASS-WITH-CAVEATS` if the user accepts the caveats). If the artifact is missing or `FAIL`, offer to run `/session-verify` first. Skip for bugfix/refactor releases with no design doc.
@@ -91,9 +93,18 @@ Look for a project-specific version bump mechanism:
 
 After bumping, verify consistency by grepping for the old version -- nothing should remain except changelogs and historical references.
 
+Commit the authorized release metadata in the owned integration checkout and record the resulting
+canonical candidate SHA through `revise`. Apply the evidence applicability check to this candidate
+before building; earlier verification does not silently cover the metadata commit.
+
 ### Step 3: User gate -- build
 
 The build step often requires the user's environment (signing keys, native toolchains, CI pipelines). Present the build instructions and **wait for the user to confirm the build is complete** before proceeding.
+
+Use [Pin release sources and settle receipts](../../references/git-workflow.md#pin-release-sources-and-settle-receipts):
+the build command or CI job must select the recorded canonical candidate SHA in a clean checkout.
+Record the observed build source SHA and artifact results. A moving branch or dirty source is not
+an exact release source, and a build from another revision cannot satisfy this candidate.
 
 **If a project skill exists** (`/release-package`): it will contain build instructions -- reference them.
 
@@ -217,11 +228,17 @@ Run a final check:
 
 ### Step 8: Release commit
 
-If changes were made in steps 5-6, commit them:
+If changes were made in steps 5-6, commit only those authorized changes in the owned integration
+checkout and record the new canonical candidate:
 
 ```
 release: prepare v{VERSION} for distribution
 ```
+
+If this changes the candidate SHA, apply the evidence applicability check again and return to the
+build/package gates for that exact revision before declaring readiness. Record submitted heads,
+integrated head, build source SHA and checks through `revise` while the integration claim is live.
+Do not present artifacts from the earlier candidate as built from this commit.
 
 ### Step 9: Release instructions
 
@@ -234,6 +251,9 @@ Print a summary of what's ready and what the user needs to do next:
 - Version bumped across {N} files
 - {Artifacts packaged / listed}
 - {Satellite content updated}
+- Canonical integrated revision: {full SHA}
+- Build source revision: {full SHA, or build pending}
+- Published revision: {observed full SHA, unpublished, or unknown}
 
 ### Verification evidence:
 - Artifact: {path} ({verdict})
@@ -249,6 +269,14 @@ Print a summary of what's ready and what the user needs to do next:
 
 These are printed, not performed. Publishing, tagging, deploying, and announcing carry their own
 authority and their own rollback story; a completed release commit authorizes none of them.
+
+Settle this assignment using the shared receipt procedure only after its authorized effects stop
+and receipts are recorded. For a preparation-only scope, report the candidate as unpublished and
+record that result. A later authorized publication must acquire or resume a live bounded integration
+claim, inspect interrupted state, refresh the target and revalidate any advanced candidate before
+acting. Keep submitted-to-canonical mappings for squash/rebase. Publication and remaining
+reconciliation have separate outcomes, and source workspace retirement requires confirmed
+integration, a stopped writer and accounted-for unfinished work.
 
 ## Execution Notes
 

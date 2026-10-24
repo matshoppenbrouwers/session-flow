@@ -23,6 +23,10 @@ Open with one sentence saying what you are about to do and what it will produce.
 
 Every record read or written here goes through the helper at `<package-root>/scripts/session-flow.py`. Resolve it by the one rule for this host (`references/runtime-integration.md`): the plugin root in `${CLAUDE_PLUGIN_ROOT}` for a native plugin, the discovered installed package for Codex, or the `session-flow-runtime.json` descriptor beside this `SKILL.md` for a standalone copy. Then confirm it answers, with absolute paths for the interpreter and the entrypoint:
 
+Resolve the canonical runtime project root and unique session actor using
+[Task workspaces and Git handoff](../../references/git-workflow.md#resolve-the-session-context).
+`$PROJECT_ROOT` always names that runtime project, even when source work runs in another checkout.
+
 ```bash
 python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" doctor
 ```
@@ -85,6 +89,12 @@ A successful `claim` on an `accepted` record also moves it to `active`. Do not s
 
 ## Step 4: Execute the Claimed Unit
 
+Before source edits, follow [Start or resume a source workspace](../../references/git-workflow.md#start-or-resume-a-source-workspace).
+Record the assignment through `revise` and execute in the assigned checkout, retaining the canonical
+runtime project root for record commands. Resume preserves existing work and verifies its identity.
+When using a separately authored oracle, follow [Materialize acceptance tests in the assigned workspace](../../references/git-workflow.md#materialize-acceptance-tests-in-the-assigned-workspace)
+before execution; verify its identity and that the test command inspects this source checkout.
+
 1. Read the record's scope region and every file it names before changing anything.
 2. Implement inside `allowed_paths` only. If the work needs a path outside them, stop and report: the scope is wrong, and widening it is a decision, not a detail. When the user approves the widening, follow the widening sequence in `/session-delegation`: `revise` changes `allowed_paths` with the approval quoted in its `correction` field, then the same actor re-claims with the full new list, because a claim replaces the previous claim's paths.
 3. Add the regression test that pins the accepted criterion — one focused test, in the existing test module where one exists, covering the decision logic rather than the framework. Where the project's own CLAUDE.md states a testing rule, that rule wins.
@@ -102,6 +112,10 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" render
 ```
 
 `outcome` is one of `passed`, `failed`, `blocked`, `unknown`, and it says what actually happened. A check that could not run is `unknown`, never `passed`. Only the claiming actor may record the result. Put the criterion, environment, code revision and limitations in `result.evidence`.
+
+For source work, follow [Record an exact-commit handoff](../../references/git-workflow.md#record-an-exact-commit-handoff)
+before declaring readiness for integration. Record the tested commit and source assignment in the
+existing result fields; a local pass without that handoff does not make the source ready.
 
 On a task, the outcome decides the lifecycle:
 
@@ -127,15 +141,18 @@ On a compact item, `record-result` records the result and never changes the item
 Delivery is a separate action from the unit's result, and it gets its own receipt. Delivery authority exists only where the user granted it: a passing task, an accepted item or a standing continuation policy does not grant it. Do each step in order and stop at the first one that fails.
 
 1. **Find the runbook.** Use `paths.runbook` in `.session-flow.json`. When it is absent, look for the runbook in the project's CLAUDE.md or AGENTS.md. When neither names one, ask the user, and offer to record the answer in `paths.runbook` so the next delivery does not ask.
-2. **Commit only the item's paths.** Stage by name the item's files and the tests written for the item, which sit outside `allowed_paths` on purpose. For an item with tasks, the item's files are the union of its tasks' `allowed_paths`, because `allowed_paths` lives on task records. For a compact item, they are its own `allowed_paths` or claim paths. Leave unrelated changes in the working tree alone.
-3. **Check the hooks.** Confirm the repository's hooks are present and executable before pushing. A hook that is missing or not executable is a failure to report, not something to skip.
-4. **Push** to the branch and remote the runbook names.
-5. **Check the deployed revision and its health.** Confirm the target runs the revision you pushed, then run the runbook's health check against it. Report a mismatch or a failing check as it is.
-6. **Record `delivery.receipt`** on the item through `revise`, with the revision, the target and the health result, as `{"revision", "target", "health"}`. Where it goes depends on what the item stores:
+2. **Commit only the item's paths.** In each assigned source workspace, stage by name the item's files and the tests written for the item, which sit outside `allowed_paths` on purpose. For an item with tasks, the item's files are the union of its tasks' `allowed_paths`, because `allowed_paths` lives on task records. For a compact item, they are its own `allowed_paths` or claim paths. Leave unrelated changes in the working tree alone. Record the checked exact-commit handoff. A commit-only request ends with that local receipt and grants no integration or push authority.
+3. **Claim and validate integration.** Follow [Claim integration ownership](../../references/git-workflow.md#claim-integration-ownership) and [Validate and integrate submitted work](../../references/git-workflow.md#validate-and-integrate-submitted-work). An authorized delivery uses a bounded integration task claiming the common canonical integration directory. Keep that claim live through effects and receipts; refuse held claims, changed heads, unfinished ancestry and unexplained interrupted state. Integrate only ready inputs and validate the canonical result.
+4. **Check the hooks.** Confirm the repository's hooks are present and executable before pushing. A hook that is missing or not executable is a failure to report, not something to skip.
+5. **Push** the checked canonical revision to the branch and remote the runbook names, only under push authority. Revalidate after target advancement or rejection as the shared procedure requires. Do not publish directly from a task workspace or fall back to force-push.
+6. **Check the deployed revision and its health.** Where deployment is authorized, confirm the target runs the revision you pushed, then run the runbook's health check against it. Report a mismatch or a failing check as it is. A push-only request records the push and leaves deployment explicitly pending.
+7. **Record `delivery.receipt`** on the item through `revise`, with the revision, the target and the health result, as `{"revision", "target", "health"}`. Where it goes depends on what the item stores:
    - **The item stores a `delivery` requirement.** A `revise` patch replaces the whole `delivery` object, so resend the stored `required`, `target` and `repository` keys unchanged and add `receipt`; dropping them changes the fingerprint and makes acceptance stale. Set `delivered_at` (ISO-8601 UTC) inside `delivery`, the key the completion gate reads, only when the push and the health check both succeeded.
    - **The item stores no `delivery`.** Do not write one: a `delivery` object holding only a receipt changes the fingerprint and makes acceptance stale. Append the receipt as an evidence entry instead, after the stored entries, with `criteria` `Delivery receipt`, the item's current `fingerprint`, the revision, target and health result, and `result` `pass` or `fail`.
 
    When a step failed, stop, record the receipt with what you observed (no `delivered_at`, or `result` `fail`), and report. A failed health check is recorded as failed, and it is not a delivery. A later successful delivery records a new receipt, and its entry supersedes the failed one.
+
+8. **Settle integration.** Follow [Pin release sources and settle receipts](../../references/git-workflow.md#pin-release-sources-and-settle-receipts) to record submitted, integrated and observed published heads with checks before the integration task's result. Preserve unknown outcomes and remaining reconciliation. Any result releases overlap exclusion, so the next owner must inspect incomplete Git/publication state and reclaim before further effects.
 
 Verification the user already authorized continues as separate work and is never cancelled silently. If delivery would change what that verification tests, say so and ask. `/session-verify` points here for how delivery is done.
 

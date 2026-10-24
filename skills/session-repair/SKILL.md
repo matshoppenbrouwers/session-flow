@@ -37,6 +37,17 @@ python3 -B "$ENTRYPOINT" --project-root "$PROJECT_ROOT" doctor
 
 Write down `storage.work_root`, `storage.sequence_path`, `storage.namespace`, `storage.bootstrap`, `storage.versioned`, `storage.locked`, `storage.pending_operations`, and `storage.reserved`. A missing namespace with `storage.bootstrap.eligible: true` is a migration setup requirement; continue the read-only survey. A malformed namespace, or a missing namespace alongside existing records or runtime state, requires restoration of the original namespace. Never allocate a replacement identity for those records. A missing runtime or an unrelated named error means report it and stop.
 
+Before migration, compare these locations with the runbook's canonical runtime project root and
+physical work root using [Canonical state, views and backup](../../references/runtime-integration.md#canonical-state-views-and-backup).
+Refuse a copied worktree root even if its namespace matches. Survey enclosing versus own-repository
+history, pinned commit/path references, active writers and hosted consumers of records and views.
+Account explicitly for a generated sequence outside the work root: runtime commits do not include
+it. Moving existing state/history or changing view publication needs its own reviewed preservation
+plan and coordinated writer pause; ordinary import/reconcile does not perform that relocation.
+Preserve namespace, bindings, history and reference resolution. Do not create a backup remote or
+change visibility as incidental repair; record the destination, owner, cadence and authority still
+needed. Keep the clean application integration checkout separate from live state and generated views.
+
 ## Stage 1: Survey, Read-Only
 
 The survey is `import` in its default mode, which writes nothing. Resolve the source as `SEQUENCE.md` under configured `paths.todo`, falling back to `_devdocs/todo/SEQUENCE.md`. Omit `historical` to use configured `paths.todo` and `paths.tasks`; when neither is configured, explicitly name the existing legacy directories. Do not replace configured historical paths with hardcoded examples. Pass the resolved source in the payload:
