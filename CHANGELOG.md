@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.2.0 (2026-10-24)
+
+### Changes
+
+- Task sessions resolve one physical runtime work root and use isolated source workspaces,
+  distinct actors and exact-commit handoffs. Delegation pins independent acceptance tests and
+  verifies that they inspect the assigned source checkout.
+- Integration and release use one bounded integration owner per repository. The procedure
+  checks publishable ancestry and applicable evidence, preserves other sessions' unfinished
+  work, revalidates after remote advancement and builds from a recorded canonical revision.
+- State-layout guidance separates runtime history and generated views from clean integration.
+  Routine state backup requires its own repository; enclosing application history follows the
+  integration path. Migration preserves namespace, history, pinned references and hosted access.
+- Twelve disposable Git/runtime fixtures cover context, ownership races, preservation, stale
+  evidence, remote advancement and backup limits. Thirteen independent acceptance checks and a
+  manual plan cover the workflow contract. Required evidence reports ship with the test inputs.
+
+These are instructions for cooperating sessions, not new runtime Git enforcement. Live recovery,
+branch-protection validation and release-cycle adoption in external repositories remain separate
+work; this plugin release does not establish those outcomes.
+
 ## 3.1.0 (2026-10-23)
 
 ### Changes
