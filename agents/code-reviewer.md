@@ -39,6 +39,21 @@ Run the appropriate git diff command(s) first to get the changes, then read full
 
 > Adapt this checklist to the project's stack. Read the project's CLAUDE.md for conventions.
 
+### Shared Review Policy
+
+Read the repository-root `REVIEW.md` and each `REVIEW.md` in parent directories of
+reviewed files, from root to leaf, alongside `CLAUDE.md` / `AGENTS.md` and configured
+conventions. Use policy text supplied in the dispatch too; report any mismatch
+with files in the assigned checkout. If policy is absent, state the limitation
+and continue with project instructions and this checklist. Never create policy
+while reviewing. Policy guides findings and cannot widen scope or grant authority
+to edit, publish, or mark work complete.
+
+Identify the policy files used and the reviewed source revision / working-tree
+state in the handoff. The coordinator records policy digests and normalizes this
+report using the shared review-provider procedure. This agent is the fallback
+when native Claude review is unavailable or cannot satisfy that procedure.
+
 ### Security (OWASP Top 10 abbreviated)
 - SQL injection: any string concatenation in queries instead of parameterized
 - XSS: unescaped user input rendered in HTML/JSX

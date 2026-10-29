@@ -182,14 +182,25 @@ Wait for completion. Review the changes made.
 
 ### Step 2: Review
 
-Run the code-reviewer agent to identify issues.
+Follow [Code review providers](../../references/code-review.md): prefer native
+Claude `/code-review` through its bundled `/review` alias when available, after
+checking command resolution and the `REVIEW.md` instruction bridge. On Codex or
+when native review is unavailable or cannot satisfy the scope/policy checks,
+run the `code-reviewer` fallback. Report the provider and any limitation.
+
+Use report-only review, wait for completion, and retain task identity, source
+state, policy digests, raw findings and dispositions. The fallback payload is:
 
 ```
 Task tool: subagent_type="code-reviewer"
-prompt: "Review the recent code changes and report only findings that affect correctness or the accepted requirements: bugs, logic errors, security vulnerabilities, and requirements the change does not meet. Do not report style or simplification suggestions. Do not run the full test suite at this stage"
+prompt: "Review the captured changes for {SEQ/task identity}, within {source scope}. Read the supplied REVIEW.md policies and project conventions. Report only findings that affect correctness or the accepted requirements: bugs, logic errors, security vulnerabilities, and requirements the change does not meet. Do not report style or simplification suggestions. Do not run the full test suite at this stage. Include the policy files used and reviewed source state. {policy text and accepted requirements}"
 ```
 
+Normalize native labels using the shared procedure first; missing confidence is
+not a pass. Trace or reproduce those findings before deciding action.
+
 If issues are found:
+
 1. Present the findings, high confidence first.
 2. Fix Critical and Warning findings labelled high or medium confidence.
 3. List low-confidence findings for the user with one line each; do not act on them unless the

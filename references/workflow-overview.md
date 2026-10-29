@@ -33,7 +33,7 @@ Four rules hold across every skill below. They are the reason the chain is not s
 
 | Stage | Produces | Consumed By |
 |-------|----------|-------------|
-| **session-init** | `.session-flow.json`, the work root and its `namespace.json`, `architecture/`, the generated `SEQUENCE.md`, CLAUDE.md/AGENTS.md sequence block | All other skills (path resolution) |
+| **session-init** | `.session-flow.json`, the work root and its `namespace.json`, `architecture/`, the generated `SEQUENCE.md`, `REVIEW.md`, CLAUDE.md/AGENTS.md sequence and review blocks | All other skills (path resolution) |
 | **gatekeeper** | Triage verdicts; captured work items, or an escalation to research-design | add-task / research-design |
 | **research-design** | Research report; `spec.md` and `plan.md` on the work item when the work warrants them | task-planning |
 | **task-planning** | Task records under `work/seq-NNN/tasks/`, each with dependency IDs, allowed paths, and scope fingerprint | delegation |
@@ -96,7 +96,10 @@ Skills dispatch agents for specialized work. Here is the mapping:
 
 ### post-implementation dispatches:
 1. **code-simplifier** (Simplify step, opt-in add-on) — Simplifies recently changed code for clarity and maintainability, and removes what the implementation left behind
-2. **code-reviewer** (Review step) — Finds bugs, security issues, and requirement gaps
+2. **Native Claude review, or code-reviewer fallback** (Review step) — Finds bugs,
+   security issues, and requirement gaps under the shared `REVIEW.md` policy.
+   Follow [Code review providers](code-review.md) for command resolution, policy
+   consumption, scope, evidence and fallback behavior.
 
 ### post-implementation also invokes:
 3. **update-architecture** (Update Architecture Docs step) — Surgically updates architecture docs to reflect code changes
@@ -110,7 +113,9 @@ Skills dispatch agents for specialized work. Here is the mapping:
 3. Marketplace plugins (e.g., `code-simplifier:code-simplifier`)
 4. Package-bundled agents (`session-flow/agents/`) — lowest priority
 
-If you have a custom `code-reviewer.md` in your project's `.claude/agents/`, post-implementation uses it instead of the bundled one.
+If native review is unavailable or cannot satisfy the shared review procedure,
+a custom `code-reviewer.md` in your project's `.claude/agents/` takes precedence
+over the bundled fallback. Pass the same policy and scope to any override.
 
 ---
 

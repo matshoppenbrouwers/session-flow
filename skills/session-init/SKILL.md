@@ -174,6 +174,31 @@ it is an architecture decision -- record it in `architecture/decisions.md` inste
 
 `lessons.md` (conclusions drawn from past work, same one-line format) uses the same offer only if the user asks for it. Otherwise just leave `paths.lessons` pointing at the default location and let the file appear when there is something to write in it.
 
+### Step 3e: Initialize the Review Policy
+
+Include the root `REVIEW.md` and review instruction bridges in the initialization
+scope presented to the user. Once initialization is authorized, resolve
+`PACKAGE_ROOT` from the same installed package as `ENTRYPOINT` and run:
+
+```bash
+python3 -B "$PACKAGE_ROOT/scripts/session_flow/review_policy.py" --project-root "$PROJECT_ROOT"
+```
+
+The helper creates an absent `REVIEW.md` from `references/review-policy-template.md`,
+using session-flow's established correctness, security and accepted-requirement
+principles. It preserves any existing policy byte for byte; do not infer or add
+project-specific rules. House rules stay in the configured conventions file.
+It creates or updates only its `session-flow:review` block in `CLAUDE.md` and
+`AGENTS.md`, preserving unrelated text. That block tells reviewers to read the
+root policy and applicable subdirectory policies. Native local `/code-review`
+reads `CLAUDE.md` but does not discover `REVIEW.md` automatically.
+
+Report each created, updated or preserved file. On an error, report the failure
+and stop; do not bypass the helper by overwriting a file. See
+[review providers](../../references/code-review.md) for native selection, fallback,
+evidence and host smoke checks. An existing initialized project adopts policy
+through this helper under its write authority, not by rerunning init.
+
 ### Step 4: Create INDEX.md
 
 Create `{root}/INDEX.md` with a minimal map of the structure:
@@ -332,7 +357,7 @@ This skill creates the config that makes step 1 work for all other skills.
 - **Creating a `todo/` directory** -- Work items live in the work root; the backlog is generated, not a directory of task files
 - **Hand-writing the sequence** -- `render` produces it; anything typed there is lost at the next render
 - **Asking the visibility question twice** -- One question, one answer, acted on; a shared work root inherits the owner's answer
-- **Creating sample/template files** -- Only create the structure; content comes from the skills that use each directory
+- **Creating sample/template files** -- Only create the structure, apart from the review policy and instruction bridges in Step 3e; other content comes from the skills that use each directory
 - **Duplicating the CLAUDE.md/AGENTS.md block** -- Match the `<!-- session-flow:sequence -->` markers and replace in place; never append a second copy
 - **Forcing a PRD.md or conventions.md** -- Both are optional; offer them, and respect an existing file via `paths.direction` / `paths.conventions`
 - **Seeding conventions.md with invented rules** -- The stub carries the format note and nothing else; rules come from the project, not from you

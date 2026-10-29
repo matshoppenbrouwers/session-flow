@@ -184,7 +184,11 @@ Then run `render`. Never write progress into a generated view.
 
 For consequential tasks (P1, several files), optionally run after completion:
 - `code-simplifier:code-simplifier` agent for cleanup
-- `code-reviewer` agent for review
+- Review through [Code review providers](../../references/code-review.md): prefer
+  native Claude `/code-review` via bundled `/review` after resolution and policy
+  checks, or use the `code-reviewer` fallback. Both consume applicable `REVIEW.md`
+  policies, retain task/source identity and return report-only findings. Record
+  provider, policy digests and limitations; this gate never establishes completion.
 
 ### Step 7: Report
 
