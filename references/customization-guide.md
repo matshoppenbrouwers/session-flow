@@ -96,7 +96,14 @@ tools: Read, Grep, Glob, Bash
 ---
 ```
 
-Then write your review instructions below the frontmatter. Post-implementation will automatically pick up your version.
+Then write your review instructions below the frontmatter. The precedence above
+applies when session-flow selects the `code-reviewer` fallback. On Claude Code,
+review prefers the bundled native reviewer when it satisfies the shared review
+procedure; a custom agent does not replace that native command. Put checks that
+must reach both native and fallback review in the root `REVIEW.md`, with the
+instruction bridge in `CLAUDE.md` / `AGENTS.md`. See
+[Code review providers](code-review.md) for policy adoption, provider selection
+and host validation.
 
 ### Marketplace plugins:
 

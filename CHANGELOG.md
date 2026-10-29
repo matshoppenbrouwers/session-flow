@@ -1,5 +1,18 @@
 # Changelog
 
+## Next release
+
+- Initialization creates an absent root `REVIEW.md` and idempotent review blocks
+  in `CLAUDE.md` / `AGENTS.md`, preserving existing policies and unrelated text.
+  A standalone helper supports adoption without reinitializing work records.
+- Post-implementation and delegation prefer native Claude review through bundled
+  `/review`, with command-resolution and policy-consumption checks and the existing
+  reviewer as fallback on other hosts. Both use shared policy and retain source,
+  task and evidence context; verification keeps completion authority.
+- Disposable-project tests cover creation, preservation, reruns, owned-block
+  updates and unsafe destinations. Native host smoke checks are documented
+  separately from automated filesystem tests.
+
 ## 3.2.0 (2026-10-24)
 
 ### Changes

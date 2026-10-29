@@ -261,6 +261,26 @@ When the security audit is included, you choose how it runs:
 - **Sub-agent** - dispatches a dedicated audit agent.
 - **Inline** - runs in the main conversation with your current model.
 
+### Shared review policy and native review
+
+`/session-init` creates a root `REVIEW.md` when absent, seeded with session-flow's
+defect-oriented review principles. Existing policies are preserved. Owned blocks
+in `CLAUDE.md` and `AGENTS.md` tell reviewers to read the policy and any applicable
+subdirectory policies; unrelated instructions remain intact. Project house rules
+stay in the configured conventions file.
+
+On Claude Code, review prefers the native `/code-review` functionality through
+its bundled `/review` alias after checking command resolution and policy use.
+Codex and other hosts use the existing reviewer as a fallback. Review stays
+report-only; task identity, reviewed source state and findings remain inputs to
+`/session-verify`. This does not enable hosted GitHub Code Review.
+
+Native local review does not automatically read `REVIEW.md`; the instruction
+bridge supplies that connection, and the workflow checks policy consumption.
+Host behavior requires the smoke checks in [Code review providers](references/code-review.md);
+filesystem tests alone do not verify Claude invocation. That guide also describes
+adoption in an existing initialized project without rerunning `/session-init`.
+
 ### Security & Liability Audit
 
 The audit covers two dimensions:
@@ -279,7 +299,7 @@ The audit can also run standalone via `/security-liability-audit`.
 | **external-researcher** | research-design (research phase) | Research docs, specs, and prior art outside the repo, with source validation. No repo access |
 | **test-author** | delegation (once for the named multi-task set, before implementers) | Write acceptance tests for the selected work |
 | **code-simplifier** | post-impl step 1 (opt-in add-on) | Simplify recently changed code and remove what the implementation left behind |
-| **code-reviewer** | post-impl step 2 | Find bugs, security issues, and requirement gaps |
+| **code-reviewer** | review fallback in post-impl / delegation | Find bugs, security issues, and requirement gaps under the shared policy when native review is unavailable |
 | **security-auditor** | post-impl step 3 | Technical security + legal liability audit |
 
 Four bundled Claude Code agents declare `model: inherit`; `codebase-researcher` and `external-researcher` declare `model: sonnet`. Override agents with your own versions in `.claude/agents/`. A Codex adaptation needs its own mapping of these agent settings.
